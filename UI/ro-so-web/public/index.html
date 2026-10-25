@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#191817" />
+  <meta name="description" content="Rõ Số — hỏi đáp trên báo cáo, kiểm tra nguồn và hiệu chỉnh số liệu." />
+  <title>Rõ Số — Hỏi đáp báo cáo</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-shell" id="workspace">
+    <aside class="sidebar" aria-label="Điều hướng tài liệu">
+      <a class="brand" href="#workspace" aria-label="Rõ Số, trang chủ">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="brand-copy"><strong>rõ số</strong><small>Hỏi đáp báo cáo</small></span>
+      </a>
+
+      <button class="new-document-button" id="upload-button"><span class="icon" data-icon="plus"></span><span>Tài liệu mới</span></button>
+      <input id="pdf-input" type="file" accept="application/pdf,.pdf" hidden />
+
+      <div class="sidebar-section-label">KHÔNG GIAN LÀM VIỆC</div>
+      <button class="sidebar-document active" data-nav="workspace" type="button">
+        <span class="sidebar-file-icon"><span class="icon" data-icon="file-pdf"></span></span>
+        <span class="sidebar-document-copy"><strong id="sidebar-document-name">Báo cáo doanh thu theo khu vực</strong><small>PDF · Đang mở</small></span>
+        <span class="active-indicator" aria-hidden="true"></span>
+      </button>
+
+      <div class="sidebar-bottom">
+        <button class="sidebar-help" id="help-button" type="button"><span class="icon" data-icon="circle-help"></span>Hướng dẫn sử dụng</button>
+        <div class="sidebar-note"><span class="sidebar-note-mark"></span><span>Phiên làm việc cục bộ<br /><strong>Không cần tài khoản</strong></span></div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div class="topbar-document">
+          <span class="topbar-file-icon"><span class="icon" data-icon="file-pdf"></span></span>
+          <div class="topbar-document-copy"><strong id="document-name">Báo cáo doanh thu theo khu vực.pdf</strong><span id="document-meta">PDF · 4 trang · 1,8 MB</span></div>
+          <button class="icon-button doc-menu-button" id="document-menu" type="button" aria-label="Thông tin tài liệu" title="Thông tin tài liệu"><span class="icon" data-icon="more"></span></button>
+        </div>
+        <div class="topbar-actions">
+          <button class="topbar-data-button" id="toggle-data-panel" type="button" aria-expanded="false"><span class="icon" data-icon="table-properties"></span><span>Bảng số liệu</span><span class="data-button-count" id="topbar-row-count">3</span></button>
+          <button class="icon-button export-report-button" id="export-report" type="button" aria-label="Xuất báo cáo" title="Xuất báo cáo"><span class="icon" data-icon="download"></span></button>
+          <button class="upload-small-button" id="topbar-upload" type="button"><span class="icon" data-icon="upload"></span><span>Tải PDF</span></button>
+        </div>
+      </header>
+
+      <section class="workbench" aria-label="Không gian làm việc với báo cáo">
+        <article class="document-panel" aria-label="Trình xem PDF">
+          <div class="document-toolbar">
+            <div class="document-mode"><span class="mode-dot"></span><span>Tài liệu</span></div>
+            <div class="document-toolbar-right">
+              <div class="page-controls" aria-label="Điều hướng trang">
+                <button class="mini-icon-button" id="prev-page" type="button" aria-label="Trang trước" title="Trang trước"><span class="icon" data-icon="chevron-left"></span></button>
+                <span class="page-counter"><span id="page-current">3</span><span class="page-counter-slash">/</span><span id="page-total">4</span></span>
+                <button class="mini-icon-button" id="next-page" type="button" aria-label="Trang tiếp" title="Trang tiếp"><span class="icon" data-icon="chevron-right"></span></button>
+              </div>
+              <span class="toolbar-separator"></span>
+              <div class="document-tools">
+                <button class="mini-icon-button" id="zoom-out" type="button" aria-label="Thu nhỏ" title="Thu nhỏ"><span class="icon" data-icon="minus"></span></button>
+                <span id="zoom-label" class="zoom-label">100%</span>
+                <button class="mini-icon-button" id="zoom-in" type="button" aria-label="Phóng to" title="Phóng to"><span class="icon" data-icon="plus"></span></button>
+              </div>
+              <button class="mini-icon-button open-pdf-button" id="open-pdf" type="button" aria-label="Mở PDF trong tab mới" title="Mở PDF trong tab mới"><span class="icon" data-icon="external-link"></span></button>
+            </div>
+          </div>
+          <div class="pdf-stage" id="pdf-stage">
+            <div class="pdf-loader" id="pdf-loader"><span class="loader-ring"></span><span>Đang mở tài liệu…</span></div>
+            <iframe id="pdf-frame" title="Bản xem báo cáo PDF" src="/sample-report.pdf#page=3&toolbar=0&navpanes=0&view=FitH"></iframe>
+            <div class="pdf-empty" id="pdf-empty" hidden>
+              <span class="pdf-empty-icon" data-icon="file-up"></span><strong>Chọn một báo cáo để bắt đầu</strong><p>Tải lên tệp PDF để xem tài liệu và hỏi đáp trên số liệu.</p><button class="button button-primary" id="empty-upload" type="button">Chọn tệp PDF</button>
+            </div>
+          </div>
+          <div class="document-footer">
+            <div><span class="footer-check" data-icon="check-circle-2"></span><span id="source-caption">Đang xem <strong>Trang 3 · Biểu đồ doanh thu theo quý</strong></span></div>
+            <button class="text-button" id="go-to-source" type="button">Về nguồn <span class="icon" data-icon="arrow-up-right"></span></button>
+          </div>
+        </article>
+
+        <article class="assistant-panel" aria-label="Trợ lý hỏi đáp">
+          <header class="assistant-heading">
+            <div class="assistant-title"><h1>Hỏi đáp</h1><p><span class="online-dot"></span>Đang dùng 1 tài liệu</p></div>
+            <button class="assistant-context" id="context-button" type="button" aria-label="Xem phạm vi hỏi đáp" title="Xem phạm vi hỏi đáp"><span class="icon" data-icon="file-text"></span><span class="context-short-label">Phạm vi</span><span class="icon tiny muted" data-icon="chevron-down"></span></button>
+          </header>
+          <div class="chat-context-strip" id="chat-context-strip">
+            <span class="context-file" id="context-file"><span class="icon" data-icon="file-pdf"></span><span id="context-filename">Báo cáo doanh thu theo khu vực</span></span>
+            <button id="clear-context" type="button" aria-label="Gỡ tài liệu khỏi phạm vi" title="Gỡ tài liệu khỏi phạm vi"><span class="icon" data-icon="x"></span></button>
+          </div>
+
+          <div class="chat-stream" id="chat-stream" aria-live="polite">
+            <div class="chat-date-divider"><span>VÍ DỤ HỎI ĐÁP</span></div>
+            <div class="user-message-row">
+              <div class="user-message">Trong quý 3, khu vực nào tăng nhiều nhất so với quý 1 theo tỷ lệ phần trăm?</div>
+              <span class="message-time">10:24</span>
+            </div>
+            <div class="assistant-message-row">
+              <div class="assistant-mini-avatar"><span class="icon" data-icon="sparkles"></span></div>
+              <div class="assistant-message-body">
+                <div class="answer-meta"><span class="answer-sender">Rõ Số</span><span class="answer-status"><span class="status-check" data-icon="check"></span>Có căn cứ</span></div>
+                <div class="answer-card">
+                  <h3>Miền Bắc tăng nhiều nhất từ Quý 1 đến Quý 3.</h3>
+                  <p>Doanh thu tăng từ <strong>58</strong> lên <strong>79 triệu đồng</strong>, tương đương <strong class="highlight-value">36,2%</strong>.</p>
+                  <div class="calculation-block"><div class="calculation-label"><span class="icon" data-icon="calculator"></span>Cách tính</div><div class="formula" id="initial-formula">((79 − 58) / 58) × 100 = 36,2%</div></div>
+                  <div class="answer-source-row"><span class="source-leading-icon" data-icon="file-check-2"></span><div class="answer-source-copy"><strong>Biểu đồ doanh thu theo quý</strong><small>Trang 3 · Đọc trực tiếp từ nhãn</small></div><button class="source-open-button" data-open-page="3" type="button">Mở nguồn <span class="icon" data-icon="arrow-up-right"></span></button></div>
+                </div>
+                <div class="answer-disclaimer"><span class="icon" data-icon="info"></span>Đối chiếu số liệu trong <button type="button" class="inline-link" id="open-table-from-answer">bảng dữ liệu</button> trước khi sử dụng.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="suggestion-block">
+            <div class="suggestion-label">Gợi ý câu hỏi</div>
+            <div class="suggestion-row" id="suggestion-row">
+              <button class="suggestion-chip" data-question="Doanh thu quý 2 của Miền Bắc là bao nhiêu?" type="button">Tra một số liệu <span class="icon" data-icon="arrow-up-right"></span></button>
+              <button class="suggestion-chip" data-question="Khu vực nào có doanh thu quý 4 cao nhất?" type="button">So sánh khu vực <span class="icon" data-icon="arrow-up-right"></span></button>
+            </div>
+          </div>
+          <form class="chat-composer" id="question-form">
+            <label class="sr-only" for="question-input">Nhập câu hỏi về báo cáo</label>
+            <textarea id="question-input" rows="1" placeholder="Hỏi về số liệu trong báo cáo…" maxlength="500"></textarea>
+            <div class="composer-bottom"><span class="composer-hint">Enter để gửi · Shift + Enter để xuống dòng</span><button class="send-button" id="send-question" type="submit" aria-label="Gửi câu hỏi" title="Gửi câu hỏi"><span class="icon" data-icon="arrow-up"></span></button></div>
+          </form>
+        </article>
+      </section>
+
+      <section class="data-panel" id="data-panel" aria-label="Bảng dữ liệu đã trích xuất" hidden>
+        <div class="data-panel-heading">
+          <div class="data-title-wrap"><div class="table-icon"><span class="icon" data-icon="table-properties"></span></div><div><div class="data-title-line"><h2>Dữ liệu đã trích xuất</h2><span class="data-count" id="row-count">3 dòng</span></div><p>Nhấp vào một giá trị để sửa · Đơn vị: triệu đồng</p></div></div>
+          <div class="data-actions"><button class="button button-small button-secondary" id="filter-unconfirmed" type="button"><span class="icon" data-icon="list-filter"></span>Chỉ hiện cần kiểm tra</button><button class="button button-small button-secondary" id="export-csv" type="button"><span class="icon" data-icon="download"></span>Xuất CSV</button><button class="icon-button data-close-button" id="close-data-panel" type="button" aria-label="Đóng bảng số liệu" title="Đóng"><span class="icon" data-icon="x"></span></button></div>
+        </div>
+        <div class="table-scroll"><table class="data-table"><thead><tr><th class="region-col">Khu vực</th><th>Quý 1</th><th>Quý 2</th><th>Quý 3</th><th>Quý 4</th><th class="change-col">Thay đổi Q1 → Q3</th><th>Tình trạng dữ liệu</th><th>Xác nhận</th><th class="source-col">Nguồn</th></tr></thead><tbody id="data-table-body"></tbody></table></div>
+        <div class="table-footer"><div class="table-footer-note"><span class="footer-dot"></span><span id="table-note">Nhấp vào một số để hiệu chỉnh; kết quả phụ thuộc sẽ được tính lại.</span></div><div class="table-legend"><span><i class="legend-swatch swatch-green"></i>Đã xác nhận</span><span><i class="legend-swatch swatch-amber"></i>Chưa xác nhận</span></div></div>
+      </section>
+      <div class="drawer-scrim" id="drawer-scrim" hidden></div>
+    </main>
+  </div>
+
+  <div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
+  <div class="modal-backdrop" id="modal-backdrop" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-top"><div class="modal-icon"><span class="icon" data-icon="info"></span></div><button class="icon-button" id="modal-close" type="button" aria-label="Đóng"><span class="icon" data-icon="x"></span></button></div>
+      <h2 id="modal-title">Thông tin</h2><p id="modal-copy"></p><div class="modal-actions"><button class="button button-primary" id="modal-ok" type="button">Đã hiểu</button></div>
+    </div>
+  </div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
