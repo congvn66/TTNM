@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sourcelens.local/contracts/calculation-result-v1.schema.json",
+  "title": "Deterministic calculation result v1",
+  "description": "Output of the code calculator. An LLM must never manufacture this object or its numeric result.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "question_plan_id", "status", "formula_id", "operands", "value", "unit", "reason_code", "warnings"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "question_plan_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["succeeded", "missing_data", "zero_denominator", "unit_mismatch", "ambiguous"]},
+    "formula_id": {"enum": ["identity_v1", "sum_v1", "subtract_v1", "absolute_change_v1", "growth_rate_v1", "percentage_point_change_v1", "compare_v1", "ranking_v1"]},
+    "operands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fact_key", "evidence_revision_id", "value", "unit"],
+        "properties": {
+          "fact_key": {"type": "string", "minLength": 1},
+          "evidence_revision_id": {"type": "string", "minLength": 1},
+          "value": {"type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+          "unit": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "value": {"type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+    "unit": {"type": ["string", "null"]},
+    "reason_code": {
+      "type": ["string", "null"],
+      "enum": [null, "MISSING_DATA", "ZERO_DENOMINATOR", "UNIT_MISMATCH", "AMBIGUOUS_INPUT"]
+    },
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "succeeded"}}},
+      "then": {"properties": {"value": {"type": "string"}, "reason_code": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"status": {"enum": ["missing_data", "zero_denominator", "unit_mismatch", "ambiguous"]}}},
+      "then": {"properties": {"value": {"type": "null"}, "reason_code": {"type": "string"}}}
+    }
+  ]
+}

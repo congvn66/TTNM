@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/contracts/provider-extraction-v1.schema.json",
+  "title": "Provider extraction result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "regions", "evidences", "warnings"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "regions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["region_key", "page_number", "bbox", "region_type", "text", "meta"],
+        "properties": {
+          "region_key": {"type": "string", "minLength": 1},
+          "page_number": {"type": "integer", "minimum": 1},
+          "bbox": {
+            "oneOf": [
+              {"type": "null"},
+              {"type": "array", "prefixItems": [{"type": "number", "minimum": 0, "maximum": 1}, {"type": "number", "minimum": 0, "maximum": 1}, {"type": "number", "minimum": 0, "maximum": 1}, {"type": "number", "minimum": 0, "maximum": 1}], "items": false}
+            ]
+          },
+          "region_type": {"enum": ["paragraph", "table", "table_cell", "chart", "chart_element", "image", "other"]},
+          "text": {"type": ["string", "null"]},
+          "meta": {"type": "object"}
+        }
+      }
+    },
+    "evidences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["evidence_key", "source_region_key", "value_kind", "raw_value", "raw_text", "semantic", "data_status", "extraction_method", "confidence"],
+        "properties": {
+          "evidence_key": {"type": "string", "minLength": 1},
+          "source_region_key": {"type": "string", "minLength": 1},
+          "value_kind": {"enum": ["number", "text"]},
+          "raw_value": {"type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+          "raw_text": {"type": ["string", "null"]},
+          "semantic": {"$ref": "semantic-v1.schema.json"},
+          "data_status": {"enum": ["valid", "missing", "error"]},
+          "extraction_method": {"enum": ["direct_label", "axis_estimation", "text", "table", "ocr", "none"]},
+          "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+        }
+      }
+    },
+    "warnings": {"type": "array", "items": {"type": "object"}}
+  }
+}

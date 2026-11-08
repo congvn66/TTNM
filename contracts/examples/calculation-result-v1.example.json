@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "question_plan_id": "plan-demo-001",
+  "status": "succeeded",
+  "formula_id": "growth_rate_v1",
+  "operands": [
+    {
+      "fact_key": "current",
+      "evidence_revision_id": "evr-current-001",
+      "value": "2785",
+      "unit": "VND_BILLION"
+    },
+    {
+      "fact_key": "baseline",
+      "evidence_revision_id": "evr-baseline-001",
+      "value": "2018",
+      "unit": "VND_BILLION"
+    }
+  ],
+  "value": "38.00792864222001982160555005",
+  "unit": "PERCENT",
+  "reason_code": null,
+  "warnings": []
+}

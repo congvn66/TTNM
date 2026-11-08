@@ -1,0 +1,1585 @@
+{
+  "_ids": [
+    {
+      "alice": "39c8c201-36d1-54d9-a3eb-428098efa363",
+      "answer_a": "f4d3d262-1a44-5368-b3dd-d8383f9a5fb8",
+      "assistant_a": "71fee26c-e49f-5245-a9d6-ee42907c2128",
+      "bob": "8dc3d2df-84ca-511f-9dc7-921027183959",
+      "ce_a_mb_q1": "d10a34dd-d61e-5696-ba1f-7bcc0cbc9d04",
+      "ce_b_mb_q1": "ff1c945b-c813-59a9-9a44-5abfc3c69d10",
+      "chat_a": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "chat_b": "00447e5b-7bf4-55be-a400-c4d857c6788c",
+      "chat_bob": "701f5670-f428-5d16-9606-a3c97bc4dcef",
+      "er_a_mb_q1": "97fd067d-c779-55f6-950d-eae23c0621bf",
+      "er_b_mb_q1": "dd518a8d-8e4d-52bd-95ae-8ef958db9415",
+      "run_sales_v2": "196d39dc-65f0-50e1-9cac-4e2ca43d7c9b",
+      "source_a": "cf4d4f9c-10b9-59dc-9111-663f1c22f930",
+      "source_b": "d73acd0c-8d48-50ad-a6d5-9b082fe7128c",
+      "version_sales_v2": "fec4cfa3-1679-5f9b-b6eb-e8d33666c5de"
+    }
+  ],
+  "account_tokens": [
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "expires_at": "2026-01-15T09:00:00Z",
+      "id": "bc99ca5b-4cd6-52f1-a4e8-221db03901cc",
+      "purpose": "reset_password",
+      "token_hash": "sha256:reset-bob",
+      "used_at": null,
+      "user_id": "8dc3d2df-84ca-511f-9dc7-921027183959"
+    }
+  ],
+  "answer_inputs": [
+    {
+      "answer_revision_id": "f4d3d262-1a44-5368-b3dd-d8383f9a5fb8",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "created_at": "2026-01-15T08:00:00Z",
+      "evidence_revision_id": "97fd067d-c779-55f6-950d-eae23c0621bf",
+      "param_key": "MB_Q1",
+      "role": "comparison_group"
+    },
+    {
+      "answer_revision_id": "f4d3d262-1a44-5368-b3dd-d8383f9a5fb8",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "created_at": "2026-01-15T08:00:00Z",
+      "evidence_revision_id": "86fde0f7-da16-5013-9b18-0298c0b983db",
+      "param_key": "MB_Q3",
+      "role": "comparison_group"
+    },
+    {
+      "answer_revision_id": "f4d3d262-1a44-5368-b3dd-d8383f9a5fb8",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "created_at": "2026-01-15T08:00:00Z",
+      "evidence_revision_id": "fd6e223a-e72e-50ab-a8b3-9b14fa435a7e",
+      "param_key": "MN_Q1",
+      "role": "comparison_group"
+    },
+    {
+      "answer_revision_id": "f4d3d262-1a44-5368-b3dd-d8383f9a5fb8",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "created_at": "2026-01-15T08:00:00Z",
+      "evidence_revision_id": "86973dca-c4d7-5b18-95c3-81f03456249b",
+      "param_key": "MN_Q3",
+      "role": "comparison_group"
+    },
+    {
+      "answer_revision_id": "f4d3d262-1a44-5368-b3dd-d8383f9a5fb8",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "created_at": "2026-01-15T08:00:00Z",
+      "evidence_revision_id": "c4850dc8-d14c-53ec-a074-fe22690ad03b",
+      "param_key": "CONTEXT_VAT",
+      "role": "context_text"
+    }
+  ],
+  "answer_revisions": [
+    {
+      "answer_status": "answered",
+      "answer_text": "Miền Bắc tăng cao nhất.",
+      "assessment": {
+        "complete": true,
+        "reasons": [],
+        "schema_version": 1
+      },
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "created_at": "2026-01-15T08:00:00Z",
+      "id": "f4d3d262-1a44-5368-b3dd-d8383f9a5fb8",
+      "input_data_revision": 1,
+      "message_id": "71fee26c-e49f-5245-a9d6-ee42907c2128",
+      "operation": {
+        "calculator_version": 1,
+        "name": "growth_rate_ranking",
+        "schema_version": 1
+      },
+      "question_context": {
+        "ambiguities": [],
+        "comparison_basis": "percent",
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "operation": "ranking",
+        "requested_periods": [
+          {
+            "label": "Quý 1",
+            "status": "partial"
+          },
+          {
+            "label": "Quý 3",
+            "status": "partial"
+          }
+        ],
+        "schema_version": 1,
+        "subjects": {
+          "mode": "all_in_scope",
+          "values": []
+        },
+        "time_required": true
+      },
+      "result": {
+        "defined": true,
+        "schema_version": 1,
+        "value": "128.9473684210526315789473684",
+        "winner_subjects": [
+          "Miền Bắc"
+        ]
+      },
+      "revision_no": 1
+    }
+  ],
+  "answer_scopes": [
+    {
+      "answer_revision_id": "f4d3d262-1a44-5368-b3dd-d8383f9a5fb8",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "chat_source_id": "cf4d4f9c-10b9-59dc-9111-663f1c22f930",
+      "created_at": "2026-01-15T08:00:00Z",
+      "filter": {
+        "dimensions": {},
+        "include_text_context": true,
+        "measure_key": "doanh_thu",
+        "period_keys": [
+          "Quý 1",
+          "Quý 3"
+        ],
+        "region_ids": [],
+        "schema_version": 1,
+        "subject_keys": [],
+        "subject_mode": "all"
+      },
+      "id": "ca10968b-bfd4-5fa2-b3ff-d9bab31531bf"
+    }
+  ],
+  "audit_events": [
+    {
+      "action": "auth.login",
+      "actor_id": "39c8c201-36d1-54d9-a3eb-428098efa363",
+      "created_at": "2026-01-15T08:00:00Z",
+      "id": "2c9f9110-2e24-5384-a8b8-9e4562f20352",
+      "metadata": {
+        "schema_version": 1
+      },
+      "target_id": "39c8c201-36d1-54d9-a3eb-428098efa363",
+      "target_type": "user"
+    }
+  ],
+  "auth_sessions": [
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "expires_at": "2026-02-15T08:00:00Z",
+      "id": "11dfce83-b587-5542-8665-3fa63beefec1",
+      "revoked_at": null,
+      "token_hash": "sha256:session-alice",
+      "user_id": "39c8c201-36d1-54d9-a3eb-428098efa363"
+    }
+  ],
+  "chat_evidences": [
+    {
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "chat_source_id": "cf4d4f9c-10b9-59dc-9111-663f1c22f930",
+      "created_at": "2026-01-15T08:00:00Z",
+      "current_revision_id": "97fd067d-c779-55f6-950d-eae23c0621bf",
+      "extracted_evidence_id": "27003dab-be3f-5265-a0b7-3f9447708ca0",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "d10a34dd-d61e-5696-ba1f-7bcc0cbc9d04"
+    },
+    {
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "chat_source_id": "cf4d4f9c-10b9-59dc-9111-663f1c22f930",
+      "created_at": "2026-01-15T08:00:00Z",
+      "current_revision_id": "86fde0f7-da16-5013-9b18-0298c0b983db",
+      "extracted_evidence_id": "1b692fc2-5203-5e50-984a-00e0ab64efc4",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "4b62769f-f448-5bae-b64b-beb1f36530b8"
+    },
+    {
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "chat_source_id": "cf4d4f9c-10b9-59dc-9111-663f1c22f930",
+      "created_at": "2026-01-15T08:00:00Z",
+      "current_revision_id": "fd6e223a-e72e-50ab-a8b3-9b14fa435a7e",
+      "extracted_evidence_id": "62eb47a7-40ad-5a64-9337-359788ab4219",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "cef3dcd5-d7e3-5854-99e4-fff9d59768fc"
+    },
+    {
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "chat_source_id": "cf4d4f9c-10b9-59dc-9111-663f1c22f930",
+      "created_at": "2026-01-15T08:00:00Z",
+      "current_revision_id": "86973dca-c4d7-5b18-95c3-81f03456249b",
+      "extracted_evidence_id": "5cab719f-640c-59e4-b6a0-90eab180d7f8",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "c8747630-bdbc-50b4-acf3-8d457d1044c5"
+    },
+    {
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "chat_source_id": "cf4d4f9c-10b9-59dc-9111-663f1c22f930",
+      "created_at": "2026-01-15T08:00:00Z",
+      "current_revision_id": "a3b65115-616d-5b43-9574-ce2c8bf5b85d",
+      "extracted_evidence_id": "655bb622-e3f3-55ea-86ab-3a5dfb92e717",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "ca0d5dcb-0db4-5a46-a817-d4ac8076fcfa"
+    },
+    {
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "chat_source_id": "cf4d4f9c-10b9-59dc-9111-663f1c22f930",
+      "created_at": "2026-01-15T08:00:00Z",
+      "current_revision_id": "c4850dc8-d14c-53ec-a074-fe22690ad03b",
+      "extracted_evidence_id": "f2ecbe7e-21a3-5d34-93a1-106ed0712757",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "f1f2a370-0fe5-5806-9b59-a2dc7832b6f4"
+    },
+    {
+      "chat_id": "00447e5b-7bf4-55be-a400-c4d857c6788c",
+      "chat_source_id": "d73acd0c-8d48-50ad-a6d5-9b082fe7128c",
+      "created_at": "2026-01-15T08:00:00Z",
+      "current_revision_id": "dd518a8d-8e4d-52bd-95ae-8ef958db9415",
+      "extracted_evidence_id": "27003dab-be3f-5265-a0b7-3f9447708ca0",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "ff1c945b-c813-59a9-9a44-5abfc3c69d10"
+    },
+    {
+      "chat_id": "00447e5b-7bf4-55be-a400-c4d857c6788c",
+      "chat_source_id": "d73acd0c-8d48-50ad-a6d5-9b082fe7128c",
+      "created_at": "2026-01-15T08:00:00Z",
+      "current_revision_id": "f9161bba-fda7-5c29-ad23-6a15be4caf5d",
+      "extracted_evidence_id": "1b692fc2-5203-5e50-984a-00e0ab64efc4",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "79691818-0148-5b7b-bbdc-3d5e98cfeada"
+    },
+    {
+      "chat_id": "00447e5b-7bf4-55be-a400-c4d857c6788c",
+      "chat_source_id": "d73acd0c-8d48-50ad-a6d5-9b082fe7128c",
+      "created_at": "2026-01-15T08:00:00Z",
+      "current_revision_id": "e53ebf54-15ef-5474-9404-33d9acb95fa4",
+      "extracted_evidence_id": "62eb47a7-40ad-5a64-9337-359788ab4219",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "99bb7a74-3996-5e77-ba33-ea05aa0e8e92"
+    },
+    {
+      "chat_id": "00447e5b-7bf4-55be-a400-c4d857c6788c",
+      "chat_source_id": "d73acd0c-8d48-50ad-a6d5-9b082fe7128c",
+      "created_at": "2026-01-15T08:00:00Z",
+      "current_revision_id": "4c7530cf-b41c-5a88-a5cf-1b043f6c5a92",
+      "extracted_evidence_id": "5cab719f-640c-59e4-b6a0-90eab180d7f8",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "f9d384bd-a08a-57ee-9022-156274743162"
+    },
+    {
+      "chat_id": "701f5670-f428-5d16-9606-a3c97bc4dcef",
+      "chat_source_id": "40b96271-6b2d-55fa-ad9f-9628f9950168",
+      "created_at": "2026-01-15T08:00:00Z",
+      "current_revision_id": "6a88da04-3d3b-5b6d-9b6c-c7de4cb51bd0",
+      "extracted_evidence_id": "944a6ff1-3504-5c17-9f87-e7ebf1919b3d",
+      "extraction_run_id": "3a02526e-1cfd-5a31-897f-be595823200b",
+      "id": "b8524606-2a1f-5800-9316-ff809a4a66da"
+    }
+  ],
+  "chat_sources": [
+    {
+      "added_at": "2026-01-15T08:00:00Z",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "document_version_id": "3e73a365-d407-5530-8f0c-18dac4f48961",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "cf4d4f9c-10b9-59dc-9111-663f1c22f930",
+      "source_status": "active"
+    },
+    {
+      "added_at": "2026-01-15T08:00:00Z",
+      "chat_id": "00447e5b-7bf4-55be-a400-c4d857c6788c",
+      "document_version_id": "3e73a365-d407-5530-8f0c-18dac4f48961",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "d73acd0c-8d48-50ad-a6d5-9b082fe7128c",
+      "source_status": "active"
+    },
+    {
+      "added_at": "2026-01-15T08:00:00Z",
+      "chat_id": "701f5670-f428-5d16-9606-a3c97bc4dcef",
+      "document_version_id": "5fdb76f3-bdc9-53ec-a08d-3aadf8a10973",
+      "extraction_run_id": "3a02526e-1cfd-5a31-897f-be595823200b",
+      "id": "40b96271-6b2d-55fa-ad9f-9628f9950168",
+      "source_status": "active"
+    }
+  ],
+  "chats": [
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "data_revision": 1,
+      "id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "next_sequence_no": 3,
+      "owner_id": "39c8c201-36d1-54d9-a3eb-428098efa363",
+      "project_id": "da436e41-6915-5f34-8607-d0f591d75c82",
+      "title": "Xếp hạng doanh thu A"
+    },
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "data_revision": 0,
+      "id": "00447e5b-7bf4-55be-a400-c4d857c6788c",
+      "next_sequence_no": 1,
+      "owner_id": "39c8c201-36d1-54d9-a3eb-428098efa363",
+      "project_id": "da436e41-6915-5f34-8607-d0f591d75c82",
+      "title": "Phiên độc lập B"
+    },
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "data_revision": 0,
+      "id": "701f5670-f428-5d16-9606-a3c97bc4dcef",
+      "next_sequence_no": 1,
+      "owner_id": "8dc3d2df-84ca-511f-9dc7-921027183959",
+      "project_id": "23fd49e4-b7b1-5799-848a-c9553865fe85",
+      "title": "Chat riêng Bob"
+    }
+  ],
+  "document_versions": [
+    {
+      "byte_size": 1000,
+      "document_id": "350155c5-7648-5040-860d-3ac6f476b82c",
+      "file_hash": "mock-sales-v1",
+      "file_name": "sales-v1.pdf",
+      "id": "3e73a365-d407-5530-8f0c-18dac4f48961",
+      "page_count": 3,
+      "status": "ready",
+      "storage_key": "alice/sales/v1.pdf",
+      "uploaded_at": "2026-01-15T08:00:00Z",
+      "version_no": 1
+    },
+    {
+      "byte_size": 1100,
+      "document_id": "350155c5-7648-5040-860d-3ac6f476b82c",
+      "file_hash": "mock-sales-v2",
+      "file_name": "sales-v2.pdf",
+      "id": "fec4cfa3-1679-5f9b-b6eb-e8d33666c5de",
+      "page_count": 3,
+      "status": "ready",
+      "storage_key": "alice/sales/v2.pdf",
+      "uploaded_at": "2026-01-15T08:00:00Z",
+      "version_no": 2
+    },
+    {
+      "byte_size": 800,
+      "document_id": "6a371f84-4002-51bd-b35a-c671c2e194d2",
+      "file_hash": "mock-missing",
+      "file_name": "missing.pdf",
+      "id": "5d6d0307-7066-583e-b36a-7701552df696",
+      "page_count": 2,
+      "status": "ready",
+      "storage_key": "alice/missing/v1.pdf",
+      "uploaded_at": "2026-01-15T08:00:00Z",
+      "version_no": 1
+    },
+    {
+      "byte_size": 700,
+      "document_id": "9f4af645-2867-5c32-98b8-a529f93f0108",
+      "file_hash": "mock-bob",
+      "file_name": "bob.pdf",
+      "id": "5fdb76f3-bdc9-53ec-a08d-3aadf8a10973",
+      "page_count": 2,
+      "status": "ready",
+      "storage_key": "bob/private/v1.pdf",
+      "uploaded_at": "2026-01-15T08:00:00Z",
+      "version_no": 1
+    }
+  ],
+  "documents": [
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "id": "350155c5-7648-5040-860d-3ac6f476b82c",
+      "owner_id": "39c8c201-36d1-54d9-a3eb-428098efa363",
+      "title": "Báo cáo doanh thu"
+    },
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "id": "6a371f84-4002-51bd-b35a-c671c2e194d2",
+      "owner_id": "39c8c201-36d1-54d9-a3eb-428098efa363",
+      "title": "Báo cáo thiếu lợi nhuận"
+    },
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "id": "9f4af645-2867-5c32-98b8-a529f93f0108",
+      "owner_id": "8dc3d2df-84ca-511f-9dc7-921027183959",
+      "title": "Tài liệu riêng Bob"
+    }
+  ],
+  "evidence_revisions": [
+    {
+      "action": "initialize",
+      "chat_evidence_id": "d10a34dd-d61e-5696-ba1f-7bcc0cbc9d04",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "created_at": "2026-01-15T08:00:00Z",
+      "created_by": null,
+      "data_status": "valid",
+      "id": "97fd067d-c779-55f6-950d-eae23c0621bf",
+      "numeric_value": "38",
+      "reason": null,
+      "revision_no": 1,
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 1",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_bắc",
+          "label": "Miền Bắc"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "text_value": null,
+      "value_kind": "number",
+      "verification_status": "unverified"
+    },
+    {
+      "action": "initialize",
+      "chat_evidence_id": "4b62769f-f448-5bae-b64b-beb1f36530b8",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "created_at": "2026-01-15T08:00:00Z",
+      "created_by": null,
+      "data_status": "valid",
+      "id": "86fde0f7-da16-5013-9b18-0298c0b983db",
+      "numeric_value": "87",
+      "reason": null,
+      "revision_no": 1,
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 3",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_bắc",
+          "label": "Miền Bắc"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "text_value": null,
+      "value_kind": "number",
+      "verification_status": "unverified"
+    },
+    {
+      "action": "initialize",
+      "chat_evidence_id": "cef3dcd5-d7e3-5854-99e4-fff9d59768fc",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "created_at": "2026-01-15T08:00:00Z",
+      "created_by": null,
+      "data_status": "valid",
+      "id": "fd6e223a-e72e-50ab-a8b3-9b14fa435a7e",
+      "numeric_value": "50",
+      "reason": null,
+      "revision_no": 1,
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 1",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_nam",
+          "label": "Miền Nam"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "text_value": null,
+      "value_kind": "number",
+      "verification_status": "unverified"
+    },
+    {
+      "action": "initialize",
+      "chat_evidence_id": "c8747630-bdbc-50b4-acf3-8d457d1044c5",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "created_at": "2026-01-15T08:00:00Z",
+      "created_by": null,
+      "data_status": "valid",
+      "id": "86973dca-c4d7-5b18-95c3-81f03456249b",
+      "numeric_value": "90",
+      "reason": null,
+      "revision_no": 1,
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 3",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_nam",
+          "label": "Miền Nam"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "text_value": null,
+      "value_kind": "number",
+      "verification_status": "unverified"
+    },
+    {
+      "action": "initialize",
+      "chat_evidence_id": "ca0d5dcb-0db4-5a46-a817-d4ac8076fcfa",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "created_at": "2026-01-15T08:00:00Z",
+      "created_by": null,
+      "data_status": "valid",
+      "id": "a3b65115-616d-5b43-9574-ce2c8bf5b85d",
+      "numeric_value": "0",
+      "reason": null,
+      "revision_no": 1,
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "chi_phí",
+          "label": "Chi phí"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 1",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_trung",
+          "label": "Miền Trung"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "text_value": null,
+      "value_kind": "number",
+      "verification_status": "unverified"
+    },
+    {
+      "action": "initialize",
+      "chat_evidence_id": "f1f2a370-0fe5-5806-9b59-a2dc7832b6f4",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "created_at": "2026-01-15T08:00:00Z",
+      "created_by": null,
+      "data_status": "valid",
+      "id": "c4850dc8-d14c-53ec-a074-fe22690ad03b",
+      "numeric_value": null,
+      "reason": null,
+      "revision_no": 1,
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "định_nghĩa_doanh_thu",
+          "label": "Định nghĩa doanh thu"
+        },
+        "period": {
+          "basis": null,
+          "end": null,
+          "label": null,
+          "source_region_ids": [],
+          "start": null,
+          "status": "not_applicable"
+        },
+        "schema_version": 1,
+        "subject": null,
+        "unit": null,
+        "value_operator": "eq"
+      },
+      "text_value": "Doanh thu chưa bao gồm thuế",
+      "value_kind": "text",
+      "verification_status": "unverified"
+    },
+    {
+      "action": "initialize",
+      "chat_evidence_id": "ff1c945b-c813-59a9-9a44-5abfc3c69d10",
+      "chat_id": "00447e5b-7bf4-55be-a400-c4d857c6788c",
+      "created_at": "2026-01-15T08:00:00Z",
+      "created_by": null,
+      "data_status": "valid",
+      "id": "dd518a8d-8e4d-52bd-95ae-8ef958db9415",
+      "numeric_value": "38",
+      "reason": null,
+      "revision_no": 1,
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 1",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_bắc",
+          "label": "Miền Bắc"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "text_value": null,
+      "value_kind": "number",
+      "verification_status": "unverified"
+    },
+    {
+      "action": "initialize",
+      "chat_evidence_id": "79691818-0148-5b7b-bbdc-3d5e98cfeada",
+      "chat_id": "00447e5b-7bf4-55be-a400-c4d857c6788c",
+      "created_at": "2026-01-15T08:00:00Z",
+      "created_by": null,
+      "data_status": "valid",
+      "id": "f9161bba-fda7-5c29-ad23-6a15be4caf5d",
+      "numeric_value": "87",
+      "reason": null,
+      "revision_no": 1,
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 3",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_bắc",
+          "label": "Miền Bắc"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "text_value": null,
+      "value_kind": "number",
+      "verification_status": "unverified"
+    },
+    {
+      "action": "initialize",
+      "chat_evidence_id": "99bb7a74-3996-5e77-ba33-ea05aa0e8e92",
+      "chat_id": "00447e5b-7bf4-55be-a400-c4d857c6788c",
+      "created_at": "2026-01-15T08:00:00Z",
+      "created_by": null,
+      "data_status": "valid",
+      "id": "e53ebf54-15ef-5474-9404-33d9acb95fa4",
+      "numeric_value": "50",
+      "reason": null,
+      "revision_no": 1,
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 1",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_nam",
+          "label": "Miền Nam"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "text_value": null,
+      "value_kind": "number",
+      "verification_status": "unverified"
+    },
+    {
+      "action": "initialize",
+      "chat_evidence_id": "f9d384bd-a08a-57ee-9022-156274743162",
+      "chat_id": "00447e5b-7bf4-55be-a400-c4d857c6788c",
+      "created_at": "2026-01-15T08:00:00Z",
+      "created_by": null,
+      "data_status": "valid",
+      "id": "4c7530cf-b41c-5a88-a5cf-1b043f6c5a92",
+      "numeric_value": "90",
+      "reason": null,
+      "revision_no": 1,
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 3",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_nam",
+          "label": "Miền Nam"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "text_value": null,
+      "value_kind": "number",
+      "verification_status": "unverified"
+    },
+    {
+      "action": "initialize",
+      "chat_evidence_id": "b8524606-2a1f-5800-9316-ff809a4a66da",
+      "chat_id": "701f5670-f428-5d16-9606-a3c97bc4dcef",
+      "created_at": "2026-01-15T08:00:00Z",
+      "created_by": null,
+      "data_status": "valid",
+      "id": "6a88da04-3d3b-5b6d-9b6c-c7de4cb51bd0",
+      "numeric_value": "999",
+      "reason": null,
+      "revision_no": 1,
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 1",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "riêng_tư",
+          "label": "Riêng tư"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "text_value": null,
+      "value_kind": "number",
+      "verification_status": "unverified"
+    }
+  ],
+  "extracted_evidences": [
+    {
+      "confidence": "0.95",
+      "created_at": "2026-01-15T08:00:00Z",
+      "data_status": "valid",
+      "extraction_method": "direct_label",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "27003dab-be3f-5265-a0b7-3f9447708ca0",
+      "raw_text": null,
+      "raw_value": "38",
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 1",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_bắc",
+          "label": "Miền Bắc"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "source_region_id": "2937bddf-8b6c-5e8c-8522-3b5e84e7c880",
+      "value_kind": "number"
+    },
+    {
+      "confidence": "0.95",
+      "created_at": "2026-01-15T08:00:00Z",
+      "data_status": "valid",
+      "extraction_method": "direct_label",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "1b692fc2-5203-5e50-984a-00e0ab64efc4",
+      "raw_text": null,
+      "raw_value": "87",
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 3",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_bắc",
+          "label": "Miền Bắc"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "source_region_id": "8e374291-a387-5413-902c-79e70e33835c",
+      "value_kind": "number"
+    },
+    {
+      "confidence": "0.95",
+      "created_at": "2026-01-15T08:00:00Z",
+      "data_status": "valid",
+      "extraction_method": "direct_label",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "62eb47a7-40ad-5a64-9337-359788ab4219",
+      "raw_text": null,
+      "raw_value": "50",
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 1",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_nam",
+          "label": "Miền Nam"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "source_region_id": "ed645b8f-2c83-5159-a649-ea604fcf8a3b",
+      "value_kind": "number"
+    },
+    {
+      "confidence": "0.95",
+      "created_at": "2026-01-15T08:00:00Z",
+      "data_status": "valid",
+      "extraction_method": "direct_label",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "5cab719f-640c-59e4-b6a0-90eab180d7f8",
+      "raw_text": null,
+      "raw_value": "90",
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 3",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_nam",
+          "label": "Miền Nam"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "source_region_id": "7c6c8171-f9e8-5b5d-b088-2b820d1dba11",
+      "value_kind": "number"
+    },
+    {
+      "confidence": "0.95",
+      "created_at": "2026-01-15T08:00:00Z",
+      "data_status": "valid",
+      "extraction_method": "direct_label",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "655bb622-e3f3-55ea-86ab-3a5dfb92e717",
+      "raw_text": null,
+      "raw_value": "0",
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "chi_phí",
+          "label": "Chi phí"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 1",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_trung",
+          "label": "Miền Trung"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "source_region_id": "89ae0484-d6ac-5fd8-8f4f-bebf27b81255",
+      "value_kind": "number"
+    },
+    {
+      "confidence": "0.95",
+      "created_at": "2026-01-15T08:00:00Z",
+      "data_status": "valid",
+      "extraction_method": "text",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "f2ecbe7e-21a3-5d34-93a1-106ed0712757",
+      "raw_text": "Doanh thu chưa bao gồm thuế",
+      "raw_value": null,
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "định_nghĩa_doanh_thu",
+          "label": "Định nghĩa doanh thu"
+        },
+        "period": {
+          "basis": null,
+          "end": null,
+          "label": null,
+          "source_region_ids": [],
+          "start": null,
+          "status": "not_applicable"
+        },
+        "schema_version": 1,
+        "subject": null,
+        "unit": null,
+        "value_operator": "eq"
+      },
+      "source_region_id": "4a444d88-1233-517c-ad23-0dbfeae96230",
+      "value_kind": "text"
+    },
+    {
+      "confidence": null,
+      "created_at": "2026-01-15T08:00:00Z",
+      "data_status": "missing",
+      "extraction_method": "direct_label",
+      "extraction_run_id": "a12a203f-1681-560c-84fa-d8a72be74cd0",
+      "id": "8749a6ed-369a-50ea-8cd2-4d9f4023892c",
+      "raw_text": null,
+      "raw_value": null,
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "lợi_nhuận",
+          "label": "Lợi nhuận"
+        },
+        "period": {
+          "basis": null,
+          "end": null,
+          "label": null,
+          "source_region_ids": [],
+          "start": null,
+          "status": "not_applicable"
+        },
+        "schema_version": 1,
+        "subject": null,
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "source_region_id": "04866ebb-b9ba-59db-813d-a9c490284207",
+      "value_kind": "number"
+    },
+    {
+      "confidence": "0.95",
+      "created_at": "2026-01-15T08:00:00Z",
+      "data_status": "valid",
+      "extraction_method": "direct_label",
+      "extraction_run_id": "3a02526e-1cfd-5a31-897f-be595823200b",
+      "id": "944a6ff1-3504-5c17-9f87-e7ebf1919b3d",
+      "raw_text": null,
+      "raw_value": "999",
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 1",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "riêng_tư",
+          "label": "Riêng tư"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "source_region_id": "c224a6a0-ab17-5a3a-a991-68715c2c0cb4",
+      "value_kind": "number"
+    },
+    {
+      "confidence": "0.95",
+      "created_at": "2026-01-15T08:00:00Z",
+      "data_status": "valid",
+      "extraction_method": "direct_label",
+      "extraction_run_id": "196d39dc-65f0-50e1-9cac-4e2ca43d7c9b",
+      "id": "169720b4-a578-5186-b749-4d82b3cf7627",
+      "raw_text": null,
+      "raw_value": "58",
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 1",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_bắc",
+          "label": "Miền Bắc"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "source_region_id": "8f7097a8-9470-545c-a8d2-5629a5e0639d",
+      "value_kind": "number"
+    },
+    {
+      "confidence": "0.95",
+      "created_at": "2026-01-15T08:00:00Z",
+      "data_status": "valid",
+      "extraction_method": "direct_label",
+      "extraction_run_id": "196d39dc-65f0-50e1-9cac-4e2ca43d7c9b",
+      "id": "6eaf832a-47af-529a-90f6-f62058af0352",
+      "raw_text": null,
+      "raw_value": "87",
+      "semantic": {
+        "dimensions": {},
+        "measure": {
+          "code": "doanh_thu",
+          "label": "Doanh thu"
+        },
+        "period": {
+          "basis": "explicit",
+          "end": null,
+          "label": "Quý 3",
+          "source_region_ids": [],
+          "start": null,
+          "status": "partial"
+        },
+        "schema_version": 1,
+        "subject": {
+          "code": "miền_bắc",
+          "label": "Miền Bắc"
+        },
+        "unit": {
+          "code": "VND_MILLION",
+          "label": "triệu đồng",
+          "multiplier": "1000000"
+        },
+        "value_operator": "eq"
+      },
+      "source_region_id": "5224e2e0-e6be-5c5c-9986-bfefb79372d0",
+      "value_kind": "number"
+    }
+  ],
+  "extraction_runs": [
+    {
+      "config": {
+        "schema_version": 1
+      },
+      "created_at": "2026-01-15T08:00:00Z",
+      "document_version_id": "3e73a365-d407-5530-8f0c-18dac4f48961",
+      "extractor_name": "mock",
+      "extractor_version": "1",
+      "id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "run_no": 1,
+      "status": "completed"
+    },
+    {
+      "config": {
+        "schema_version": 1
+      },
+      "created_at": "2026-01-15T08:00:00Z",
+      "document_version_id": "fec4cfa3-1679-5f9b-b6eb-e8d33666c5de",
+      "extractor_name": "mock",
+      "extractor_version": "1",
+      "id": "196d39dc-65f0-50e1-9cac-4e2ca43d7c9b",
+      "run_no": 1,
+      "status": "completed"
+    },
+    {
+      "config": {
+        "schema_version": 1
+      },
+      "created_at": "2026-01-15T08:00:00Z",
+      "document_version_id": "5d6d0307-7066-583e-b36a-7701552df696",
+      "extractor_name": "mock",
+      "extractor_version": "1",
+      "id": "a12a203f-1681-560c-84fa-d8a72be74cd0",
+      "run_no": 1,
+      "status": "completed"
+    },
+    {
+      "config": {
+        "schema_version": 1
+      },
+      "created_at": "2026-01-15T08:00:00Z",
+      "document_version_id": "5fdb76f3-bdc9-53ec-a08d-3aadf8a10973",
+      "extractor_name": "mock",
+      "extractor_version": "1",
+      "id": "3a02526e-1cfd-5a31-897f-be595823200b",
+      "run_no": 1,
+      "status": "completed"
+    }
+  ],
+  "job_events": [
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "event_no": 1,
+      "event_type": "succeeded",
+      "id": "86e6adc9-c601-5082-a10d-704db0323a93",
+      "job_id": "5b1acf6c-fd64-5c23-a19b-8f0a387f7a50",
+      "payload": {
+        "answer_revision_id": "f4d3d262-1a44-5368-b3dd-d8383f9a5fb8"
+      }
+    }
+  ],
+  "jobs": [
+    {
+      "attempts": 1,
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "created_at": "2026-01-15T08:00:00Z",
+      "dedup_key": "answer:71fee26c-e49f-5245-a9d6-ee42907c2128:1",
+      "id": "5b1acf6c-fd64-5c23-a19b-8f0a387f7a50",
+      "input_data_revision": 1,
+      "kind": "answer_question",
+      "max_attempts": 3,
+      "owner_id": "39c8c201-36d1-54d9-a3eb-428098efa363",
+      "payload": {
+        "message_id": "71fee26c-e49f-5245-a9d6-ee42907c2128",
+        "schema_version": 1
+      },
+      "result": {
+        "answer_revision_id": "f4d3d262-1a44-5368-b3dd-d8383f9a5fb8"
+      },
+      "status": "succeeded"
+    }
+  ],
+  "message_pins": [
+    {
+      "answer_revision_id": "f4d3d262-1a44-5368-b3dd-d8383f9a5fb8",
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "id": "d643690d-0f04-5c75-ad00-eba22349cc94",
+      "message_id": "71fee26c-e49f-5245-a9d6-ee42907c2128",
+      "owner_id": "39c8c201-36d1-54d9-a3eb-428098efa363",
+      "pinned_at": "2026-01-15T08:00:00Z"
+    }
+  ],
+  "messages": [
+    {
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "content": "Trong quý 3, khu vực nào tăng nhiều nhất so với quý 1 theo tỷ lệ phần trăm?",
+      "created_at": "2026-01-15T08:00:00Z",
+      "current_answer_revision_id": null,
+      "id": "ccd5858e-f2da-5159-8f3e-80513fbe018d",
+      "needs_update": false,
+      "reply_to_message_id": null,
+      "role": "user",
+      "sequence_no": 1,
+      "status": "accepted"
+    },
+    {
+      "chat_id": "92a15df5-67cc-541f-80e2-4bfdbb326aca",
+      "content": "",
+      "created_at": "2026-01-15T08:00:00Z",
+      "current_answer_revision_id": "f4d3d262-1a44-5368-b3dd-d8383f9a5fb8",
+      "id": "71fee26c-e49f-5245-a9d6-ee42907c2128",
+      "needs_update": false,
+      "reply_to_message_id": "ccd5858e-f2da-5159-8f3e-80513fbe018d",
+      "role": "assistant",
+      "sequence_no": 2,
+      "status": "completed"
+    }
+  ],
+  "project_documents": [
+    {
+      "added_at": "2026-01-15T08:00:00Z",
+      "document_id": "350155c5-7648-5040-860d-3ac6f476b82c",
+      "owner_id": "39c8c201-36d1-54d9-a3eb-428098efa363",
+      "project_id": "da436e41-6915-5f34-8607-d0f591d75c82"
+    },
+    {
+      "added_at": "2026-01-15T08:00:00Z",
+      "document_id": "6a371f84-4002-51bd-b35a-c671c2e194d2",
+      "owner_id": "39c8c201-36d1-54d9-a3eb-428098efa363",
+      "project_id": "da436e41-6915-5f34-8607-d0f591d75c82"
+    },
+    {
+      "added_at": "2026-01-15T08:00:00Z",
+      "document_id": "9f4af645-2867-5c32-98b8-a529f93f0108",
+      "owner_id": "8dc3d2df-84ca-511f-9dc7-921027183959",
+      "project_id": "23fd49e4-b7b1-5799-848a-c9553865fe85"
+    }
+  ],
+  "projects": [
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "id": "da436e41-6915-5f34-8607-d0f591d75c82",
+      "name": "Phân tích doanh thu",
+      "owner_id": "39c8c201-36d1-54d9-a3eb-428098efa363"
+    },
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "id": "23fd49e4-b7b1-5799-848a-c9553865fe85",
+      "name": "Dữ liệu Bob",
+      "owner_id": "8dc3d2df-84ca-511f-9dc7-921027183959"
+    }
+  ],
+  "request_keys": [
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "expires_at": "2026-01-18T08:00:00Z",
+      "key": "seed-question-a",
+      "owner_id": "39c8c201-36d1-54d9-a3eb-428098efa363",
+      "request_hash": "seed-hash",
+      "response": {
+        "assistant_message_id": "71fee26c-e49f-5245-a9d6-ee42907c2128",
+        "job_id": "5b1acf6c-fd64-5c23-a19b-8f0a387f7a50"
+      },
+      "response_status": 202,
+      "route": "POST /api/v1/chats/{id}/messages"
+    }
+  ],
+  "source_regions": [
+    {
+      "bbox": [
+        0.1,
+        0.12000000000000001,
+        0.8,
+        0.19999999999999998
+      ],
+      "created_at": "2026-01-15T08:00:00Z",
+      "extracted_text": "38",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "2937bddf-8b6c-5e8c-8522-3b5e84e7c880",
+      "meta": {
+        "schema_version": 1
+      },
+      "page_number": 2,
+      "region_key": "mb-q1",
+      "region_type": "chart_element"
+    },
+    {
+      "bbox": [
+        0.1,
+        0.14,
+        0.8,
+        0.22
+      ],
+      "created_at": "2026-01-15T08:00:00Z",
+      "extracted_text": "87",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "8e374291-a387-5413-902c-79e70e33835c",
+      "meta": {
+        "schema_version": 1
+      },
+      "page_number": 2,
+      "region_key": "mb-q3",
+      "region_type": "chart_element"
+    },
+    {
+      "bbox": [
+        0.1,
+        0.16,
+        0.8,
+        0.24
+      ],
+      "created_at": "2026-01-15T08:00:00Z",
+      "extracted_text": "50",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "ed645b8f-2c83-5159-a649-ea604fcf8a3b",
+      "meta": {
+        "schema_version": 1
+      },
+      "page_number": 2,
+      "region_key": "mn-q1",
+      "region_type": "chart_element"
+    },
+    {
+      "bbox": [
+        0.1,
+        0.18,
+        0.8,
+        0.26
+      ],
+      "created_at": "2026-01-15T08:00:00Z",
+      "extracted_text": "90",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "7c6c8171-f9e8-5b5d-b088-2b820d1dba11",
+      "meta": {
+        "schema_version": 1
+      },
+      "page_number": 2,
+      "region_key": "mn-q3",
+      "region_type": "chart_element"
+    },
+    {
+      "bbox": [
+        0.1,
+        0.2,
+        0.8,
+        0.28
+      ],
+      "created_at": "2026-01-15T08:00:00Z",
+      "extracted_text": "0",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "89ae0484-d6ac-5fd8-8f4f-bebf27b81255",
+      "meta": {
+        "schema_version": 1
+      },
+      "page_number": 2,
+      "region_key": "zero-q1",
+      "region_type": "table_cell"
+    },
+    {
+      "bbox": [
+        0.1,
+        0.22,
+        0.8,
+        0.3
+      ],
+      "created_at": "2026-01-15T08:00:00Z",
+      "extracted_text": "Doanh thu chưa bao gồm thuế",
+      "extraction_run_id": "ef4a439d-6781-52e5-a5f5-203d11d15bcd",
+      "id": "4a444d88-1233-517c-ad23-0dbfeae96230",
+      "meta": {
+        "schema_version": 1
+      },
+      "page_number": 1,
+      "region_key": "context-vat",
+      "region_type": "paragraph"
+    },
+    {
+      "bbox": [
+        0.1,
+        0.24000000000000002,
+        0.8,
+        0.32
+      ],
+      "created_at": "2026-01-15T08:00:00Z",
+      "extracted_text": null,
+      "extraction_run_id": "a12a203f-1681-560c-84fa-d8a72be74cd0",
+      "id": "04866ebb-b9ba-59db-813d-a9c490284207",
+      "meta": {
+        "schema_version": 1
+      },
+      "page_number": 1,
+      "region_key": "profit-missing",
+      "region_type": "paragraph"
+    },
+    {
+      "bbox": [
+        0.1,
+        0.26,
+        0.8,
+        0.33999999999999997
+      ],
+      "created_at": "2026-01-15T08:00:00Z",
+      "extracted_text": "999",
+      "extraction_run_id": "3a02526e-1cfd-5a31-897f-be595823200b",
+      "id": "c224a6a0-ab17-5a3a-a991-68715c2c0cb4",
+      "meta": {
+        "schema_version": 1
+      },
+      "page_number": 1,
+      "region_key": "bob-private",
+      "region_type": "table_cell"
+    },
+    {
+      "bbox": [
+        0.1,
+        0.28,
+        0.8,
+        0.36
+      ],
+      "created_at": "2026-01-15T08:00:00Z",
+      "extracted_text": "58",
+      "extraction_run_id": "196d39dc-65f0-50e1-9cac-4e2ca43d7c9b",
+      "id": "8f7097a8-9470-545c-a8d2-5629a5e0639d",
+      "meta": {
+        "schema_version": 1
+      },
+      "page_number": 2,
+      "region_key": "mb-q1-v2",
+      "region_type": "chart_element"
+    },
+    {
+      "bbox": [
+        0.1,
+        0.30000000000000004,
+        0.8,
+        0.38
+      ],
+      "created_at": "2026-01-15T08:00:00Z",
+      "extracted_text": "87",
+      "extraction_run_id": "196d39dc-65f0-50e1-9cac-4e2ca43d7c9b",
+      "id": "5224e2e0-e6be-5c5c-9986-bfefb79372d0",
+      "meta": {
+        "schema_version": 1
+      },
+      "page_number": 2,
+      "region_key": "mb-q3-v2",
+      "region_type": "chart_element"
+    }
+  ],
+  "users": [
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "display_name": "Alice",
+      "email": "alice@example.test",
+      "id": "39c8c201-36d1-54d9-a3eb-428098efa363",
+      "normalized_email": "alice@example.test"
+    },
+    {
+      "created_at": "2026-01-15T08:00:00Z",
+      "display_name": "Bob",
+      "email": "bob@example.test",
+      "id": "8dc3d2df-84ca-511f-9dc7-921027183959",
+      "normalized_email": "bob@example.test"
+    }
+  ]
+}
