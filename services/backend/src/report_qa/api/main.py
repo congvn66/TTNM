@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from report_qa.application.evidence_extraction import extract_pdf_artifact
 from report_qa.application.chart_reading import ChartReadRequest, PdfVectorChartReader
+from report_qa.application.deplot_reading import DeplotChartReader
 from report_qa.application.p0_pipeline import build_question_plan, calculation_answer, execute_calculation, resolve_evidence
 from report_qa.domain.contracts import validate_calculation_result_v1, validate_question_plan_v2
 from report_qa.domain.types import validate_decimal_text
@@ -139,7 +140,7 @@ def favicon() -> Response:
 
 
 catalog = load_catalog()
-chart_reader = PdfVectorChartReader()
+chart_reader = DeplotChartReader() if os.getenv("CHART_READER_BACKEND", "deplot") == "deplot" else PdfVectorChartReader()
 MAX_PDF_BYTES = 100 * 1024 * 1024
 LOCAL_OWNER_ID = "local-test-owner"
 
@@ -475,6 +476,10 @@ def list_document_evidences(session_id: str, document_id: str) -> dict[str, Any]
         records.append({
             "evidence_key": evidence["evidence_key"], "page_number": evidence["page_number"], "bbox": evidence["bbox"],
             "raw_text": evidence.get("raw_text"), "method_label": evidence["method_label"], "semantic": evidence.get("semantic"),
+            "source_type": evidence["source_type"], "source_region_key": evidence["source_region_key"],
+            "data_status": evidence["data_status"], "extraction_method": evidence["extraction_method"],
+            "table_locator": evidence.get("table_locator"), "chart_read": evidence.get("chart_read"),
+            "confidence": evidence["confidence"],
             "original_numeric_value": item["original_numeric_value"], "current_numeric_value": current["numeric_value"],
             "current_revision_id": current["id"], "revision_count": len(item["revisions"]),
         })
@@ -758,7 +763,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     )
     selected_scores = {int(item[0]["page"]): item[1] for item in ranked_pages}
     operation = question_plan.get("operation") or {}
-    if operation.get("type") != "lookup":
+    if operation.get("type") != "lookup" or any(fact.get("measure") != "unknown" and fact.get("period") for fact in question_plan.get("facts", [])):
         base_extraction = json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
         extraction = extraction_with_evidence_revisions(document, base_extraction)
         resolution = resolve_evidence(question_plan, extraction, {int(item["page"]) for item in context_pages})
@@ -771,17 +776,30 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
                 missing_fact_keys=resolution["missing_fact_keys"],
             )
         )
-        if resolution["status"] == "chart_required":
+        allowed_chart_facts = set(question_plan["source_strategy"]["chart_fact_keys"]) & set(resolution["missing_fact_keys"])
+        candidate_charts = [region for region in extraction.get("chart_regions", []) if int(region["page_number"]) in {int(item["page"]) for item in context_pages}]
+        # Do not digitize all pictures on a relevant page. With multiple
+        # candidates, defer until the planner/UI supplies a unique source.
+        if len(candidate_charts) > 1:
+            chart_terms = set(normalize_search_text(retrieval_question).split())
+            ranked_charts = [(len(chart_terms & set(normalize_search_text(str(r.get("text", ""))).split())), r) for r in candidate_charts]
+            best = max(score for score, _ in ranked_charts)
+            candidate_charts = [r for score, r in ranked_charts if score == best] if best > 0 else []
+            if len(candidate_charts) != 1:
+                candidate_charts = []
+        if resolution["status"] == "chart_required" and allowed_chart_facts and candidate_charts:
             chart_result = chart_reader.read(
                 ChartReadRequest(
                     document_version_id=document["id"],
                     question_plan_id=question_plan["question_plan_id"],
-                    fact_keys=tuple(resolution["missing_fact_keys"]),
+                    fact_keys=tuple(sorted(allowed_chart_facts)),
+                    chart_region_keys=tuple(region["chart_region_key"] for region in candidate_charts),
+                    chart_regions=tuple(candidate_charts),
                     source_pdf_path=document_path(document["storage_name"]),
                     page_numbers=tuple(int(item["page"]) for item in context_pages),
                     fact_requirements=tuple(
                         item for item in question_plan["facts"]
-                        if item["fact_key"] in set(resolution["missing_fact_keys"])
+                        if item["fact_key"] in allowed_chart_facts
                     ),
                 )
             )
@@ -860,7 +878,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         return {
             "user_message": user_message,
             "assistant_message": assistant_message,
-            "limitations": (["Chart reader chưa được triển khai; kết quả hiện chỉ dùng evidence text/bảng"] if resolution["status"] == "chart_required" else []),
+            "limitations": (["Chưa xác định được nguồn biểu đồ hoặc số liệu đủ căn cứ; cần chọn vùng nguồn và xác minh nhãn/trục"] if resolution["status"] == "chart_required" else []),
             "trace_id": trace_id,
         }
     provider = None

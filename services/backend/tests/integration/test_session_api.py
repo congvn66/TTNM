@@ -283,7 +283,7 @@ def test_ambiguous_question_is_persisted_as_clarification_without_retrieval() ->
         cleanup_session(created["id"])
 
 
-def test_chart_port_is_called_only_when_a_required_fact_is_missing() -> None:
+def test_missing_fact_without_a_chart_does_not_call_chart_reader() -> None:
     calls = []
 
     class SpyChartReader:
@@ -317,9 +317,8 @@ def test_chart_port_is_called_only_when_a_required_fact_is_missing() -> None:
         assert response.status_code == 200, response.text
         assistant = response.json()["assistant_message"]
         assert assistant["calculation_result"]["status"] == "missing_data"
-        assert len(calls) == 1
-        assert calls[0].fact_keys == ("baseline",)
-        assert [event["stage"] for event in assistant["trace"]].count("chart_read") == 1
+        assert calls == []
+        assert [event["stage"] for event in assistant["trace"]].count("chart_read") == 0
     finally:
         api_main.chart_reader = original_reader
         cleanup_session(created["id"])
@@ -403,3 +402,38 @@ def test_editing_evidence_preserves_old_new_history_and_marks_linked_answer() ->
         assert persisted["needs_update"] is True
     finally:
         cleanup_session(created["id"])
+
+
+def test_ready_missing_fact_calls_only_selected_chart(monkeypatch):
+    calls = []
+    original = api_main.extract_pdf_artifact
+
+    def base_with_chart(path, version):
+        result = original(path, version)
+        result['chart_regions'] = [{'chart_region_key': 'revenue-chart', 'page_number': 1,
+                                    'bbox': [.1, .3, .8, .9], 'text': 'Revenue'}]
+        return result
+
+    class Spy:
+        def read(self, request):
+            calls.append(request)
+            return {'status': 'not_found', 'code': 'CHART_READ_AMBIGUOUS',
+                    'question_plan_id': request.question_plan_id,
+                    'fact_keys': list(request.fact_keys), 'evidence_batch': None}
+
+    monkeypatch.setattr(api_main, 'extract_pdf_artifact', base_with_chart)
+    monkeypatch.setattr(api_main, 'chart_reader', Spy())
+    created = client.post('/api/v1/sessions', json={'title': 'Triggered chart'}).json()['session']
+    try:
+        uploaded = client.post(f"/api/v1/sessions/{created['id']}/documents",
+                               files={'file': ('report.pdf', pdf_with_text('Revenue Q1/2026 was 120.'), 'application/pdf')})
+        response = client.post(f"/api/v1/sessions/{created['id']}/messages",
+                               json={'document_id': uploaded.json()['document']['id'],
+                                     'question': 'By what percent did revenue change from Q1/2025 to Q1/2026?'})
+        assert response.status_code == 200, response.text
+        assert len(calls) == 1
+        assert calls[0].fact_keys == ('baseline',)
+        assert calls[0].chart_region_keys == ('revenue-chart',)
+        assert len(calls[0].fact_requirements) == 1
+    finally:
+        cleanup_session(created['id'])

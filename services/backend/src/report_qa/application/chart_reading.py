@@ -24,6 +24,7 @@ class ChartReadRequest:
     source_pdf_path: Path | None = None
     page_numbers: tuple[int, ...] = ()
     fact_requirements: tuple[dict[str, Any], ...] = ()
+    chart_regions: tuple[dict[str, Any], ...] = ()
 
 
 class ChartReader(Protocol):

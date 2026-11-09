@@ -1,0 +1,1 @@
+TITLE | Sales by region <0x0A> A | Revenue (million VND) <0x0A> A | 50 <0x0A> B | 87 <0x0A> C | 31 <0x0A> D | 87 <0x0A> E | 77

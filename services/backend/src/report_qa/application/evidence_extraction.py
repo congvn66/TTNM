@@ -1,8 +1,7 @@
-"""Layout-aware numeric evidence extraction for the local PDF adapter.
+"""Configured PDF extraction entry point and explicit legacy compatibility adapter.
 
-The adapter deliberately extracts text and numeric locators only. Chart values
-are never inferred during document ingestion; a future chart adapter must be
-called with an explicit question-plan trigger.
+Docling is the default. No chart values are read during upload; the question
+pipeline invokes the separate DePlot reader only with a scoped trigger.
 """
 
 from __future__ import annotations
@@ -106,6 +105,12 @@ def _unit_near(text: str, raw: str) -> str | None:
     lowered = text.casefold()
     if raw.endswith("%") or "phần trăm" in lowered or "percent" in lowered:
         return "PERCENT"
+    if ("million" in lowered or "triệu" in lowered) and ("vnd" in lowered or "đồng" in lowered):
+        return "VND_MILLION"
+    if ("billion" in lowered or "tỷ" in lowered) and ("vnd" in lowered or "đồng" in lowered):
+        return "VND_BILLION"
+    if ("nghìn" in lowered or "ngàn" in lowered or "thousand" in lowered) and ("vnd" in lowered or "đồng" in lowered):
+        return "VND_THOUSAND"
     if "$" in text or "usd" in lowered:
         return "USD"
     if "tỷ" in lowered and ("đồng" in lowered or "vnd" in lowered):
@@ -132,7 +137,7 @@ def _measure(text: str) -> str:
     return "unknown"
 
 
-def extract_pdf_artifact(path: Path, document_version_id: str) -> dict[str, Any]:
+def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[str, Any]:
     """Return page text plus a strict v2 evidence batch and local contexts."""
 
     from pypdf import PdfReader
@@ -317,4 +322,16 @@ def extract_pdf_artifact(path: Path, document_version_id: str) -> dict[str, Any]
     return {"pages": pages, "evidence_batch": batch, "evidence_contexts": contexts}
 
 
-__all__ = ["extract_pdf_artifact"]
+def extract_pdf_artifact(path: Path, document_version_id: str) -> dict[str, Any]:
+    """Select a configured backend; never silently fall back after model failure."""
+    import os
+    backend = os.getenv("PDF_EXTRACTION_BACKEND", "docling")
+    if backend == "legacy":
+        return extract_legacy_pdf_artifact(path, document_version_id)
+    if backend != "docling":
+        raise ValueError("PDF_EXTRACTION_BACKEND must be docling or legacy")
+    from report_qa.application.docling_extraction import extract_docling_artifact
+    return extract_docling_artifact(path, document_version_id, locale=os.getenv("PDF_NUMBER_LOCALE") or None)
+
+
+__all__ = ["extract_pdf_artifact", "extract_legacy_pdf_artifact"]

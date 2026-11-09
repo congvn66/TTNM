@@ -194,6 +194,16 @@ def resolve_evidence(plan: dict[str, Any], extraction: dict[str, Any], selected_
             if evidence["evidence_key"] in used or int(evidence["page_number"]) not in selected_pages:
                 continue
             semantic = evidence.get("semantic") or {}
+            if evidence.get("source_type") not in fact.get("allowed_sources", ["table", "text", "chart"]):
+                continue
+            if fact.get("measure") not in {None, "unknown"} and semantic.get("measure") != fact["measure"]:
+                continue
+            if fact.get("subject") and semantic.get("subject") != fact["subject"]:
+                continue
+            if any(semantic.get("dimensions", {}).get(key) != value for key, value in fact.get("dimensions", {}).items()):
+                continue
+            if fact.get("unit") and not semantic.get("unit"):
+                continue
             evidence_period = (semantic.get("period") or {}).get("label")
             if fact.get("period") and evidence_period != fact["period"]:
                 continue

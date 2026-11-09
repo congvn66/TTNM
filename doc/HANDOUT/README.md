@@ -1,5 +1,7 @@
 # Handout triển khai một luồng Document QA
 
+Docling/DePlot implementation on branch `tien`: [setup, schema output, examples and limitations](tien-docling-deplot.md).
+
 ## 1. Mục tiêu chung
 
 Repository chỉ còn **một luồng sản phẩm**. Không có fixture API hay luồng kiểm thử song song:

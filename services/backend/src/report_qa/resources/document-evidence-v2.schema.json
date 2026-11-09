@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sourcelens.local/contracts/document-evidence-v2.schema.json",
+  "title": "Document evidence batch v2",
+  "description": "Canonical output of text/table extraction and on-demand chart reading. Every numeric value carries an exact page locator.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "document_version_id", "extraction_run_id", "scope", "trigger", "evidences", "warnings"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "document_version_id": {"type": "string", "minLength": 1},
+    "extraction_run_id": {"type": "string", "minLength": 1},
+    "scope": {"enum": ["base_document", "on_demand_chart"]},
+    "trigger": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["question_plan_id", "fact_keys", "chart_region_keys"],
+          "properties": {
+            "question_plan_id": {"type": "string", "minLength": 1},
+            "fact_keys": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+            "chart_region_keys": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+          }
+        }
+      ]
+    },
+    "evidences": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/evidence"}
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message", "evidence_key"],
+        "properties": {
+          "code": {"type": "string", "minLength": 1},
+          "message": {"type": "string", "minLength": 1},
+          "evidence_key": {"type": ["string", "null"]}
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"scope": {"const": "base_document"}}},
+      "then": {"properties": {"trigger": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"scope": {"const": "on_demand_chart"}}},
+      "then": {"properties": {"trigger": {"type": "object"}}}
+    }
+  ],
+  "$defs": {
+    "bbox": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "number", "minimum": 0, "maximum": 1},
+        {"type": "number", "minimum": 0, "maximum": 1},
+        {"type": "number", "minimum": 0, "maximum": 1},
+        {"type": "number", "minimum": 0, "maximum": 1}
+      ],
+      "items": false
+    },
+    "period": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["label", "start", "end", "granularity"],
+          "properties": {
+            "label": {"type": "string", "minLength": 1},
+            "start": {"type": ["string", "null"], "format": "date"},
+            "end": {"type": ["string", "null"], "format": "date"},
+            "granularity": {"enum": ["day", "month", "quarter", "half_year", "year", "instant", "unknown"]}
+          }
+        }
+      ]
+    },
+    "semantic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["measure", "subject", "period", "unit", "dimensions"],
+      "properties": {
+        "measure": {"type": "string", "minLength": 1},
+        "subject": {"type": ["string", "null"]},
+        "period": {"$ref": "#/$defs/period"},
+        "unit": {"type": ["string", "null"]},
+        "dimensions": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "chart_read": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["chart_region_key", "series_label", "category_label", "axis_label", "axis_unit", "lower_tick", "upper_tick", "assumptions"],
+          "properties": {
+            "chart_region_key": {"type": "string", "minLength": 1},
+            "series_label": {"type": ["string", "null"]},
+            "category_label": {"type": ["string", "null"]},
+            "axis_label": {"type": ["string", "null"]},
+            "axis_unit": {"type": ["string", "null"]},
+            "lower_tick": {"type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+            "upper_tick": {"type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+            "assumptions": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_key", "source_region_key", "source_type", "page_number", "bbox", "raw_text", "numeric_value", "data_status", "extraction_method", "method_label", "semantic", "table_locator", "chart_read", "confidence"],
+      "properties": {
+        "evidence_key": {"type": "string", "minLength": 1},
+        "source_region_key": {"type": "string", "minLength": 1},
+        "source_type": {"enum": ["text", "table", "chart"]},
+        "page_number": {"type": "integer", "minimum": 1},
+        "bbox": {"$ref": "#/$defs/bbox"},
+        "raw_text": {"type": ["string", "null"]},
+        "numeric_value": {"type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+        "data_status": {"enum": ["valid", "missing", "unreadable", "ambiguous"]},
+        "extraction_method": {"enum": ["text", "table_cell", "ocr", "direct_label", "axis_estimation"]},
+        "method_label": {"enum": ["đọc từ văn bản", "đọc từ ô bảng", "đọc bằng OCR", "đọc từ nhãn", "ước lượng theo trục"]},
+        "semantic": {"$ref": "#/$defs/semantic"},
+        "table_locator": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["table_region_key", "row_index", "column_index", "row_header", "column_header"],
+              "properties": {
+                "table_region_key": {"type": "string", "minLength": 1},
+                "row_index": {"type": "integer", "minimum": 0},
+                "column_index": {"type": "integer", "minimum": 0},
+                "row_header": {"type": ["string", "null"]},
+                "column_header": {"type": ["string", "null"]}
+              }
+            }
+          ]
+        },
+        "chart_read": {"$ref": "#/$defs/chart_read"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"source_type": {"const": "text"}}},
+          "then": {"properties": {"extraction_method": {"enum": ["text", "ocr"]}, "method_label": {"enum": ["đọc từ văn bản", "đọc bằng OCR"]}, "chart_read": {"type": "null"}}}
+        },
+        {
+          "if": {"properties": {"source_type": {"const": "table"}}},
+          "then": {"properties": {"extraction_method": {"const": "table_cell"}, "method_label": {"const": "đọc từ ô bảng"}, "table_locator": {"type": "object"}, "chart_read": {"type": "null"}}}
+        },
+        {
+          "if": {"properties": {"source_type": {"const": "chart"}}},
+          "then": {
+            "properties": {
+              "extraction_method": {"enum": ["direct_label", "axis_estimation"]},
+              "method_label": {"enum": ["đọc từ nhãn", "ước lượng theo trục"]},
+              "chart_read": {"type": "object"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"extraction_method": {"const": "ocr"}}},
+          "then": {"properties": {"method_label": {"const": "đọc bằng OCR"}}}
+        },
+        {
+          "if": {"properties": {"extraction_method": {"const": "direct_label"}}},
+          "then": {"properties": {"method_label": {"const": "đọc từ nhãn"}}}
+        },
+        {
+          "if": {"properties": {"extraction_method": {"const": "axis_estimation"}}},
+          "then": {"properties": {"method_label": {"const": "ước lượng theo trục"}}}
+        }
+      ]
+    }
+  }
+}

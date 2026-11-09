@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
-from report_qa.application.evidence_extraction import extract_pdf_artifact
+from report_qa.application.evidence_extraction import extract_legacy_pdf_artifact as extract_pdf_artifact
 from report_qa.application.chart_reading import ChartReadRequest, PdfVectorChartReader
 from report_qa.application.p0_pipeline import build_question_plan, execute_calculation
 
