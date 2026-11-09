@@ -1,0 +1,77 @@
+{
+  "status": "completed",
+  "code": null,
+  "question_plan_id": "example-question-1",
+  "fact_keys": [
+    "region-a"
+  ],
+  "evidence_batch": {
+    "schema_version": 2,
+    "document_version_id": "example-report-v1",
+    "extraction_run_id": "b96ad34b-952d-4bb3-ae20-e3fd1a2bd0fc",
+    "scope": "on_demand_chart",
+    "trigger": {
+      "question_plan_id": "example-question-1",
+      "fact_keys": [
+        "region-a"
+      ],
+      "chart_region_keys": [
+        "page-1-picture-0"
+      ]
+    },
+    "evidences": [
+      {
+        "evidence_key": "chart-312487e94c1533535aa8",
+        "source_region_key": "page-1-picture-0",
+        "source_type": "chart",
+        "page_number": 1,
+        "bbox": [
+          0.2374249699879952,
+          0.6507571258907363,
+          0.2603841536614646,
+          0.6621362826603325
+        ],
+        "raw_text": "50",
+        "numeric_value": "50",
+        "data_status": "valid",
+        "extraction_method": "direct_label",
+        "method_label": "đọc từ nhãn",
+        "semantic": {
+          "measure": "doanh_thu",
+          "subject": "A",
+          "period": null,
+          "unit": "VND_MILLION",
+          "dimensions": {
+            "category": "A",
+            "series": "Revenue (million VND)"
+          }
+        },
+        "table_locator": null,
+        "chart_read": {
+          "chart_region_key": "page-1-picture-0",
+          "series_label": "Revenue (million VND)",
+          "category_label": "A",
+          "axis_label": "Revenue (million VND)",
+          "axis_unit": "VND_MILLION",
+          "lower_tick": null,
+          "upper_tick": null,
+          "assumptions": [
+            "deplot_chart_to_table",
+            "chart_region_bbox_for_estimates",
+            "printed_label_verified"
+          ]
+        },
+        "confidence": 0.9
+      }
+    ],
+    "warnings": []
+  },
+  "provider_outputs": [
+    {
+      "chart_region_key": "page-1-picture-0",
+      "raw_output": "TITLE | Sales by region <0x0A> A | Revenue (million VND) <0x0A> A | 50 <0x0A> B | 87 <0x0A> C | 31 <0x0A> D | 87 <0x0A> E | 77",
+      "model": "google/deplot",
+      "revision": "6e76d62430da16986be3426bae32301fb9115397"
+    }
+  ]
+}

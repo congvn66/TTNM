@@ -1,0 +1,56 @@
+{
+  "status": "ready",
+  "question_plan_id": "example-question-1",
+  "fact_keys": [
+    "region-a"
+  ],
+  "chart_region_keys": [
+    "page-1-picture-0"
+  ],
+  "page_numbers": [
+    1
+  ],
+  "fact_requirements": [
+    {
+      "fact_key": "region-a",
+      "measure": "doanh_thu",
+      "subject": "A",
+      "period": null,
+      "unit": "VND_MILLION",
+      "dimensions": {}
+    }
+  ],
+  "chart_regions": [
+    {
+      "chart_region_key": "page-1-picture-0",
+      "page_number": 1,
+      "bbox": [
+        0.07058823529411765,
+        0.5261282660332541,
+        0.9277310924369748,
+        0.7862232779097387
+      ],
+      "axis": {
+        "verified": true,
+        "scale": "linear",
+        "label": "Revenue (million VND)",
+        "unit": "VND_MILLION",
+        "lower_tick": "0",
+        "upper_tick": "100"
+      },
+      "verified_labels": [
+        {
+          "category": "A",
+          "series": "Revenue (million VND)",
+          "value": "50",
+          "bbox": [
+            0.2374249699879952,
+            0.6507571258907363,
+            0.2603841536614646,
+            0.6621362826603325
+          ]
+        }
+      ]
+    }
+  ]
+}
