@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: sourcelens-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sourcelens}
+      POSTGRES_USER: ${POSTGRES_USER:-sourcelens}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sourcelens-dev-only}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - sourcelens-postgres-data:/var/lib/postgresql/data
+      - ../../doc/initial-schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  minio:
+    image: minio/minio:latest
+    container_name: sourcelens-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sourcelens}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-sourcelens-dev-only}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - sourcelens-minio-data:/data
+
+volumes:
+  sourcelens-postgres-data:
+  sourcelens-minio-data:
