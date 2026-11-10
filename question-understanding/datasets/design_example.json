@@ -1,0 +1,122 @@
+{
+ "document_code": "DOC_STAT_2025_01",
+ "file_name": "baocao_kinhdoanh_3quy.pdf",
+ "page_count": 4,
+ "evidences": [
+  {
+   "evidence_code": "EVD_0001",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Định nghĩa doanh thu",
+   "time_period": "",
+   "unit": "text",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Doanh thu thuần chưa bao gồm thuế GTGT.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_CHART_MB_Q1",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Miền Bắc",
+   "time_period": "Quý 1",
+   "unit": "triệu đồng",
+   "raw_value": 38,
+   "current_value": 38,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_CHART_MB_Q3",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Miền Bắc",
+   "time_period": "Quý 3",
+   "unit": "triệu đồng",
+   "raw_value": 87,
+   "current_value": 87,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_CHART_MN_Q1",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Miền Nam",
+   "time_period": "Quý 1",
+   "unit": "triệu đồng",
+   "raw_value": 50,
+   "current_value": 50,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_CHART_MN_Q3",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Miền Nam",
+   "time_period": "Quý 3",
+   "unit": "triệu đồng",
+   "raw_value": 90,
+   "current_value": 90,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  }
+ ]
+}

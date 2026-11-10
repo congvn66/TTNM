@@ -1,0 +1,1548 @@
+{
+ "document_code": "S1_HUONG_LUA",
+ "file_name": "S1-huong-lua.pdf",
+ "page_count": 3,
+ "evidences": [
+  {
+   "evidence_code": "EVD_0001",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Miền Bắc",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": 18240,
+   "current_value": 18240,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0002",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Miền Bắc",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 21350,
+   "current_value": 21350,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0003",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp - Miền Bắc",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": 5290,
+   "current_value": 5290,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0004",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp - Miền Bắc",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 6405,
+   "current_value": 6405,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0005",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Miền Trung",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": 8120,
+   "current_value": 8120,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0006",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Miền Trung",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 9860,
+   "current_value": 9860,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0007",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp - Miền Trung",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0008",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp - Miền Trung",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 2760,
+   "current_value": 2760,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0009",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Miền Nam",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": 15930,
+   "current_value": 15930,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0010",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     220.0,
+     300.0,
+     232.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Miền Nam",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 17420,
+   "current_value": 17420,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0011",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     232.0,
+     300.0,
+     244.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp - Miền Nam",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": 4620,
+   "current_value": 4620,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0012",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     244.0,
+     300.0,
+     256.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp - Miền Nam",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 5050,
+   "current_value": 5050,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0013",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     256.0,
+     300.0,
+     268.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Xuất khẩu",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": 0,
+   "current_value": 0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0014",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     268.0,
+     300.0,
+     280.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Xuất khẩu",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 1250,
+   "current_value": 1250,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0015",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     280.0,
+     300.0,
+     292.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp - Xuất khẩu",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": 0,
+   "current_value": 0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0016",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     292.0,
+     300.0,
+     304.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp - Xuất khẩu",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 310,
+   "current_value": 310,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0017",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     304.0,
+     300.0,
+     316.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Tổng",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": 42290,
+   "current_value": 42290,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0018",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     316.0,
+     300.0,
+     328.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Tổng",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 49880,
+   "current_value": 49880,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0019",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     328.0,
+     300.0,
+     340.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp - Tổng",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0020",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     340.0,
+     300.0,
+     352.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp - Tổng",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 14525,
+   "current_value": 14525,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0021",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     352.0,
+     300.0,
+     364.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Định nghĩa Doanh thu thuần",
+   "time_period": "",
+   "unit": "text",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Doanh thu thuần là doanh thu bán hàng chưa gồm thuế GTGT, sau khi trừ chiết khấu thương mại và hàng bán bị trả lại.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0022",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     364.0,
+     300.0,
+     376.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Định nghĩa Lợi nhuận gộp",
+   "time_period": "",
+   "unit": "text",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Lợi nhuận gộp bằng doanh thu thuần trừ giá vốn hàng bán.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0023",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     376.0,
+     300.0,
+     388.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Định nghĩa Biên lợi nhuận gộp",
+   "time_period": "",
+   "unit": "text",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Biên lợi nhuận gộp bằng lợi nhuận gộp chia cho doanh thu thuần.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0024",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     388.0,
+     300.0,
+     400.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Định nghĩa Khách hàng hoạt động",
+   "time_period": "",
+   "unit": "text",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Khách hàng hoạt động là khách hàng có ít nhất một đơn hàng thành công trong tháng.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0025",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     400.0,
+     300.0,
+     412.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Định nghĩa Tỷ lệ khách hàng quay lại",
+   "time_period": "",
+   "unit": "text",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Tỷ lệ khách hàng quay lại là tỷ lệ phần trăm khách hàng hoạt động của tháng đã từng mua hàng trước tháng đó.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0026",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     412.0,
+     300.0,
+     424.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thuế suất GTGT",
+   "time_period": "",
+   "unit": "%",
+   "raw_value": 8,
+   "current_value": 8,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0027",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     424.0,
+     300.0,
+     436.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ trọng kênh trực tuyến - Miền Nam",
+   "time_period": "Quý 2/2026",
+   "unit": "%",
+   "raw_value": 31,
+   "current_value": 31,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0028",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     436.0,
+     300.0,
+     448.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Chi phí vận chuyển trên doanh thu thuần",
+   "time_period": "Quý 2/2026",
+   "unit": "%",
+   "raw_value": 6.5,
+   "current_value": 6.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0029",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     448.0,
+     300.0,
+     460.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Mục tiêu doanh thu thuần",
+   "time_period": "Năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 220,
+   "current_value": 220,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0030",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     460.0,
+     300.0,
+     472.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Khách hàng hoạt động",
+   "time_period": "Tháng 6/2026",
+   "unit": "nghìn khách hàng",
+   "raw_value": 128.4,
+   "current_value": 128.4,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0031",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     472.0,
+     300.0,
+     484.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Bắc",
+   "time_period": "Tháng 1/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 38,
+   "current_value": 38,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0032",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     484.0,
+     300.0,
+     496.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Bắc",
+   "time_period": "Tháng 2/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 35,
+   "current_value": 35,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0033",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     496.0,
+     300.0,
+     508.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Bắc",
+   "time_period": "Tháng 3/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 41,
+   "current_value": 41,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0034",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     508.0,
+     300.0,
+     520.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Bắc",
+   "time_period": "Tháng 4/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 44,
+   "current_value": 44,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0035",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     520.0,
+     300.0,
+     532.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Bắc",
+   "time_period": "Tháng 5/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 49,
+   "current_value": 49,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0036",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     532.0,
+     300.0,
+     544.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Bắc",
+   "time_period": "Tháng 6/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 47,
+   "current_value": 47,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0037",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     544.0,
+     300.0,
+     556.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Trung",
+   "time_period": "Tháng 1/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 17,
+   "current_value": 17,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0038",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     556.0,
+     300.0,
+     568.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Trung",
+   "time_period": "Tháng 2/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 15,
+   "current_value": 15,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0039",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     568.0,
+     300.0,
+     580.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Trung",
+   "time_period": "Tháng 3/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 19,
+   "current_value": 19,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0040",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Trung",
+   "time_period": "Tháng 4/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 21,
+   "current_value": 21,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0041",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Trung",
+   "time_period": "Tháng 5/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 24,
+   "current_value": 24,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0042",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Trung",
+   "time_period": "Tháng 6/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 30,
+   "current_value": 30,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0043",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Nam",
+   "time_period": "Tháng 1/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 33,
+   "current_value": 33,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0044",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Nam",
+   "time_period": "Tháng 2/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 30,
+   "current_value": 30,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0045",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Nam",
+   "time_period": "Tháng 3/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 36,
+   "current_value": 36,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0046",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Nam",
+   "time_period": "Tháng 4/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 35,
+   "current_value": 35,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0047",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Nam",
+   "time_period": "Tháng 5/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 37,
+   "current_value": 37,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0048",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Nam",
+   "time_period": "Tháng 6/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 38,
+   "current_value": 38,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0049",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số đơn hàng - Miền Trung",
+   "time_period": "Tháng 6/2026",
+   "unit": "nghìn đơn",
+   "raw_value": 33,
+   "current_value": 33,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0050",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     220.0,
+     300.0,
+     232.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - Miền Bắc",
+   "time_period": "Cuối quý 1/2026",
+   "unit": "cửa hàng",
+   "raw_value": 64,
+   "current_value": 64,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0051",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     232.0,
+     300.0,
+     244.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - Miền Bắc",
+   "time_period": "Cuối quý 2/2026",
+   "unit": "cửa hàng",
+   "raw_value": 68,
+   "current_value": 68,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0052",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     244.0,
+     300.0,
+     256.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - Miền Trung",
+   "time_period": "Cuối quý 1/2026",
+   "unit": "cửa hàng",
+   "raw_value": 27,
+   "current_value": 27,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0053",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     256.0,
+     300.0,
+     268.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - Miền Trung",
+   "time_period": "Cuối quý 2/2026",
+   "unit": "cửa hàng",
+   "raw_value": 31,
+   "current_value": 31,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0054",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     268.0,
+     300.0,
+     280.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - Miền Nam",
+   "time_period": "Cuối quý 1/2026",
+   "unit": "cửa hàng",
+   "raw_value": 52,
+   "current_value": 52,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0055",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     280.0,
+     300.0,
+     292.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - Miền Nam",
+   "time_period": "Cuối quý 2/2026",
+   "unit": "cửa hàng",
+   "raw_value": 55,
+   "current_value": 55,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0056",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     292.0,
+     300.0,
+     304.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ khách hàng quay lại",
+   "time_period": "Tháng 1/2025",
+   "unit": "%",
+   "raw_value": 36,
+   "current_value": 36,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0057",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     304.0,
+     300.0,
+     316.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ khách hàng quay lại",
+   "time_period": "Tháng 2/2025",
+   "unit": "%",
+   "raw_value": 34,
+   "current_value": 34,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0058",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     316.0,
+     300.0,
+     328.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ khách hàng quay lại",
+   "time_period": "Tháng 3/2025",
+   "unit": "%",
+   "raw_value": 37,
+   "current_value": 37,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0059",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     328.0,
+     300.0,
+     340.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ khách hàng quay lại",
+   "time_period": "Tháng 4/2025",
+   "unit": "%",
+   "raw_value": 38,
+   "current_value": 38,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0060",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     340.0,
+     300.0,
+     352.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ khách hàng quay lại",
+   "time_period": "Tháng 5/2025",
+   "unit": "%",
+   "raw_value": 39,
+   "current_value": 39,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0061",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     352.0,
+     300.0,
+     364.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ khách hàng quay lại",
+   "time_period": "Tháng 6/2025",
+   "unit": "%",
+   "raw_value": 40,
+   "current_value": 40,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0062",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     364.0,
+     300.0,
+     376.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ khách hàng quay lại",
+   "time_period": "Tháng 1/2026",
+   "unit": "%",
+   "raw_value": 39,
+   "current_value": 39,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0063",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     376.0,
+     300.0,
+     388.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ khách hàng quay lại",
+   "time_period": "Tháng 2/2026",
+   "unit": "%",
+   "raw_value": 38,
+   "current_value": 38,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0064",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     388.0,
+     300.0,
+     400.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ khách hàng quay lại",
+   "time_period": "Tháng 3/2026",
+   "unit": "%",
+   "raw_value": 42,
+   "current_value": 42,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0065",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     400.0,
+     300.0,
+     412.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ khách hàng quay lại",
+   "time_period": "Tháng 4/2026",
+   "unit": "%",
+   "raw_value": 44,
+   "current_value": 44,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0066",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     412.0,
+     300.0,
+     424.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ khách hàng quay lại",
+   "time_period": "Tháng 5/2026",
+   "unit": "%",
+   "raw_value": 46,
+   "current_value": 46,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0067",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     424.0,
+     300.0,
+     436.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ khách hàng quay lại",
+   "time_period": "Tháng 6/2026",
+   "unit": "%",
+   "raw_value": 48,
+   "current_value": 48,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  }
+ ]
+}

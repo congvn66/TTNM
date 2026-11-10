@@ -1,0 +1,1479 @@
+{
+ "document_code": "R2_KBSV_MWG",
+ "file_name": "R2-kbsv-mwg-p1-5.pdf",
+ "page_count": 5,
+ "evidences": [
+  {
+   "evidence_code": "EVD_0001",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần",
+   "time_period": "Quý 3/2024",
+   "unit": "tỷ đồng",
+   "raw_value": 34147,
+   "current_value": 34147,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0002",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 39853,
+   "current_value": 39853,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0003",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần",
+   "time_period": "9 tháng 2024",
+   "unit": "tỷ đồng",
+   "raw_value": 99927,
+   "current_value": 99927,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0004",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần",
+   "time_period": "9 tháng 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 113607,
+   "current_value": 113607,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0005",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - TGDĐ+Topzone",
+   "time_period": "Quý 3/2024",
+   "unit": "tỷ đồng",
+   "raw_value": 8132,
+   "current_value": 8132,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0006",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - TGDĐ+Topzone",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 9535,
+   "current_value": 9535,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0007",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - TGDĐ+Topzone",
+   "time_period": "9 tháng 2024",
+   "unit": "tỷ đồng",
+   "raw_value": 21649,
+   "current_value": 21649,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0008",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - TGDĐ+Topzone",
+   "time_period": "9 tháng 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 26130,
+   "current_value": 26130,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0009",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - ĐMX",
+   "time_period": "Quý 3/2024",
+   "unit": "tỷ đồng",
+   "raw_value": 14319,
+   "current_value": 14319,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0010",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     220.0,
+     300.0,
+     232.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - ĐMX",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 17547,
+   "current_value": 17547,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0011",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     232.0,
+     300.0,
+     244.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - ĐMX",
+   "time_period": "9 tháng 2024",
+   "unit": "tỷ đồng",
+   "raw_value": 45095,
+   "current_value": 45095,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0012",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     244.0,
+     300.0,
+     256.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - ĐMX",
+   "time_period": "9 tháng 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 50442,
+   "current_value": 50442,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0013",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     256.0,
+     300.0,
+     268.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - BHX",
+   "time_period": "Quý 3/2024",
+   "unit": "tỷ đồng",
+   "raw_value": 10840,
+   "current_value": 10840,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0014",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     268.0,
+     300.0,
+     280.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - BHX",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 11780,
+   "current_value": 11780,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0015",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     280.0,
+     300.0,
+     292.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - BHX",
+   "time_period": "9 tháng 2024",
+   "unit": "tỷ đồng",
+   "raw_value": 30329,
+   "current_value": 30329,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0016",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     292.0,
+     300.0,
+     304.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - BHX",
+   "time_period": "9 tháng 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 34423,
+   "current_value": 34423,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0017",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     304.0,
+     300.0,
+     316.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Khác",
+   "time_period": "Quý 3/2024",
+   "unit": "tỷ đồng",
+   "raw_value": 922,
+   "current_value": 922,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0018",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     316.0,
+     300.0,
+     328.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Khác",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 990,
+   "current_value": 990,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0019",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     328.0,
+     300.0,
+     340.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Khác",
+   "time_period": "9 tháng 2024",
+   "unit": "tỷ đồng",
+   "raw_value": 2854,
+   "current_value": 2854,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0020",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     340.0,
+     300.0,
+     352.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Khác",
+   "time_period": "9 tháng 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 2613,
+   "current_value": 2613,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0021",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     352.0,
+     300.0,
+     364.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp",
+   "time_period": "Quý 3/2024",
+   "unit": "tỷ đồng",
+   "raw_value": 6892,
+   "current_value": 6892,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0022",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     364.0,
+     300.0,
+     376.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 7478,
+   "current_value": 7478,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0023",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     376.0,
+     300.0,
+     388.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp",
+   "time_period": "9 tháng 2024",
+   "unit": "tỷ đồng",
+   "raw_value": 20787,
+   "current_value": 20787,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0024",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     388.0,
+     300.0,
+     400.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận gộp",
+   "time_period": "9 tháng 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 22247,
+   "current_value": 22247,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0025",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     400.0,
+     300.0,
+     412.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "Quý 3/2024",
+   "unit": "tỷ đồng",
+   "raw_value": 806,
+   "current_value": 806,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0026",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     412.0,
+     300.0,
+     424.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 1784,
+   "current_value": 1784,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0027",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     424.0,
+     300.0,
+     436.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "9 tháng 2024",
+   "unit": "tỷ đồng",
+   "raw_value": 2830,
+   "current_value": 2830,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0028",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     436.0,
+     300.0,
+     448.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "9 tháng 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 4989,
+   "current_value": 4989,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0029",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     448.0,
+     300.0,
+     460.0
+    ],
+    "meta": {}
+   },
+   "series_name": "LNST công ty mẹ",
+   "time_period": "Quý 3/2024",
+   "unit": "tỷ đồng",
+   "raw_value": 800,
+   "current_value": 800,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0030",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     460.0,
+     300.0,
+     472.0
+    ],
+    "meta": {}
+   },
+   "series_name": "LNST công ty mẹ",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 1784,
+   "current_value": 1784,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0031",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     472.0,
+     300.0,
+     484.0
+    ],
+    "meta": {}
+   },
+   "series_name": "LNST công ty mẹ",
+   "time_period": "9 tháng 2024",
+   "unit": "tỷ đồng",
+   "raw_value": 2819,
+   "current_value": 2819,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0032",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     484.0,
+     300.0,
+     496.0
+    ],
+    "meta": {}
+   },
+   "series_name": "LNST công ty mẹ",
+   "time_period": "9 tháng 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 4965,
+   "current_value": 4965,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0033",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     496.0,
+     300.0,
+     508.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên lợi nhuận gộp",
+   "time_period": "Quý 3/2024",
+   "unit": "%",
+   "raw_value": 20.2,
+   "current_value": 20.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0034",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     508.0,
+     300.0,
+     520.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên lợi nhuận gộp",
+   "time_period": "Quý 3/2025",
+   "unit": "%",
+   "raw_value": 18.8,
+   "current_value": 18.8,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0035",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     520.0,
+     300.0,
+     532.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên lợi nhuận gộp",
+   "time_period": "9 tháng 2024",
+   "unit": "%",
+   "raw_value": 20.8,
+   "current_value": 20.8,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0036",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     532.0,
+     300.0,
+     544.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên lợi nhuận gộp",
+   "time_period": "9 tháng 2025",
+   "unit": "%",
+   "raw_value": 19.6,
+   "current_value": 19.6,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0037",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     544.0,
+     300.0,
+     556.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên LNST",
+   "time_period": "Quý 3/2024",
+   "unit": "%",
+   "raw_value": 2.4,
+   "current_value": 2.4,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0038",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     556.0,
+     300.0,
+     568.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên LNST",
+   "time_period": "Quý 3/2025",
+   "unit": "%",
+   "raw_value": 4.5,
+   "current_value": 4.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0039",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     568.0,
+     300.0,
+     580.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên LNST",
+   "time_period": "9 tháng 2024",
+   "unit": "%",
+   "raw_value": 2.8,
+   "current_value": 2.8,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0040",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên LNST",
+   "time_period": "9 tháng 2025",
+   "unit": "%",
+   "raw_value": 4.4,
+   "current_value": 4.4,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0041",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Giá mục tiêu",
+   "time_period": "",
+   "unit": "đồng/cổ phiếu",
+   "raw_value": 106100,
+   "current_value": 106100,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0042",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Giá hiện tại",
+   "time_period": "",
+   "unit": "đồng/cổ phiếu",
+   "raw_value": 79900,
+   "current_value": 79900,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0043",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - TGDĐ",
+   "time_period": "Năm 2024",
+   "unit": "cửa hàng",
+   "raw_value": 1021,
+   "current_value": 1021,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0044",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - TGDĐ",
+   "time_period": "Quý 3/2025",
+   "unit": "cửa hàng",
+   "raw_value": 1013,
+   "current_value": 1013,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0045",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - ĐMX",
+   "time_period": "Năm 2024",
+   "unit": "cửa hàng",
+   "raw_value": 2026,
+   "current_value": 2026,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0046",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - ĐMX",
+   "time_period": "Quý 3/2025",
+   "unit": "cửa hàng",
+   "raw_value": 2018,
+   "current_value": 2018,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0047",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - BHX",
+   "time_period": "Năm 2024",
+   "unit": "cửa hàng",
+   "raw_value": 1770,
+   "current_value": 1770,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0048",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - BHX",
+   "time_period": "Quý 3/2025",
+   "unit": "cửa hàng",
+   "raw_value": 2290,
+   "current_value": 2290,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0049",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - An Khang",
+   "time_period": "Năm 2024",
+   "unit": "cửa hàng",
+   "raw_value": 326,
+   "current_value": 326,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0050",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     220.0,
+     300.0,
+     232.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - An Khang",
+   "time_period": "Quý 3/2025",
+   "unit": "cửa hàng",
+   "raw_value": 347,
+   "current_value": 347,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0051",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     232.0,
+     300.0,
+     244.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - Erablue",
+   "time_period": "Năm 2024",
+   "unit": "cửa hàng",
+   "raw_value": 87,
+   "current_value": 87,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0052",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     244.0,
+     300.0,
+     256.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng - Erablue",
+   "time_period": "Quý 3/2025",
+   "unit": "cửa hàng",
+   "raw_value": 144,
+   "current_value": 144,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0053",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     256.0,
+     300.0,
+     268.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dự phóng LNST công ty mẹ - KBSV",
+   "time_period": "Năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 8173,
+   "current_value": 8173,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0054",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     268.0,
+     300.0,
+     280.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dự phóng LNST công ty mẹ - Đồng thuận",
+   "time_period": "Năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 7052,
+   "current_value": 7052,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0055",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     280.0,
+     300.0,
+     292.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dự phóng doanh thu",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 155535,
+   "current_value": 155535,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0056",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     292.0,
+     300.0,
+     304.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Giá mục tiêu kịch bản tích cực",
+   "time_period": "",
+   "unit": "đồng/cổ phiếu",
+   "raw_value": 119100,
+   "current_value": 119100,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0057",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     304.0,
+     300.0,
+     316.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Giá mục tiêu kịch bản cơ sở",
+   "time_period": "",
+   "unit": "đồng/cổ phiếu",
+   "raw_value": 106100,
+   "current_value": 106100,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0058",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     316.0,
+     300.0,
+     328.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Giá mục tiêu kịch bản tiêu cực",
+   "time_period": "",
+   "unit": "đồng/cổ phiếu",
+   "raw_value": 93600,
+   "current_value": 93600,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0059",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     328.0,
+     300.0,
+     340.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng BHX mở mới theo mục tiêu",
+   "time_period": "Năm 2026",
+   "unit": "cửa hàng",
+   "raw_value": 700,
+   "current_value": 700,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0060",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     340.0,
+     300.0,
+     352.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số cửa hàng BHX mở mới theo mục tiêu",
+   "time_period": "Năm 2026",
+   "unit": "cửa hàng",
+   "raw_value": 1000,
+   "current_value": 1000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0061",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     352.0,
+     300.0,
+     364.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu 1 cửa hàng 1 tháng - ĐMX",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 2.9,
+   "current_value": 2.9,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0062",
+   "source_type": "chart_line",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     364.0,
+     300.0,
+     376.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tăng trưởng doanh thu ICT&CE - TGDĐ+ĐMX",
+   "time_period": "Quý 3/2025",
+   "unit": "%",
+   "raw_value": 20.6,
+   "current_value": 20.6,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0063",
+   "source_type": "chart_line",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     376.0,
+     300.0,
+     388.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tăng trưởng doanh thu ICT&CE - FPT Shop",
+   "time_period": "Quý 3/2025",
+   "unit": "%",
+   "raw_value": 11.2,
+   "current_value": 11.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0064",
+   "source_type": "chart_line",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     388.0,
+     300.0,
+     400.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tăng trưởng doanh thu ICT&CE - DGW ICT&CE",
+   "time_period": "Quý 3/2025",
+   "unit": "%",
+   "raw_value": 9.9,
+   "current_value": 9.9,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  }
+ ]
+}

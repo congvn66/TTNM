@@ -1,0 +1,122 @@
+{
+ "document_code": "VNG_SNAPSHOT_Q1_26",
+ "file_name": "Snapshot Q1-26 VI.pdf",
+ "page_count": 7,
+ "evidences": [
+  {
+   "evidence_code": "EVD_0001",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận thuần từ HĐKD sau điều chỉnh",
+   "time_period": "Quý 1/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 185,
+   "current_value": 185,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0002",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận thuần từ HĐKD sau điều chỉnh",
+   "time_period": "Quý 2/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 251,
+   "current_value": 251,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0003",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận thuần từ HĐKD sau điều chỉnh",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 263,
+   "current_value": 263,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0004",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận thuần từ HĐKD sau điều chỉnh",
+   "time_period": "Quý 4/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 139,
+   "current_value": 139,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0005",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận thuần từ HĐKD sau điều chỉnh",
+   "time_period": "Quý 1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 470,
+   "current_value": 470,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  }
+ ]
+}

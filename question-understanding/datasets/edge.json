@@ -1,0 +1,306 @@
+{
+ "document_code": "EDGE",
+ "file_name": "edge.pdf",
+ "page_count": 2,
+ "evidences": [
+  {
+   "evidence_code": "EVD_0001",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận - A",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": -100,
+   "current_value": -100,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0002",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận - A",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 50,
+   "current_value": 50,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0003",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - A",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": 0,
+   "current_value": 0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0004",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - A",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 10,
+   "current_value": 10,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0005",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - B",
+   "time_period": "Quý 1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 2,
+   "current_value": 2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0006",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - B",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 3000,
+   "current_value": 3000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0007",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - C",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0008",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - C",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 5,
+   "current_value": 5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0009",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - D",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "error",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0010",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     220.0,
+     300.0,
+     232.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - D",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 5,
+   "current_value": 5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0011",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     232.0,
+     300.0,
+     244.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - A",
+   "time_period": "Quý 2/2026",
+   "unit": "nghìn tấn",
+   "raw_value": 7,
+   "current_value": 7,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0012",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     244.0,
+     300.0,
+     256.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Không rõ đơn vị - A",
+   "time_period": "Quý 1/2026",
+   "unit": null,
+   "raw_value": 10,
+   "current_value": 10,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0013",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     256.0,
+     300.0,
+     268.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Không rõ đơn vị - A",
+   "time_period": "Quý 2/2026",
+   "unit": null,
+   "raw_value": 20,
+   "current_value": 20,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  }
+ ]
+}

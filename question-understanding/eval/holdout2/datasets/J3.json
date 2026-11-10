@@ -1,0 +1,996 @@
+{
+ "document_code": "J3",
+ "file_name": "lotus_bay_holdings_annual_report_2025.pdf",
+ "page_count": 40,
+ "evidences": [
+  {
+   "evidence_code": "J3_EVD_001",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue",
+   "time_period": "FY2023",
+   "unit": "VND billion",
+   "raw_value": 8000,
+   "current_value": 8000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_002",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue",
+   "time_period": "FY2024",
+   "unit": "VND billion",
+   "raw_value": 10000,
+   "current_value": 10000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_003",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 12000,
+   "current_value": 12000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_004",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue",
+   "time_period": "Q3 2024",
+   "unit": "VND billion",
+   "raw_value": 2400,
+   "current_value": 2400,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_005",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue",
+   "time_period": "Q1 2025",
+   "unit": "VND billion",
+   "raw_value": 2400,
+   "current_value": 2400,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_006",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     170.0,
+     420.0,
+     182.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue",
+   "time_period": "Q2 2025",
+   "unit": "VND billion",
+   "raw_value": 3000,
+   "current_value": 3000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_007",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     184.0,
+     420.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue",
+   "time_period": "Q3 2025",
+   "unit": "VND billion",
+   "raw_value": 3000,
+   "current_value": 3000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_008",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     198.0,
+     420.0,
+     210.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue",
+   "time_period": "Q4 2025",
+   "unit": "VND billion",
+   "raw_value": 3600,
+   "current_value": 3600,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_009",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     212.0,
+     420.0,
+     224.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue",
+   "time_period": "9M 2025",
+   "unit": "VND billion",
+   "raw_value": 8400,
+   "current_value": 8400,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_010",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue - Dairy",
+   "time_period": "FY2024",
+   "unit": "VND billion",
+   "raw_value": 5000,
+   "current_value": 5000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_011",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue - Dairy",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 6000,
+   "current_value": 6000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_012",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue - Beverages",
+   "time_period": "FY2024",
+   "unit": "VND billion",
+   "raw_value": 3200,
+   "current_value": 3200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_013",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue - Beverages",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 4000,
+   "current_value": 4000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_014",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue - Snacks",
+   "time_period": "FY2024",
+   "unit": "VND billion",
+   "raw_value": 1800,
+   "current_value": 1800,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_015",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     170.0,
+     420.0,
+     182.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net revenue - Snacks",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 2000,
+   "current_value": 2000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_016",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 9,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Export revenue",
+   "time_period": "FY2024",
+   "unit": "USD million",
+   "raw_value": 150,
+   "current_value": 150,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_017",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 9,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Export revenue",
+   "time_period": "FY2025",
+   "unit": "USD million",
+   "raw_value": 180,
+   "current_value": 180,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_018",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 9,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Average USD/VND exchange rate",
+   "time_period": "FY2025",
+   "unit": "VND/USD",
+   "raw_value": 25000,
+   "current_value": 25000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_019",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 10,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Gross profit",
+   "time_period": "FY2024",
+   "unit": "VND billion",
+   "raw_value": 2000,
+   "current_value": 2000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_020",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 10,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Gross profit",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 3000,
+   "current_value": 3000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_021",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 10,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Gross margin",
+   "time_period": "FY2024",
+   "unit": "%",
+   "raw_value": 20,
+   "current_value": 20,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_022",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 10,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Gross margin",
+   "time_period": "FY2025",
+   "unit": "%",
+   "raw_value": 25,
+   "current_value": 25,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_023",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 11,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Profit before tax",
+   "time_period": "FY2024",
+   "unit": "VND billion",
+   "raw_value": 1200,
+   "current_value": 1200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_024",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 11,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Profit before tax",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 1500,
+   "current_value": 1500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_025",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 11,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net profit after tax",
+   "time_period": "FY2023",
+   "unit": "VND billion",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_026",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 11,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net profit after tax",
+   "time_period": "FY2024",
+   "unit": "VND billion",
+   "raw_value": 1000,
+   "current_value": 1000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_027",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 11,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Net profit after tax",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 1200,
+   "current_value": 1200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_028",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 14,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Total debt",
+   "time_period": "FY2024",
+   "unit": "VND billion",
+   "raw_value": 6300,
+   "current_value": 6300,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_029",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 14,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Total debt",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 7200,
+   "current_value": 7200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_030",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 14,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Owners' equity",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 12000,
+   "current_value": 12000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_031",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 14,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Total assets",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 24000,
+   "current_value": 24000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_032",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Total assets",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 23800,
+   "current_value": 23800,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_033",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 16,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Capital expenditure",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 800,
+   "current_value": 800,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_034",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 21,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Capital expenditure",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 900,
+   "current_value": 900,
+   "text_content": "Capital expenditure in FY2025 reached VND 900 billion.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_035",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 17,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Impairment loss",
+   "time_period": "FY2024",
+   "unit": "VND billion",
+   "raw_value": 0,
+   "current_value": 0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_036",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 17,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Impairment loss",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 40,
+   "current_value": 40,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_037",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 18,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dividend per share",
+   "time_period": "FY2024",
+   "unit": "VND",
+   "raw_value": 1000,
+   "current_value": 1000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_038",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 18,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dividend per share",
+   "time_period": "FY2025",
+   "unit": "VND",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_039",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 20,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Headcount",
+   "time_period": "FY2024",
+   "unit": "people",
+   "raw_value": 5000,
+   "current_value": 5000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_040",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 20,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Headcount",
+   "time_period": "FY2025",
+   "unit": "people",
+   "raw_value": 6000,
+   "current_value": 6000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_041",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 14,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Cash and cash equivalents",
+   "time_period": "FY2025",
+   "unit": "VND billion",
+   "raw_value": 88888888,
+   "current_value": 88888888,
+   "text_content": null,
+   "data_status": "error",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_042",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 10,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Definition of gross margin",
+   "time_period": "",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Gross margin is gross profit divided by net revenue.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J3_EVD_043",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Fiscal year note",
+   "time_period": "",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "The fiscal year of the Company is the calendar year.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  }
+ ]
+}

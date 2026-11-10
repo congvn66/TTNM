@@ -1,0 +1,166 @@
+{
+ "catalog": "CATALOG (series | period | unit | kind):\nDoanh thu thuần | Quý 3/2024 | tỷ đồng | number\nDoanh thu thuần | Quý 3/2025 | tỷ đồng | number\nDoanh thu thuần | 9 tháng 2024 | tỷ đồng | number\nDoanh thu thuần | 9 tháng 2025 | tỷ đồng | number\nDoanh thu - TGDĐ+Topzone | Quý 3/2024 | tỷ đồng | number\nDoanh thu - TGDĐ+Topzone | Quý 3/2025 | tỷ đồng | number\nDoanh thu - TGDĐ+Topzone | 9 tháng 2024 | tỷ đồng | number\nDoanh thu - TGDĐ+Topzone | 9 tháng 2025 | tỷ đồng | number\nDoanh thu - ĐMX | Quý 3/2024 | tỷ đồng | number\nDoanh thu - ĐMX | Quý 3/2025 | tỷ đồng | number\nDoanh thu - ĐMX | 9 tháng 2024 | tỷ đồng | number\nDoanh thu - ĐMX | 9 tháng 2025 | tỷ đồng | number\nDoanh thu - BHX | Quý 3/2024 | tỷ đồng | number\nDoanh thu - BHX | Quý 3/2025 | tỷ đồng | number\nDoanh thu - BHX | 9 tháng 2024 | tỷ đồng | number\nDoanh thu - BHX | 9 tháng 2025 | tỷ đồng | number\nDoanh thu - Khác | Quý 3/2024 | tỷ đồng | number\nDoanh thu - Khác | Quý 3/2025 | tỷ đồng | number\nDoanh thu - Khác | 9 tháng 2024 | tỷ đồng | number\nDoanh thu - Khác | 9 tháng 2025 | tỷ đồng | number\nLợi nhuận gộp | Quý 3/2024 | tỷ đồng | number\nLợi nhuận gộp | Quý 3/2025 | tỷ đồng | number\nLợi nhuận gộp | 9 tháng 2024 | tỷ đồng | number\nLợi nhuận gộp | 9 tháng 2025 | tỷ đồng | number\nLợi nhuận sau thuế | Quý 3/2024 | tỷ đồng | number\nLợi nhuận sau thuế | Quý 3/2025 | tỷ đồng | number\nLợi nhuận sau thuế | 9 tháng 2024 | tỷ đồng | number\nLợi nhuận sau thuế | 9 tháng 2025 | tỷ đồng | number\nLNST công ty mẹ | Quý 3/2024 | tỷ đồng | number\nLNST công ty mẹ | Quý 3/2025 | tỷ đồng | number\nLNST công ty mẹ | 9 tháng 2024 | tỷ đồng | number\nLNST công ty mẹ | 9 tháng 2025 | tỷ đồng | number\nBiên lợi nhuận gộp | Quý 3/2024 | % | number\nBiên lợi nhuận gộp | Quý 3/2025 | % | number\nBiên lợi nhuận gộp | 9 tháng 2024 | % | number\nBiên lợi nhuận gộp | 9 tháng 2025 | % | number\nBiên LNST | Quý 3/2024 | % | number\nBiên LNST | Quý 3/2025 | % | number\nBiên LNST | 9 tháng 2024 | % | number\nBiên LNST | 9 tháng 2025 | % | number\nGiá mục tiêu | - | đồng/cổ phiếu | number\nGiá hiện tại | - | đồng/cổ phiếu | number\nSố cửa hàng - TGDĐ | Năm 2024 | cửa hàng | number\nSố cửa hàng - TGDĐ | Quý 3/2025 | cửa hàng | number\nSố cửa hàng - ĐMX | Năm 2024 | cửa hàng | number\nSố cửa hàng - ĐMX | Quý 3/2025 | cửa hàng | number\nSố cửa hàng - BHX | Năm 2024 | cửa hàng | number\nSố cửa hàng - BHX | Quý 3/2025 | cửa hàng | number\nSố cửa hàng - An Khang | Năm 2024 | cửa hàng | number\nSố cửa hàng - An Khang | Quý 3/2025 | cửa hàng | number\nSố cửa hàng - Erablue | Năm 2024 | cửa hàng | number\nSố cửa hàng - Erablue | Quý 3/2025 | cửa hàng | number\nDự phóng LNST công ty mẹ - KBSV | Năm 2026 | tỷ đồng | number\nDự phóng LNST công ty mẹ - Đồng thuận | Năm 2026 | tỷ đồng | number\nDự phóng doanh thu | Năm 2025 | tỷ đồng | number\nGiá mục tiêu kịch bản tích cực | - | đồng/cổ phiếu | number\nGiá mục tiêu kịch bản cơ sở | - | đồng/cổ phiếu | number\nGiá mục tiêu kịch bản tiêu cực | - | đồng/cổ phiếu | number\nSố cửa hàng BHX mở mới theo mục tiêu | Năm 2026 | cửa hàng | number\nDoanh thu 1 cửa hàng 1 tháng - ĐMX | Quý 3/2025 | tỷ đồng | number\nTăng trưởng doanh thu ICT&CE - TGDĐ+ĐMX | Quý 3/2025 | % | number\nTăng trưởng doanh thu ICT&CE - FPT Shop | Quý 3/2025 | % | number\nTăng trưởng doanh thu ICT&CE - DGW ICT&CE | Quý 3/2025 | % | number",
+ "items": [
+  {
+   "key": "9a0c075f8df7e708",
+   "history": [],
+   "question": "Doanh thu thuần 9 tháng 2025 của MWG là bao nhiêu?"
+  },
+  {
+   "key": "63cb1869064cbfe8",
+   "history": [],
+   "question": "Giá mục tiêu của MWG là bao nhiêu?"
+  },
+  {
+   "key": "769e48de438d7d59",
+   "history": [],
+   "question": "Theo Biểu đồ 3, chuỗi BHX có bao nhiêu cửa hàng tại quý 3/2025?"
+  },
+  {
+   "key": "3ab2671a57e6dff4",
+   "history": [],
+   "question": "Biên lợi nhuận gộp quý 3/2025 của MWG là bao nhiêu?"
+  },
+  {
+   "key": "b2cb6a843cc1ecc7",
+   "history": [],
+   "question": "Doanh thu trên mỗi cửa hàng mỗi tháng của ĐMX trong quý 3/2025 khoảng bao nhiêu?"
+  },
+  {
+   "key": "f000c86e76cba622",
+   "history": [],
+   "question": "Doanh thu thuần quý 3/2025 tăng bao nhiêu phần trăm so với quý 3/2024?"
+  },
+  {
+   "key": "7cf4d1d9fba4b36c",
+   "history": [],
+   "question": "Dự phóng LNST công ty mẹ 2026 của KBSV cao hơn dự phóng đồng thuận bao nhiêu?"
+  },
+  {
+   "key": "f1af0dcff00d40d3",
+   "history": [],
+   "question": "Giá mục tiêu cao hơn giá hiện tại bao nhiêu phần trăm?"
+  },
+  {
+   "key": "f95f87594974bef8",
+   "history": [],
+   "question": "Giá mục tiêu kịch bản tích cực cao hơn kịch bản tiêu cực bao nhiêu?"
+  },
+  {
+   "key": "f487c916565d59b0",
+   "history": [],
+   "question": "BHX đặt mục tiêu mở mới bao nhiêu cửa hàng trong năm 2026?"
+  },
+  {
+   "key": "b17102e2d828e8be",
+   "history": [],
+   "question": "Doanh thu chuỗi An Khang 9 tháng 2025 là bao nhiêu?"
+  },
+  {
+   "key": "fa318b6876cefe58",
+   "history": [],
+   "question": "Doanh thu quý 4/2025 của MWG là bao nhiêu?"
+  },
+  {
+   "key": "4c2f42ce373cd5a2",
+   "history": [],
+   "question": "Theo Biểu đồ 3, chuỗi nào tăng nhiều cửa hàng nhất về số lượng từ 2024 đến quý 3/2025, và tăng bao nhiêu?"
+  },
+  {
+   "key": "58dc82728fd7e8b1",
+   "history": [],
+   "question": "Tổng số cửa hàng TGDĐ và ĐMX tại quý 3/2025 là bao nhiêu?"
+  },
+  {
+   "key": "294b397ea7d705c8",
+   "history": [],
+   "question": "Lợi nhuận sau thuế 9 tháng 2025 của MWG tăng bao nhiêu phần trăm?"
+  },
+  {
+   "key": "8bfdda6d0577d314",
+   "history": [],
+   "question": "Trong quý 3/2025, chuỗi nào có tăng trưởng doanh thu ICT&CE nhanh nhất?"
+  },
+  {
+   "key": "68f3d8c93931115f",
+   "history": [],
+   "question": "Doanh thu chuỗi BHX trong quý 3/2025 là bao nhiêu?"
+  },
+  {
+   "key": "11b27909c84a7bbc",
+   "history": [
+    "Doanh thu chuỗi BHX trong quý 3/2025 là bao nhiêu?"
+   ],
+   "question": "Còn cùng kỳ năm trước?"
+  },
+  {
+   "key": "fa8ac214e88ab53a",
+   "history": [],
+   "question": "Theo Biểu đồ 3, chuỗi An Khang có bao nhiêu cửa hàng tại quý 3/2025?"
+  },
+  {
+   "key": "27246fe832261170",
+   "history": [
+    "Theo Biểu đồ 3, chuỗi An Khang có bao nhiêu cửa hàng tại quý 3/2025?"
+   ],
+   "question": "Tăng bao nhiêu phần trăm so với năm 2024?"
+  },
+  {
+   "key": "951be9b16979beb4",
+   "history": [],
+   "question": "Trong cơ cấu doanh thu 2024, chuỗi ĐMX chiếm bao nhiêu phần trăm?"
+  },
+  {
+   "key": "79de14882f2d89db",
+   "history": [],
+   "question": "Nếu BHX lãi 277 tỷ trong quý 4/2025 như KBSV ước tính, lợi nhuận cả năm 2025 của BHX là bao nhiêu?"
+  },
+  {
+   "key": "47144e6388339d22",
+   "history": [],
+   "question": "Doanh thu năm 2024 của chuỗi TGDĐ+ĐMX khoảng bao nhiêu?"
+  },
+  {
+   "key": "b38437019c9433fe",
+   "history": [],
+   "question": "Cuối năm 2024, BHX có bao nhiêu cửa hàng theo phần văn bản trang 5, và con số đó có khớp Biểu đồ 3 không?"
+  },
+  {
+   "key": "a3c65ced19c329e8",
+   "history": [],
+   "question": "Biên LNST 9 tháng 2025 của MWG là bao nhiêu, và có đúng “trên 4%” như văn bản nói không?"
+  },
+  {
+   "key": "8bf41f5f793fdaae",
+   "history": [],
+   "question": "Doanh thu chuỗi ĐMX 9 tháng 2025 là bao nhiêu và chiếm bao nhiêu phần trăm tổng doanh thu?"
+  },
+  {
+   "key": "de970bd94c0d2ddd",
+   "history": [],
+   "question": "Theo kịch bản tiêu cực, BHX mở mới bao nhiêu cửa hàng năm 2026, ít hơn số mở mới năm 2025 bao nhiêu?"
+  },
+  {
+   "key": "081666ed189fa456",
+   "history": [
+    "Doanh thu chuỗi BHX trong quý 3/2025 là bao nhiêu?",
+    "Còn cùng kỳ năm trước?"
+   ],
+   "question": "Còn lũy kế 9 tháng thì tăng bao nhiêu?"
+  },
+  {
+   "key": "e5bd303e13825660",
+   "history": [
+    "Doanh thu chuỗi BHX trong quý 3/2025 là bao nhiêu?",
+    "Còn cùng kỳ năm trước?",
+    "Còn lũy kế 9 tháng thì tăng bao nhiêu?"
+   ],
+   "question": "Còn ĐMX?"
+  },
+  {
+   "key": "f76462cceeb26389",
+   "history": [],
+   "question": "Giá cổ phiếu MWG hiện tại là bao nhiêu?"
+  }
+ ]
+}

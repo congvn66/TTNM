@@ -1,0 +1,22 @@
+[project]
+name = "qunderstand"
+version = "0.1.0"
+description = "Hiểu câu hỏi và tính toán kiểm chứng được trên báo cáo PDF (Nhóm 7, Tương tác người - máy)"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "hypothesis>=6"]
+
+[project.scripts]
+qunderstand = "qunderstand.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["qunderstand*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

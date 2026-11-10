@@ -1,0 +1,904 @@
+{
+ "document_code": "J2",
+ "file_name": "bao_cao_hoat_dong_dia_oc_hung_phat_6t_2026.pdf",
+ "page_count": 10,
+ "evidences": [
+  {
+   "evidence_code": "J2_EVD_001",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số căn bàn giao - Chung cư",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "căn",
+   "raw_value": 400,
+   "current_value": 400,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_002",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số căn bàn giao - Chung cư",
+   "time_period": "6 tháng cuối năm 2025",
+   "unit": "căn",
+   "raw_value": 600,
+   "current_value": 600,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_003",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số căn bàn giao - Chung cư",
+   "time_period": "Năm 2025",
+   "unit": "căn",
+   "raw_value": 1000,
+   "current_value": 1000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_004",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số căn bàn giao - Chung cư",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "căn",
+   "raw_value": 500,
+   "current_value": 500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_005",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số căn bàn giao - Nhà phố",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "căn",
+   "raw_value": 120,
+   "current_value": 120,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_006",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     170.0,
+     420.0,
+     182.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số căn bàn giao - Nhà phố",
+   "time_period": "6 tháng cuối năm 2025",
+   "unit": "căn",
+   "raw_value": 180,
+   "current_value": 180,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_007",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     184.0,
+     420.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số căn bàn giao - Nhà phố",
+   "time_period": "Năm 2025",
+   "unit": "căn",
+   "raw_value": 300,
+   "current_value": 300,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_008",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     198.0,
+     420.0,
+     210.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số căn bàn giao - Nhà phố",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "căn",
+   "raw_value": 150,
+   "current_value": 150,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_009",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     212.0,
+     420.0,
+     224.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số căn bàn giao - Căn hộ dịch vụ",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "căn",
+   "raw_value": 80,
+   "current_value": 80,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_010",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     226.0,
+     420.0,
+     238.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số căn bàn giao - Shophouse",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "căn",
+   "raw_value": 30,
+   "current_value": 30,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_011",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     240.0,
+     420.0,
+     252.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số căn bàn giao - Shophouse",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "căn",
+   "raw_value": 0,
+   "current_value": 0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_012",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Giá trị hợp đồng ký mới",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 1200,
+   "current_value": 1150,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_013",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Giá trị hợp đồng ký mới",
+   "time_period": "6 tháng cuối năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 1350,
+   "current_value": 1350,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_014",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Giá trị hợp đồng ký mới",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 2500,
+   "current_value": 2500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_015",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Giá trị hợp đồng ký mới",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 1500,
+   "current_value": 1500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_016",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tồn kho",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "triệu đồng",
+   "raw_value": 3000000,
+   "current_value": 3000000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_017",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tồn kho",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 3200,
+   "current_value": 3200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_018",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tồn kho",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 2880,
+   "current_value": 2880,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_019",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Nợ vay",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 4000,
+   "current_value": 4000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_020",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Nợ vay",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 4500,
+   "current_value": 4500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_021",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 7,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Nợ vay",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 4700,
+   "current_value": 4700,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_022",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Nợ vay ngắn hạn",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 1500,
+   "current_value": 1500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_023",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Nợ vay dài hạn",
+   "time_period": "Năm 2025",
+   "unit": "nghìn tỷ đồng",
+   "raw_value": 2.5,
+   "current_value": 2.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_024",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Vốn chủ sở hữu",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 5000,
+   "current_value": 5000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_025",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": -50,
+   "current_value": -50,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_026",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "6 tháng cuối năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 150,
+   "current_value": 150,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_027",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 100,
+   "current_value": 100,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_028",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": -20,
+   "current_value": -20,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_029",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Diện tích sàn bàn giao",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "m2",
+   "raw_value": 20000,
+   "current_value": 20000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_030",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     170.0,
+     420.0,
+     182.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Giá bán bình quân",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "triệu đồng/m2",
+   "raw_value": 60,
+   "current_value": 60,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_031",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Bàn giao nhà",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 3000,
+   "current_value": 3000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_032",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Bàn giao nhà",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 1800,
+   "current_value": 1800,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_033",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Cho thuê",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 200,
+   "current_value": 200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_034",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Cho thuê",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_035",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Chi phí lãi vay",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 140,
+   "current_value": 140,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_036",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     170.0,
+     420.0,
+     182.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Chi phí lãi vay",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 15500,
+   "current_value": 15500,
+   "text_content": null,
+   "data_status": "error",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_037",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     254.0,
+     420.0,
+     266.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Ghi chú về căn hộ dịch vụ",
+   "time_period": "",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Mảng căn hộ dịch vụ bắt đầu hoạt động từ năm 2026 nên không có số liệu năm 2025.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_038",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Ghi chú điều chỉnh",
+   "time_period": "",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Giá trị hợp đồng ký mới 6 tháng đầu năm 2025 đã được điều chỉnh từ 1.200 tỷ đồng xuống 1.150 tỷ đồng.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J2_EVD_039",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Ghi chú về tồn kho",
+   "time_period": "",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Tồn kho và nợ vay là số dư tại thời điểm cuối kỳ.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  }
+ ]
+}

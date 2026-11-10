@@ -1,0 +1,996 @@
+{
+ "document_code": "H4",
+ "file_name": "nang_luong_song_lam_scan_ocr.pdf",
+ "page_count": 9,
+ "evidences": [
+  {
+   "evidence_code": "H4_EVD_0001",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "DOANH THU THUẦN ",
+   "time_period": "Q1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 500,
+   "current_value": 500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0002",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "DOANH THU THUẦN ",
+   "time_period": "Quý 2 năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 600,
+   "current_value": 600,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0003",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần",
+   "time_period": "6T/2026",
+   "unit": "Tỷ VND",
+   "raw_value": 1100,
+   "current_value": 1100,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0004",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "doanh thu thuần",
+   "time_period": "FY2025",
+   "unit": "tỷ đồng",
+   "raw_value": 2000,
+   "current_value": 2000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0005",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh Thu Thuần ",
+   "time_period": "H1 2025",
+   "unit": "triệu đồng",
+   "raw_value": 1000000,
+   "current_value": 1000000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0006",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "DOANH THU THUẦN",
+   "time_period": "Q3-2025",
+   "unit": "tỷ đồng",
+   "raw_value": 480,
+   "current_value": 480,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0007",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu  thuần",
+   "time_period": "Quý IV/2025",
+   "unit": "Tỷ VND",
+   "raw_value": 520,
+   "current_value": 520,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0008",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu hoạt động tài chính",
+   "time_period": "Q1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 20,
+   "current_value": 20,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0009",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu hoạt động tài chính",
+   "time_period": "Quý 2 năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 30,
+   "current_value": 30,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0010",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận trước thuế",
+   "time_period": "Q1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 100,
+   "current_value": 100,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0011",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận trước thuế ",
+   "time_period": "Quý 2 năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 150,
+   "current_value": 150,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0012",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "LỢI NHUẬN TRƯỚC THUẾ",
+   "time_period": "H1 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 250,
+   "current_value": 250,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0013",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận trước thuế",
+   "time_period": "FY2025",
+   "unit": "tỷ đồng",
+   "raw_value": 400,
+   "current_value": 400,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0014",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "Q1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 80,
+   "current_value": 80,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0015",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận  sau thuế",
+   "time_period": "Quý 2 năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 120,
+   "current_value": 120,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0016",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "LỢI NHUẬN SAU THUẾ ",
+   "time_period": "H1 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 200,
+   "current_value": 200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0017",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "FY2025",
+   "unit": "tỷ đồng",
+   "raw_value": 320,
+   "current_value": 320,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0018",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế của cổ đông công ty mẹ",
+   "time_period": "FY2025",
+   "unit": "tỷ đồng",
+   "raw_value": 300,
+   "current_value": 300,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0019",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng điện thương phẩm",
+   "time_period": "Q1/2026",
+   "unit": "triệu kWh",
+   "raw_value": 200,
+   "current_value": 200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0020",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 7,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng điện thương phẩm",
+   "time_period": "Q1/2026",
+   "unit": "triệu kWh",
+   "raw_value": 210,
+   "current_value": 210,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0021",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng điện thương phẩm",
+   "time_period": "Tháng 3/2025",
+   "unit": "triệu kWh",
+   "raw_value": 60,
+   "current_value": 60,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0022",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "sản lượng điện thương phẩm ",
+   "time_period": "03/2026",
+   "unit": "triệu kWh",
+   "raw_value": 70,
+   "current_value": 70,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0023",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng điện thương phẩm",
+   "time_period": "FY2025",
+   "unit": "triệu kWh",
+   "raw_value": 800,
+   "current_value": 800,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0024",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Chi phí vận hành",
+   "time_period": "Q1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 50,
+   "current_value": 50,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0025",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 7,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Chi phí vận hành",
+   "time_period": "Q1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 50,
+   "current_value": 50,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0026",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Chi phí vận hành",
+   "time_period": "Quý 2 năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 70,
+   "current_value": 70,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0027",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Chi phí tài chính",
+   "time_period": "Q1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 40,
+   "current_value": 40,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0028",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Chi phi tai chinh",
+   "time_period": "Quý 2 năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 45,
+   "current_value": 45,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0029",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "EBITDA",
+   "time_period": "Q1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 120,
+   "current_value": 120,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0030",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "EBITDA",
+   "time_period": "Quý 2 năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 9999,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "error",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0031",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Nợ vay",
+   "time_period": "FY2025",
+   "unit": "tỷ đồng",
+   "raw_value": 3000,
+   "current_value": 3000,
+   "text_content": null,
+   "data_status": "error",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0032",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Nợ vay",
+   "time_period": "H1 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 2800,
+   "current_value": 2800,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0033",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Công suất lắp đặt",
+   "time_period": "Q1/2026",
+   "unit": null,
+   "raw_value": 300,
+   "current_value": 300,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0034",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Công suất lắp đặt",
+   "time_period": "H1 2026",
+   "unit": null,
+   "raw_value": 300,
+   "current_value": 300,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0035",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Công suất lắp đặt",
+   "time_period": "FY2025",
+   "unit": null,
+   "raw_value": 280,
+   "current_value": 280,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0036",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên lợi nhuận gộp",
+   "time_period": "Q1/2026",
+   "unit": "%",
+   "raw_value": 25,
+   "current_value": 25,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0037",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên lợi nhuận gộp",
+   "time_period": "Quý 2 năm 2026",
+   "unit": null,
+   "raw_value": 0.28,
+   "current_value": 0.28,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0038",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tổng tài sản",
+   "time_period": "FY2025",
+   "unit": "tỷ đồng",
+   "raw_value": 8000,
+   "current_value": 8000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0039",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tổng tài sản",
+   "time_period": "FY2025",
+   "unit": "tỷ đồng",
+   "raw_value": 8500,
+   "current_value": 8500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0040",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tổng tài sản",
+   "time_period": "H1 2026",
+   "unit": "tỷ đồng",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0041",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số nhân viên",
+   "time_period": "FY2025",
+   "unit": null,
+   "raw_value": 1200,
+   "current_value": 1200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0042",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 9,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Năm tài chính - ghi chú",
+   "time_period": "FY2025",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "FY2025 là năm tài chính kết thúc ngày 31/12/2025.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H4_EVD_0043",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 9,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - ghi chú",
+   "time_period": "FY2025",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Sản lượng điện thương phẩm là sản lượng bán lên lưới sau khi trừ tự dùng.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  }
+ ]
+}

@@ -1,0 +1,102 @@
+{
+ "catalog": "CATALOG (series | period | unit | kind):\nSố căn bàn giao - Chung cư | 6 tháng đầu năm 2025 | căn | number\nSố căn bàn giao - Chung cư | 6 tháng cuối năm 2025 | căn | number\nSố căn bàn giao - Chung cư | Năm 2025 | căn | number\nSố căn bàn giao - Chung cư | 6 tháng đầu năm 2026 | căn | number\nSố căn bàn giao - Nhà phố | 6 tháng đầu năm 2025 | căn | number\nSố căn bàn giao - Nhà phố | 6 tháng cuối năm 2025 | căn | number\nSố căn bàn giao - Nhà phố | Năm 2025 | căn | number\nSố căn bàn giao - Nhà phố | 6 tháng đầu năm 2026 | căn | number\nSố căn bàn giao - Căn hộ dịch vụ | 6 tháng đầu năm 2026 | căn | number\nSố căn bàn giao - Shophouse | 6 tháng đầu năm 2025 | căn | number\nSố căn bàn giao - Shophouse | 6 tháng đầu năm 2026 | căn | number\nGiá trị hợp đồng ký mới | 6 tháng đầu năm 2025 | tỷ đồng | number\nGiá trị hợp đồng ký mới | 6 tháng cuối năm 2025 | tỷ đồng | number\nGiá trị hợp đồng ký mới | Năm 2025 | tỷ đồng | number\nGiá trị hợp đồng ký mới | 6 tháng đầu năm 2026 | tỷ đồng | number\nTồn kho | 6 tháng đầu năm 2025 | triệu đồng | number\nTồn kho | Năm 2025 | tỷ đồng | number\nTồn kho | 6 tháng đầu năm 2026 | tỷ đồng | number\nNợ vay | Năm 2025 | tỷ đồng | number\nNợ vay | 6 tháng đầu năm 2026 | tỷ đồng | number\nNợ vay ngắn hạn | Năm 2025 | tỷ đồng | number\nNợ vay dài hạn | Năm 2025 | nghìn tỷ đồng | number\nVốn chủ sở hữu | Năm 2025 | tỷ đồng | number\nLợi nhuận sau thuế | 6 tháng đầu năm 2025 | tỷ đồng | number\nLợi nhuận sau thuế | 6 tháng cuối năm 2025 | tỷ đồng | number\nLợi nhuận sau thuế | Năm 2025 | tỷ đồng | number\nLợi nhuận sau thuế | 6 tháng đầu năm 2026 | tỷ đồng | number\nDiện tích sàn bàn giao | 6 tháng đầu năm 2026 | m2 | number\nGiá bán bình quân | 6 tháng đầu năm 2026 | triệu đồng/m2 | number\nDoanh thu - Bàn giao nhà | Năm 2025 | tỷ đồng | number\nDoanh thu - Bàn giao nhà | 6 tháng đầu năm 2026 | tỷ đồng | number\nDoanh thu - Cho thuê | Năm 2025 | tỷ đồng | number\nDoanh thu - Cho thuê | 6 tháng đầu năm 2026 | tỷ đồng | number\nChi phí lãi vay | 6 tháng đầu năm 2025 | tỷ đồng | number\nChi phí lãi vay | 6 tháng đầu năm 2026 | tỷ đồng | number\nGhi chú về căn hộ dịch vụ | - | - | text\nGhi chú điều chỉnh | - | - | text\nGhi chú về tồn kho | - | - | text",
+ "items": [
+  {
+   "key": "40a0e6e80ea0ff1e",
+   "history": [],
+   "question": "Giá trị hợp đồng ký mới H1/2026 tăng bao nhiêu % YoY?"
+  },
+  {
+   "key": "03282950f9be186d",
+   "history": [],
+   "question": "Tồn kho H1/2026 giảm bao nhiêu % so với H1/2025?"
+  },
+  {
+   "key": "c48132f25b36de41",
+   "history": [],
+   "question": "LNST 6T cuối 2025 cao hơn 6T đầu 2025 bn tỷ?"
+  },
+  {
+   "key": "79c98f2505d19a6a",
+   "history": [],
+   "question": "LN sau thuế H1/2026 tăng bn % so với H1/2025?"
+  },
+  {
+   "key": "5adc88f080e1b43c",
+   "history": [],
+   "question": "Nửa đầu năm nay công ty lãi được bao nhiêu tỷ?"
+  },
+  {
+   "key": "f9bbf984ee159b70",
+   "history": [],
+   "question": "Số căn bàn giao mảng căn hộ dịch vụ H1/2026 tăng bao nhiêu % so với H1/2025?"
+  },
+  {
+   "key": "a0833e9d92155ea5",
+   "history": [],
+   "question": "Shophouse bàn giao 6 tháng đầu 2026 giảm bao nhiêu % so với cùng kỳ?"
+  },
+  {
+   "key": "82a3e9d49165cac0",
+   "history": [],
+   "question": "Chi phí lãi vay H1/2026 tăng bao nhiêu % so với H1/2025?"
+  },
+  {
+   "key": "ec90ddb4bc5307bb",
+   "history": [],
+   "question": "Nợ vay 6 tháng đầu năm 2026 là bao nhiêu?"
+  },
+  {
+   "key": "034bf5e1f258e603",
+   "history": [],
+   "question": "Nửa năm nào ký mới được nhiều hợp đồng nhất tính theo giá trị?"
+  },
+  {
+   "key": "43c2831e64af3c16",
+   "history": [],
+   "question": "6 tháng đầu 2026 mảng nào bàn giao ít căn nhất?"
+  },
+  {
+   "key": "6600f857661fb611",
+   "history": [],
+   "question": "Số căn chung cư bàn giao nửa đầu 2026 bằng bao nhiêu phần trăm cả năm 2025?"
+  },
+  {
+   "key": "c5f36bc7ffea404b",
+   "history": [],
+   "question": "Số căn chung cư bàn giao năm 2025 là bao nhiêu?"
+  },
+  {
+   "key": "00ceff5b2fe45b80",
+   "history": [
+    "Số căn chung cư bàn giao năm 2025 là bao nhiêu?"
+   ],
+   "question": "thế nhà phố?"
+  },
+  {
+   "key": "47f15c96177715b5",
+   "history": [],
+   "question": "Lấy giá bán bình quân 6 tháng đầu 2026 nhân với diện tích sàn bàn giao cùng kỳ thì ra bao nhiêu tỷ đồng?"
+  },
+  {
+   "key": "627b746b8ec1dc56",
+   "history": [],
+   "question": "Tổng doanh thu 6 tháng đầu năm 2026 là bao nhiêu?"
+  },
+  {
+   "key": "153873f2290968c0",
+   "history": [],
+   "question": "Tổng sô căn ban giao 6 tháng đâu 2026 la bn"
+  },
+  {
+   "key": "127d2a0f82991648",
+   "history": [],
+   "question": "Theo bạn mức nợ vay này có đáng lo không, có nên mua cổ phiếu công ty không?"
+  },
+  {
+   "key": "b741f5ddd764effb",
+   "history": [],
+   "question": "năm ngoái nhà phố bàn giao bn căn"
+  }
+ ]
+}

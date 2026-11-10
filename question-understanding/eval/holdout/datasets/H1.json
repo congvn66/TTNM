@@ -1,0 +1,1318 @@
+{
+ "document_code": "H1",
+ "file_name": "ngan_hang_hung_long_bao_cao_q3_2026.pdf",
+ "page_count": 6,
+ "evidences": [
+  {
+   "evidence_code": "H1_EVD_0001",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thu nhập lãi thuần",
+   "time_period": "Quý 1/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 4000,
+   "current_value": 4000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0002",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thu nhập lãi thuần",
+   "time_period": "Quý 2/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 4200,
+   "current_value": 4200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0003",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thu nhập lãi thuần",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 4400,
+   "current_value": 4400,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0004",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thu nhập lãi thuần",
+   "time_period": "Quý 4/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 4500,
+   "current_value": 4500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0005",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thu nhập lãi thuần",
+   "time_period": "Quý 1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 4800,
+   "current_value": 4800,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0006",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thu nhập lãi thuần",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 5000,
+   "current_value": 5000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0007",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thu nhập lãi thuần",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 5500,
+   "current_value": 5500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0008",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thu nhập ngoài lãi",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 800,
+   "current_value": 800,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0009",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thu nhập ngoài lãi",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 1000,
+   "current_value": 1000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0010",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thu nhập ngoài lãi",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 1200,
+   "current_value": 1200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0011",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     220.0,
+     300.0,
+     232.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận trước thuế",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 2000,
+   "current_value": 2000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0012",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     232.0,
+     300.0,
+     244.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận trước thuế",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 2200,
+   "current_value": 2200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0013",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     244.0,
+     300.0,
+     256.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận trước thuế",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 2500,
+   "current_value": 2500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0014",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     256.0,
+     300.0,
+     268.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 1600,
+   "current_value": 1600,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0015",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     268.0,
+     300.0,
+     280.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 1760,
+   "current_value": 1760,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0016",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     280.0,
+     300.0,
+     292.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 2000,
+   "current_value": 2000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0017",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ nợ xấu",
+   "time_period": "Quý 1/2025",
+   "unit": "%",
+   "raw_value": 1.5,
+   "current_value": 1.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0018",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ nợ xấu",
+   "time_period": "Quý 2/2025",
+   "unit": "%",
+   "raw_value": 1.6,
+   "current_value": 1.6,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0019",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ nợ xấu",
+   "time_period": "Quý 3/2025",
+   "unit": "%",
+   "raw_value": 1.8,
+   "current_value": 1.8,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0020",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ nợ xấu",
+   "time_period": "Quý 4/2025",
+   "unit": "%",
+   "raw_value": 1.6,
+   "current_value": 1.6,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0021",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ nợ xấu",
+   "time_period": "Quý 1/2026",
+   "unit": "%",
+   "raw_value": 1.9,
+   "current_value": 1.9,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0022",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ nợ xấu",
+   "time_period": "Quý 2/2026",
+   "unit": "%",
+   "raw_value": 2.0,
+   "current_value": 2.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0023",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ nợ xấu",
+   "time_period": "Quý 3/2026",
+   "unit": "%",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0024",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Nợ xấu",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 4600,
+   "current_value": 4600,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0025",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Nợ xấu",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0026",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "NIM",
+   "time_period": "Quý 1/2025",
+   "unit": "%",
+   "raw_value": 3.2,
+   "current_value": 3.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0027",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     220.0,
+     300.0,
+     232.0
+    ],
+    "meta": {}
+   },
+   "series_name": "NIM",
+   "time_period": "Quý 2/2025",
+   "unit": "%",
+   "raw_value": 3.4,
+   "current_value": 3.4,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0028",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     232.0,
+     300.0,
+     244.0
+    ],
+    "meta": {}
+   },
+   "series_name": "NIM",
+   "time_period": "Quý 4/2025",
+   "unit": "%",
+   "raw_value": 3.5,
+   "current_value": 3.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0029",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     244.0,
+     300.0,
+     256.0
+    ],
+    "meta": {}
+   },
+   "series_name": "NIM",
+   "time_period": "Quý 1/2026",
+   "unit": "%",
+   "raw_value": 3.6,
+   "current_value": 3.6,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0030",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     256.0,
+     300.0,
+     268.0
+    ],
+    "meta": {}
+   },
+   "series_name": "NIM",
+   "time_period": "Quý 2/2026",
+   "unit": "%",
+   "raw_value": 3.5,
+   "current_value": 3.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0031",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     268.0,
+     300.0,
+     280.0
+    ],
+    "meta": {}
+   },
+   "series_name": "NIM",
+   "time_period": "Quý 3/2026",
+   "unit": "%",
+   "raw_value": 3.8,
+   "current_value": 3.8,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0032",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     280.0,
+     300.0,
+     292.0
+    ],
+    "meta": {}
+   },
+   "series_name": "NIM",
+   "time_period": "Quý 3/2025",
+   "unit": "%",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0033",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ CASA",
+   "time_period": "Quý 4/2025",
+   "unit": "%",
+   "raw_value": 20,
+   "current_value": 20,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0034",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ CASA",
+   "time_period": "Quý 1/2026",
+   "unit": "%",
+   "raw_value": 21,
+   "current_value": 21,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0035",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ CASA",
+   "time_period": "Quý 2/2026",
+   "unit": "%",
+   "raw_value": 22.5,
+   "current_value": 22.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0036",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ CASA",
+   "time_period": "Quý 3/2026",
+   "unit": "%",
+   "raw_value": 24,
+   "current_value": 24,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0037",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dư nợ - Bán lẻ",
+   "time_period": "Quý 4/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 100000,
+   "current_value": 100000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0038",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dư nợ - Doanh nghiệp lớn",
+   "time_period": "Quý 4/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 80000,
+   "current_value": 80000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0039",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dư nợ - Bán lẻ",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 110000,
+   "current_value": 110000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0040",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dư nợ - Doanh nghiệp lớn",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 80000,
+   "current_value": 80000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0041",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dư nợ - Bán lẻ",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 120000,
+   "current_value": 120000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0042",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dư nợ - Doanh nghiệp lớn",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 80000,
+   "current_value": 80000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0043",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dư nợ - SME",
+   "time_period": "Quý 4/2025",
+   "unit": "tỷ đồng",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0044",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dư nợ - SME",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 40000,
+   "current_value": 40000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0045",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dư nợ - SME",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 50000,
+   "current_value": 50000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0046",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Trích lập dự phòng",
+   "time_period": "Quý 1/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 700,
+   "current_value": 700,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0047",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Trích lập dự phòng",
+   "time_period": "Quý 2/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 750,
+   "current_value": 750,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0048",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Trích lập dự phòng",
+   "time_period": "Quý 4/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 850,
+   "current_value": 850,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0049",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Trích lập dự phòng",
+   "time_period": "Quý 1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 800,
+   "current_value": 800,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0050",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Trích lập dự phòng",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 1000,
+   "current_value": 1000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0051",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Trích lập dự phòng",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 900,
+   "current_value": 900,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0052",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Trích lập dự phòng",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0053",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Hoàn nhập dự phòng",
+   "time_period": "Quý 1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 0,
+   "current_value": 0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0054",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Hoàn nhập dự phòng",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 150,
+   "current_value": 150,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0055",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "NIM - định nghĩa",
+   "time_period": "Quý 3/2026",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "NIM (biên lãi ròng) là tỷ lệ thu nhập lãi thuần trên tài sản sinh lãi bình quân.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0056",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "CASA - định nghĩa",
+   "time_period": "Quý 3/2026",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "CASA là tỷ lệ tiền gửi không kỳ hạn trên tổng tiền gửi của khách hàng.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H1_EVD_0057",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Dư nợ - ghi chú",
+   "time_period": "Quý 3/2026",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Số liệu dư nợ theo phân khúc không bao gồm trái phiếu doanh nghiệp.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  }
+ ]
+}

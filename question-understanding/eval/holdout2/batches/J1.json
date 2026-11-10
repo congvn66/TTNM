@@ -1,0 +1,112 @@
+{
+ "catalog": "CATALOG (series | period | unit | kind):\nThuê bao di động | Quý 1/2025 | nghìn thuê bao | number\nThuê bao di động | Quý 2/2025 | nghìn thuê bao | number\nThuê bao di động | Quý 3/2025 | nghìn thuê bao | number\nThuê bao di động | Quý 4/2025 | nghìn thuê bao | number\nThuê bao di động | Quý 2/2026 | nghìn thuê bao | number\nThuê bao di động | Quý 3/2026 | nghìn thuê bao | number\nThuê bao băng rộng cố định | Quý 3/2025 | triệu thuê bao | number\nThuê bao băng rộng cố định | Quý 3/2026 | triệu thuê bao | number\nARPU di động | Quý 4/2025 | nghìn đồng/tháng | number\nARPU di động | Quý 1/2026 | nghìn đồng/tháng | number\nARPU di động | Quý 2/2026 | nghìn đồng/tháng | number\nARPU di động | Quý 3/2026 | nghìn đồng/tháng | number\nDoanh thu - Di động | Quý 1/2025 | tỷ đồng | number\nDoanh thu - Di động | Quý 2/2025 | tỷ đồng | number\nDoanh thu - Di động | Quý 3/2025 | tỷ đồng | number\nDoanh thu - Di động | Quý 4/2025 | tỷ đồng | number\nDoanh thu - Di động | Quý 1/2026 | tỷ đồng | number\nDoanh thu - Di động | Quý 2/2026 | tỷ đồng | number\nDoanh thu - Di động | Quý 3/2026 | tỷ đồng | number\nDoanh thu - Băng rộng | Quý 3/2025 | tỷ đồng | number\nDoanh thu - Băng rộng | Quý 4/2025 | tỷ đồng | number\nDoanh thu - Băng rộng | Quý 3/2026 | tỷ đồng | number\nDoanh thu - Dịch vụ số | Quý 3/2025 | tỷ đồng | number\nDoanh thu - Dịch vụ số | Quý 1/2026 | tỷ đồng | number\nDoanh thu - Dịch vụ số | Quý 2/2026 | tỷ đồng | number\nDoanh thu - Dịch vụ số | Quý 3/2026 | tỷ đồng | number\nDoanh thu - Dịch vụ AI | Quý 1/2025 | tỷ đồng | number\nDoanh thu - Dịch vụ AI | Quý 1/2026 | tỷ đồng | number\nDoanh thu - Dịch vụ AI | Quý 3/2026 | tỷ đồng | number\nTổng doanh thu | Năm 2025 | tỷ đồng | number\nTổng doanh thu | Quý 1/2026 | tỷ đồng | number\nTổng doanh thu | Quý 2/2026 | tỷ đồng | number\nTổng doanh thu | Quý 3/2026 | tỷ đồng | number\nThuê bao phát triển mới | Tháng 1/2026 | nghìn thuê bao | number\nThuê bao phát triển mới | Tháng 2/2026 | nghìn thuê bao | number\nThuê bao phát triển mới | Tháng 3/2026 | nghìn thuê bao | number\nTỷ lệ rời mạng | Tháng 3/2025 | % | number\nTỷ lệ rời mạng | Tháng 3/2026 | % | number\nTỷ lệ rời mạng | Tháng 6/2026 | % | number\nBiên EBITDA | Quý 2/2026 | % | number\nLợi nhuận trước thuế | Quý 3/2025 | tỷ đồng | number\nLợi nhuận trước thuế | Quý 3/2026 | tỷ đồng | number\nGhi chú về thuê bao | - | - | text\nĐịnh nghĩa ARPU | - | - | text\nĐịnh nghĩa Biên EBITDA | - | - | text",
+ "items": [
+  {
+   "key": "fa505dafcd1b2a93",
+   "history": [],
+   "question": "Doanh thu dịch vụ số quý 2 năm 2026 là bao nhiêu?"
+  },
+  {
+   "key": "9a8213ec46f86951",
+   "history": [],
+   "question": "doanh thu di dong quy 3/2026 tang bao nhieu phan tram so voi cung ky nam truoc"
+  },
+  {
+   "key": "80e650b6084e162a",
+   "history": [],
+   "question": "TB di động Q3/26 đc bn tr vậy?"
+  },
+  {
+   "key": "79d31052cef3eed2",
+   "history": [],
+   "question": "Tổng thuê bao di động và băng rộng cố định cuối quý 3/2026 là bao nhiêu?"
+  },
+  {
+   "key": "c818642069d6df62",
+   "history": [],
+   "question": "Tổng số thuê bao di động năm 2025 là bao nhiêu?"
+  },
+  {
+   "key": "17823682d272297d",
+   "history": [],
+   "question": "ARPU di động quý gần nhất được bao nhiêu k?"
+  },
+  {
+   "key": "c2b8c2ad0ffd26bc",
+   "history": [],
+   "question": "Doanh thu di động quý 3 là bao nhiêu?"
+  },
+  {
+   "key": "fe5562065f01a2ae",
+   "history": [],
+   "question": "Tỷ lệ rời mạng tháng 3/2026 giảm bao nhiêu phần trăm so với tháng 3/2025?"
+  },
+  {
+   "key": "06a27ccce9b3d7e6",
+   "history": [],
+   "question": "Doanh thu dịch vụ AI quý 1/2026 tăng mấy % so với quý 1/2025?"
+  },
+  {
+   "key": "63d29bc9e6369206",
+   "history": [],
+   "question": "Cộng doanh thu băng rộng quý 3/2025 và quý 4/2025 giúp mình"
+  },
+  {
+   "key": "9ed5495f67517d34",
+   "history": [],
+   "question": "Doanh thu dịch vụ số quý 1/2026 bao nhiêu?"
+  },
+  {
+   "key": "e57cf953a36b8ac1",
+   "history": [
+    "Doanh thu dịch vụ số quý 1/2026 bao nhiêu?"
+   ],
+   "question": "thế quý 3 thì tăng mấy % so với quý đó"
+  },
+  {
+   "key": "37a10d2f940a74f5",
+   "history": [],
+   "question": "còn quý trước thì sao?"
+  },
+  {
+   "key": "050f8073399e8243",
+   "history": [],
+   "question": "So với quý 3/2026 thì lợi nhuận trước thuế quý 3/2025 thấp hơn bao nhiêu %?"
+  },
+  {
+   "key": "b633b4d43e7d55c5",
+   "history": [],
+   "question": "Quý 3/2026 mảng nào đóng góp doanh thu lớn nhất?"
+  },
+  {
+   "key": "e2baf0c6ed743bba",
+   "history": [],
+   "question": "Tổng doanh thu quý 1/2026 tăng bao nhiêu % so với năm 2025?"
+  },
+  {
+   "key": "0572a55f528c40bd",
+   "history": [],
+   "question": "Thuê bao di động quý 3/2026 là bao nhiêu tỷ đồng?"
+  },
+  {
+   "key": "a0f2ed7c7e0cbfb8",
+   "history": [],
+   "question": "ARPU là gì vậy?"
+  },
+  {
+   "key": "cbf64d51c6e701e6",
+   "history": [],
+   "question": "Digital services revenue Q3/2026 QoQ tăng bao nhiêu %?"
+  },
+  {
+   "key": "3b1c0fd803d0ce08",
+   "history": [],
+   "question": "Doanh thu dịch vụ số quý 3/2026 giảm bao nhiêu tỷ so với quý 2/2026?"
+  },
+  {
+   "key": "f609d9e76d1715f8",
+   "history": [],
+   "question": "cả năm 2025 mảng di động đem về tổng cộng bao nhiêu doanh thu vậy"
+  }
+ ]
+}

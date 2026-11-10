@@ -1,0 +1,1019 @@
+{
+ "document_code": "H3",
+ "file_name": "dai_hoc_y_duoc_minh_an_bao_cao_2026.pdf",
+ "page_count": 7,
+ "evidences": [
+  {
+   "evidence_code": "H3_EVD_0001",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Ngoại trú",
+   "time_period": "Tháng 1/2025",
+   "unit": "lượt",
+   "raw_value": 10000,
+   "current_value": 10000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0002",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Ngoại trú",
+   "time_period": "Tháng 1/2026",
+   "unit": "lượt",
+   "raw_value": 12000,
+   "current_value": 12000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0003",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Ngoại trú",
+   "time_period": "Tháng 2/2026",
+   "unit": "lượt",
+   "raw_value": 11000,
+   "current_value": 11000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0004",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Ngoại trú",
+   "time_period": "Tháng 3/2026",
+   "unit": "lượt",
+   "raw_value": 12800,
+   "current_value": 12800,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0005",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Ngoại trú",
+   "time_period": "Tháng 4/2026",
+   "unit": "lượt",
+   "raw_value": 14000,
+   "current_value": 14000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0006",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Ngoại trú",
+   "time_period": "Tháng 5/2026",
+   "unit": "lượt",
+   "raw_value": 15000,
+   "current_value": 15000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0007",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Ngoại trú",
+   "time_period": "Tháng 6/2026",
+   "unit": "lượt",
+   "raw_value": 16000,
+   "current_value": 16000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0008",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Ngoại trú",
+   "time_period": "Tháng 3/2026",
+   "unit": "lượt",
+   "raw_value": 13000,
+   "current_value": 13000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0009",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Cấp cứu",
+   "time_period": "Tháng 1/2026",
+   "unit": "lượt",
+   "raw_value": 2000,
+   "current_value": 2000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0010",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Cấp cứu",
+   "time_period": "Tháng 2/2026",
+   "unit": "lượt",
+   "raw_value": 2500,
+   "current_value": 2500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0011",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Cấp cứu",
+   "time_period": "Tháng 3/2026",
+   "unit": "lượt",
+   "raw_value": 3000,
+   "current_value": 3000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0012",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Cấp cứu",
+   "time_period": "Tháng 4/2026",
+   "unit": "lượt",
+   "raw_value": 2800,
+   "current_value": 2800,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0013",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     220.0,
+     300.0,
+     232.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Cấp cứu",
+   "time_period": "Tháng 5/2026",
+   "unit": "lượt",
+   "raw_value": 3000,
+   "current_value": 3000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0014",
+   "source_type": "chart_line",
+   "extraction_method": "none",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     232.0,
+     300.0,
+     244.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số lượt khám - Cấp cứu",
+   "time_period": "Tháng 6/2026",
+   "unit": "lượt",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0015",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ lấp đầy giường bệnh",
+   "time_period": "Tháng 1/2026",
+   "unit": "%",
+   "raw_value": 80,
+   "current_value": 80,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0016",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ lấp đầy giường bệnh",
+   "time_period": "Tháng 2/2026",
+   "unit": "%",
+   "raw_value": 75,
+   "current_value": 75,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0017",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ lấp đầy giường bệnh",
+   "time_period": "Tháng 3/2026",
+   "unit": "%",
+   "raw_value": 85,
+   "current_value": 85,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0018",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ lấp đầy giường bệnh",
+   "time_period": "Tháng 4/2026",
+   "unit": "%",
+   "raw_value": 90,
+   "current_value": 90,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0019",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ lấp đầy giường bệnh",
+   "time_period": "Tháng 5/2026",
+   "unit": "%",
+   "raw_value": 95,
+   "current_value": 95,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0020",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ lấp đầy giường bệnh",
+   "time_period": "Tháng 6/2026",
+   "unit": "%",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0021",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số giường bệnh",
+   "time_period": "Năm 2024",
+   "unit": "giường",
+   "raw_value": 500,
+   "current_value": 500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0022",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số giường bệnh",
+   "time_period": "Năm 2025",
+   "unit": "giường",
+   "raw_value": 600,
+   "current_value": 600,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0023",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số giường bệnh",
+   "time_period": "Năm 2026",
+   "unit": "giường",
+   "raw_value": 640,
+   "current_value": 640,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0024",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số sinh viên - Khoa Y",
+   "time_period": "Năm học 2024-2025",
+   "unit": "sinh viên",
+   "raw_value": 2000,
+   "current_value": 2000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0025",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số sinh viên - Khoa Y",
+   "time_period": "Năm học 2025-2026",
+   "unit": "sinh viên",
+   "raw_value": 2400,
+   "current_value": 2400,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0026",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số sinh viên - Khoa Dược",
+   "time_period": "Năm học 2024-2025",
+   "unit": "sinh viên",
+   "raw_value": 1500,
+   "current_value": 1500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0027",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số sinh viên - Khoa Dược",
+   "time_period": "Năm học 2025-2026",
+   "unit": "sinh viên",
+   "raw_value": 1500,
+   "current_value": 1500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0028",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số sinh viên - Khoa Điều dưỡng",
+   "time_period": "Năm học 2024-2025",
+   "unit": "sinh viên",
+   "raw_value": 1000,
+   "current_value": 1000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0029",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số sinh viên - Khoa Điều dưỡng",
+   "time_period": "Năm học 2025-2026",
+   "unit": "sinh viên",
+   "raw_value": 1100,
+   "current_value": 1100,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0030",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số sinh viên - Khoa Răng Hàm Mặt",
+   "time_period": "Năm học 2024-2025",
+   "unit": "sinh viên",
+   "raw_value": 500,
+   "current_value": 500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0031",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số sinh viên - Khoa Răng Hàm Mặt",
+   "time_period": "Năm học 2025-2026",
+   "unit": "sinh viên",
+   "raw_value": 400,
+   "current_value": 400,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0032",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số sinh viên - Khoa Y học cổ truyền",
+   "time_period": "Năm học 2024-2025",
+   "unit": "sinh viên",
+   "raw_value": 0,
+   "current_value": 0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0033",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Số sinh viên - Khoa Y học cổ truyền",
+   "time_period": "Năm học 2025-2026",
+   "unit": "sinh viên",
+   "raw_value": 100,
+   "current_value": 100,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0034",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Học phí - Khoa Y",
+   "time_period": "Năm học 2024-2025",
+   "unit": "triệu đồng/năm",
+   "raw_value": 40,
+   "current_value": 40,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0035",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Học phí - Khoa Y",
+   "time_period": "Năm học 2025-2026",
+   "unit": "triệu đồng/năm",
+   "raw_value": 44,
+   "current_value": 44,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0036",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Học phí - Khoa Dược",
+   "time_period": "Năm học 2024-2025",
+   "unit": "triệu đồng/năm",
+   "raw_value": 30,
+   "current_value": 30,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0037",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Học phí - Khoa Dược",
+   "time_period": "Năm học 2025-2026",
+   "unit": "triệu đồng/năm",
+   "raw_value": 33,
+   "current_value": 33,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0038",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Học phí - Khoa Điều dưỡng",
+   "time_period": "Năm học 2024-2025",
+   "unit": "triệu đồng/năm",
+   "raw_value": 20,
+   "current_value": 20,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0039",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Học phí - Khoa Điều dưỡng",
+   "time_period": "Năm học 2025-2026",
+   "unit": "triệu đồng/năm",
+   "raw_value": 24,
+   "current_value": 24,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0040",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Học phí - Khoa Răng Hàm Mặt",
+   "time_period": "Năm học 2024-2025",
+   "unit": "triệu đồng/năm",
+   "raw_value": 50,
+   "current_value": 50,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0041",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Học phí - Khoa Răng Hàm Mặt",
+   "time_period": "Năm học 2025-2026",
+   "unit": "triệu đồng/năm",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0042",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Học phí - Khoa Y học cổ truyền",
+   "time_period": "Năm học 2025-2026",
+   "unit": "triệu đồng/năm",
+   "raw_value": 25,
+   "current_value": 25,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0043",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ lấp đầy - định nghĩa",
+   "time_period": "Năm 2026",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Tỷ lệ lấp đầy là số ngày giường thực tế chia cho số ngày giường kế hoạch.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H3_EVD_0044",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biểu đồ - ghi chú",
+   "time_period": "Năm 2026",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Số lượt khám trên biểu đồ được đọc từ trục tung, có sai số do làm tròn.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  }
+ ]
+}

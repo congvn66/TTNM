@@ -1,0 +1,166 @@
+{
+ "catalog": "CATALOG (series | period | unit | kind):\nDoanh thu thuần | Quý 2/2025 | tỷ đồng | number\nDoanh thu thuần | Quý 2/2026 | tỷ đồng | number\nDoanh thu thuần dự phóng | Năm 2026 | tỷ đồng | number\nDoanh thu thuần lũy kế | 6 tháng 2026 | tỷ đồng | number\nLợi nhuận sau thuế | Quý 2/2026 | tỷ đồng | number\nTăng trưởng lợi nhuận sau thuế so với cùng kỳ | Quý 2/2026 | % | number\nLợi nhuận sau thuế lũy kế | 6 tháng 2026 | tỷ đồng | number\nLợi nhuận sau thuế cổ đông công ty mẹ | Quý 2/2025 | tỷ đồng | number\nLợi nhuận sau thuế cổ đông công ty mẹ | Quý 2/2026 | tỷ đồng | number\nLợi nhuận sau thuế cổ đông công ty mẹ dự phóng | Năm 2026 | tỷ đồng | number\nBiên lợi nhuận gộp | Quý 3/2024 | % | number\nBiên lợi nhuận gộp | Quý 4/2024 | % | number\nBiên lợi nhuận gộp | Quý 1/2025 | % | number\nBiên lợi nhuận gộp | Quý 2/2025 | % | number\nBiên lợi nhuận gộp | Quý 3/2025 | % | number\nBiên lợi nhuận gộp | Quý 4/2025 | % | number\nBiên lợi nhuận gộp | Quý 1/2026 | % | number\nBiên lợi nhuận gộp | Quý 2/2026 | % | number\nBiên lợi nhuận trước thuế | Quý 3/2024 | % | number\nBiên lợi nhuận trước thuế | Quý 4/2024 | % | number\nBiên lợi nhuận trước thuế | Quý 1/2025 | % | number\nBiên lợi nhuận trước thuế | Quý 2/2025 | % | number\nBiên lợi nhuận trước thuế | Quý 3/2025 | % | number\nBiên lợi nhuận trước thuế | Quý 4/2025 | % | number\nBiên lợi nhuận trước thuế | Quý 1/2026 | % | number\nBiên lợi nhuận trước thuế | Quý 2/2026 | % | number\nSố ngày tồn kho | Quý 3/2024 | ngày | number\nSố ngày tồn kho | Quý 4/2024 | ngày | number\nSố ngày tồn kho | Quý 1/2025 | ngày | number\nSố ngày tồn kho | Quý 2/2025 | ngày | number\nSố ngày tồn kho | Quý 3/2025 | ngày | number\nSố ngày tồn kho | Quý 4/2025 | ngày | number\nSố ngày tồn kho | Quý 1/2026 | ngày | number\nSố ngày tồn kho | Quý 2/2026 | ngày | number\nTăng trưởng lợi nhuận trước thuế so với cùng kỳ | Quý 3/2024 | % | number\nTăng trưởng lợi nhuận trước thuế so với cùng kỳ | Quý 4/2024 | % | number\nTăng trưởng lợi nhuận trước thuế so với cùng kỳ | Quý 1/2025 | % | number\nTăng trưởng lợi nhuận trước thuế so với cùng kỳ | Quý 2/2025 | % | number\nTăng trưởng lợi nhuận trước thuế so với cùng kỳ | Quý 3/2025 | % | number\nTăng trưởng lợi nhuận trước thuế so với cùng kỳ | Quý 4/2025 | % | number\nTăng trưởng lợi nhuận trước thuế so với cùng kỳ | Quý 1/2026 | % | number\nTăng trưởng lợi nhuận trước thuế so với cùng kỳ | Quý 2/2026 | % | number\nSản lượng tiêu thụ - Ống thép | Quý 2/2026 | tấn | number\nSản lượng tiêu thụ - Tôn mạ | Quý 2/2026 | tấn | number\nSản lượng tiêu thụ - Thép xây dựng | Quý 2/2026 | triệu tấn | number\nSản lượng - HRC | Quý 2/2026 | triệu tấn | number\nTăng trưởng sản lượng HRC so với cùng kỳ | Quý 2/2026 | % | number\nDoanh thu mảng nông nghiệp | Quý 2/2026 | tỷ đồng | number\nHàng tồn kho | Quý 2/2026 | tỷ đồng | number\nGiá dự phóng theo P/B | - | đồng/cổ phiếu | number\nGiá dự phóng theo DCF | - | đồng/cổ phiếu | number\nGiá mục tiêu | Năm 2026 | đồng/cổ phiếu | number\nGiá hiện tại | - | đồng/cổ phiếu | number\nEPS 4 quý gần nhất | - | đồng/cổ phiếu | number\nĐịnh nghĩa LNST sau CĐTS | - | text | text",
+ "items": [
+  {
+   "key": "8baf98ca64750b9c",
+   "history": [],
+   "question": "Doanh thu thuần quý 2/2025 của HPG là bao nhiêu?"
+  },
+  {
+   "key": "d0481436ca0ff27d",
+   "history": [],
+   "question": "Biên lợi nhuận gộp quý 1/2026 của HPG là bao nhiêu?"
+  },
+  {
+   "key": "03163853d9da98b8",
+   "history": [],
+   "question": "Số ngày tồn kho của HPG trong quý 4/2025 là bao nhiêu?"
+  },
+  {
+   "key": "8fe07427760a2ad1",
+   "history": [],
+   "question": "Tăng trưởng lợi nhuận trước thuế quý 1/2026 so với cùng kỳ là bao nhiêu?"
+  },
+  {
+   "key": "05d7aba670871116",
+   "history": [],
+   "question": "Sản lượng tiêu thụ ống thép của HPG trong quý 2/2026 là bao nhiêu?"
+  },
+  {
+   "key": "a20eea799efe034c",
+   "history": [],
+   "question": "Giá dự phóng theo phương pháp P/B là bao nhiêu?"
+  },
+  {
+   "key": "5bad100308ce1c1e",
+   "history": [],
+   "question": "Theo giá hiện tại và EPS 4 quý gần nhất trong báo cáo, P/E của HPG là bao nhiêu?"
+  },
+  {
+   "key": "1e69ab425eca43ce",
+   "history": [],
+   "question": "Giá mục tiêu cao hơn giá hiện tại bao nhiêu phần trăm?"
+  },
+  {
+   "key": "1389647bf514022f",
+   "history": [],
+   "question": "Doanh thu thuần quý 2/2026 của HPG là bao nhiêu?"
+  },
+  {
+   "key": "14ba306d230e1e9d",
+   "history": [],
+   "question": "Lợi nhuận sau thuế lũy kế 6 tháng 2026 của HPG là bao nhiêu?"
+  },
+  {
+   "key": "50353990ef3fca8f",
+   "history": [],
+   "question": "Doanh thu xuất khẩu thép của HPG trong quý 2/2026 là bao nhiêu?"
+  },
+  {
+   "key": "61c053b2e25ea243",
+   "history": [],
+   "question": "Lợi nhuận sau thuế quý 3/2026 của HPG là bao nhiêu?"
+  },
+  {
+   "key": "e4273444ee609d4c",
+   "history": [],
+   "question": "Biên lợi nhuận gộp quý 2/2026 thay đổi bao nhiêu điểm phần trăm so với quý 2/2025?"
+  },
+  {
+   "key": "8e87a0fb67ea3b8f",
+   "history": [],
+   "question": "Trong biểu đồ hàng tồn kho, quý nào có số ngày tồn kho cao nhất?"
+  },
+  {
+   "key": "3e4e091e7ec14ef6",
+   "history": [],
+   "question": "Doanh thu thuần quý 1/2026 của HPG là bao nhiêu?"
+  },
+  {
+   "key": "ec5190834d949a94",
+   "history": [],
+   "question": "Theo dự phóng doanh thu 2026 của DSC, nửa cuối năm 2026 HPG cần đạt bao nhiêu doanh thu?"
+  },
+  {
+   "key": "07770ea8b1c36dc4",
+   "history": [],
+   "question": "Doanh thu mảng nông nghiệp quý 2/2025 là bao nhiêu?"
+  },
+  {
+   "key": "a1e58db0f22b68dd",
+   "history": [],
+   "question": "“LNST sau CĐTS” trong bảng trang 1 nghĩa là gì, và quý 2/2026 bằng bao nhiêu?"
+  },
+  {
+   "key": "65b4e2db04265108",
+   "history": [],
+   "question": "Lợi nhuận quý 2/2026 của HPG tăng bao nhiêu so với cùng kỳ?"
+  },
+  {
+   "key": "5adb616868426301",
+   "history": [],
+   "question": "Báo cáo này được cập nhật vào ngày nào?"
+  },
+  {
+   "key": "af945272a5f6094c",
+   "history": [],
+   "question": "Biên lợi nhuận gộp quý 2/2026 của HPG là bao nhiêu?"
+  },
+  {
+   "key": "981bd626e24617c4",
+   "history": [
+    "Biên lợi nhuận gộp quý 2/2026 của HPG là bao nhiêu?"
+   ],
+   "question": "Còn biên lợi nhuận trước thuế?"
+  },
+  {
+   "key": "6beb5e5aaeb11702",
+   "history": [
+    "Biên lợi nhuận gộp quý 2/2026 của HPG là bao nhiêu?",
+    "Còn biên lợi nhuận trước thuế?"
+   ],
+   "question": "So với quý trước thì giảm bao nhiêu điểm phần trăm?"
+  },
+  {
+   "key": "060c2c474b6c7acf",
+   "history": [],
+   "question": "Số ngày tồn kho của HPG trong quý 2/2026 là bao nhiêu?"
+  },
+  {
+   "key": "e36c7fa4573990dd",
+   "history": [
+    "Số ngày tồn kho của HPG trong quý 2/2026 là bao nhiêu?"
+   ],
+   "question": "Tăng hay giảm bao nhiêu so với cùng kỳ năm trước?"
+  },
+  {
+   "key": "a724b0020b77e046",
+   "history": [],
+   "question": "Mảng thép đóng góp trên 90% doanh thu. Vậy doanh thu ngoài mảng thép trong quý 2/2026 tối đa khoảng bao nhiêu?"
+  },
+  {
+   "key": "6af530b9b3df5cfa",
+   "history": [],
+   "question": "Giá trị hàng tồn kho cuối quý 1/2026 là bao nhiêu?"
+  },
+  {
+   "key": "993908bcf57f1a13",
+   "history": [],
+   "question": "Kế hoạch doanh thu cả năm 2026 của HPG khoảng bao nhiêu?"
+  },
+  {
+   "key": "d4769daae4ceb49f",
+   "history": [],
+   "question": "Sản lượng HRC quý 2/2025 là bao nhiêu?"
+  },
+  {
+   "key": "64a5a39bc738c99e",
+   "history": [
+    "Biên lợi nhuận gộp quý 2/2026 của HPG là bao nhiêu?",
+    "Còn biên lợi nhuận trước thuế?",
+    "So với quý trước thì giảm bao nhiêu điểm phần trăm?"
+   ],
+   "question": "Vì sao vậy?"
+  }
+ ]
+}

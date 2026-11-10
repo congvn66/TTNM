@@ -1,0 +1,35 @@
+{
+ "catalog": "CATALOG (series | period | unit | kind):\nLợi nhuận - A | Quý 1/2026 | triệu đồng | number\nLợi nhuận - A | Quý 2/2026 | triệu đồng | number\nDoanh thu - A | Quý 1/2026 | triệu đồng | number\nDoanh thu - A | Quý 2/2026 | triệu đồng | number\nDoanh thu - B | Quý 1/2026 | tỷ đồng | number\nDoanh thu - B | Quý 2/2026 | triệu đồng | number\nDoanh thu - C | Quý 1/2026 | triệu đồng | number\nDoanh thu - C | Quý 2/2026 | triệu đồng | number\nDoanh thu - D | Quý 1/2026 | triệu đồng | number\nDoanh thu - D | Quý 2/2026 | triệu đồng | number\nSản lượng - A | Quý 2/2026 | nghìn tấn | number\nKhông rõ đơn vị - A | Quý 1/2026 | - | number\nKhông rõ đơn vị - A | Quý 2/2026 | - | number",
+ "items": [
+  {
+   "key": "c06e66926714a6ff",
+   "history": [],
+   "question": "Lợi nhuận A quý 2 tăng bao nhiêu phần trăm so với quý 1?"
+  },
+  {
+   "key": "315aec982e2be818",
+   "history": [],
+   "question": "Doanh thu A quý 2 tăng bao nhiêu phần trăm so với quý 1?"
+  },
+  {
+   "key": "c5b58942e9e6874e",
+   "history": [],
+   "question": "Doanh thu B quý 2 cao hơn quý 1 bao nhiêu?"
+  },
+  {
+   "key": "20cec4b94ddfa12f",
+   "history": [],
+   "question": "Doanh thu C quý 2 tăng bao nhiêu phần trăm so với quý 1?"
+  },
+  {
+   "key": "20ce8081dae98c94",
+   "history": [],
+   "question": "Doanh thu D quý 2 tăng bao nhiêu phần trăm so với quý 1?"
+  },
+  {
+   "key": "b0dafcf1ee5ca4f1",
+   "history": [],
+   "question": "Không rõ đơn vị A quý 2 cao hơn quý 1 bao nhiêu?"
+  }
+ ]
+}

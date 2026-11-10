@@ -1,0 +1,1042 @@
+{
+ "document_code": "J1",
+ "file_name": "bao_cao_kinh_doanh_vien_thong_minh_long_q3_2026.pdf",
+ "page_count": 12,
+ "evidences": [
+  {
+   "evidence_code": "J1_EVD_001",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thuê bao di động",
+   "time_period": "Quý 1/2025",
+   "unit": "nghìn thuê bao",
+   "raw_value": 8000,
+   "current_value": 8000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_002",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thuê bao di động",
+   "time_period": "Quý 2/2025",
+   "unit": "nghìn thuê bao",
+   "raw_value": 8200,
+   "current_value": 8200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_003",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thuê bao di động",
+   "time_period": "Quý 3/2025",
+   "unit": "nghìn thuê bao",
+   "raw_value": 8400,
+   "current_value": 8400,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_004",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thuê bao di động",
+   "time_period": "Quý 4/2025",
+   "unit": "nghìn thuê bao",
+   "raw_value": 8500,
+   "current_value": 8500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_005",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thuê bao di động",
+   "time_period": "Quý 2/2026",
+   "unit": "nghìn thuê bao",
+   "raw_value": 9000,
+   "current_value": 9000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_006",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     170.0,
+     420.0,
+     182.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thuê bao di động",
+   "time_period": "Quý 3/2026",
+   "unit": "nghìn thuê bao",
+   "raw_value": 9100,
+   "current_value": 9100,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_007",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     184.0,
+     420.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thuê bao băng rộng cố định",
+   "time_period": "Quý 3/2025",
+   "unit": "triệu thuê bao",
+   "raw_value": 1.0,
+   "current_value": 1.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_008",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     198.0,
+     420.0,
+     210.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thuê bao băng rộng cố định",
+   "time_period": "Quý 3/2026",
+   "unit": "triệu thuê bao",
+   "raw_value": 1.5,
+   "current_value": 1.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_009",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "ARPU di động",
+   "time_period": "Quý 4/2025",
+   "unit": "nghìn đồng/tháng",
+   "raw_value": 88,
+   "current_value": 88,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_010",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "ARPU di động",
+   "time_period": "Quý 1/2026",
+   "unit": "nghìn đồng/tháng",
+   "raw_value": 90,
+   "current_value": 90,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_011",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "ARPU di động",
+   "time_period": "Quý 2/2026",
+   "unit": "nghìn đồng/tháng",
+   "raw_value": 92,
+   "current_value": 92,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_012",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "ARPU di động",
+   "time_period": "Quý 3/2026",
+   "unit": "nghìn đồng/tháng",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_013",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Di động",
+   "time_period": "Quý 1/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 1000,
+   "current_value": 1000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_014",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Di động",
+   "time_period": "Quý 2/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 1100,
+   "current_value": 1100,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_015",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Di động",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 1200,
+   "current_value": 1200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_016",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Di động",
+   "time_period": "Quý 4/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 1300,
+   "current_value": 1300,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_017",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Di động",
+   "time_period": "Quý 1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 1250,
+   "current_value": 1250,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_018",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     170.0,
+     420.0,
+     182.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Di động",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 1320,
+   "current_value": 1320,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_019",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     184.0,
+     420.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Di động",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 1500,
+   "current_value": 1500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_020",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     198.0,
+     420.0,
+     210.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Băng rộng",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 360,
+   "current_value": 360,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_021",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     212.0,
+     420.0,
+     224.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Băng rộng",
+   "time_period": "Quý 4/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 4800000,
+   "current_value": 4800000,
+   "text_content": null,
+   "data_status": "error",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_022",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     226.0,
+     420.0,
+     238.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Băng rộng",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 450,
+   "current_value": 450,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_023",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Dịch vụ số",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 200,
+   "current_value": 200,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_024",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Dịch vụ số",
+   "time_period": "Quý 1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 240,
+   "current_value": 240,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_025",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Dịch vụ số",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 260,
+   "current_value": 260,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_026",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Dịch vụ số",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 300,
+   "current_value": 300,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_027",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Dịch vụ AI",
+   "time_period": "Quý 1/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 0,
+   "current_value": 0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_028",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     170.0,
+     420.0,
+     182.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Dịch vụ AI",
+   "time_period": "Quý 1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 10,
+   "current_value": 10,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_029",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     184.0,
+     420.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu - Dịch vụ AI",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 50,
+   "current_value": 50,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_030",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tổng doanh thu",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 6000,
+   "current_value": 6000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_031",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tổng doanh thu",
+   "time_period": "Quý 1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 1900,
+   "current_value": 1900,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_032",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tổng doanh thu",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 2020,
+   "current_value": 2020,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_033",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 6,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tổng doanh thu",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 2300,
+   "current_value": 2300,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_034",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 7,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thuê bao phát triển mới",
+   "time_period": "Tháng 1/2026",
+   "unit": "nghìn thuê bao",
+   "raw_value": 120,
+   "current_value": 120,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_035",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 7,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thuê bao phát triển mới",
+   "time_period": "Tháng 2/2026",
+   "unit": "nghìn thuê bao",
+   "raw_value": 90,
+   "current_value": 90,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_036",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 7,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thuê bao phát triển mới",
+   "time_period": "Tháng 3/2026",
+   "unit": "nghìn thuê bao",
+   "raw_value": 150,
+   "current_value": 150,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_037",
+   "source_type": "chart_line",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ rời mạng",
+   "time_period": "Tháng 3/2025",
+   "unit": "%",
+   "raw_value": 2.0,
+   "current_value": 2.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_038",
+   "source_type": "chart_line",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ rời mạng",
+   "time_period": "Tháng 3/2026",
+   "unit": "%",
+   "raw_value": 1.5,
+   "current_value": 1.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_039",
+   "source_type": "chart_line",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 8,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ rời mạng",
+   "time_period": "Tháng 6/2026",
+   "unit": "%",
+   "raw_value": 1.2,
+   "current_value": 1.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_040",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 9,
+    "bbox": [
+     50.0,
+     100.0,
+     420.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên EBITDA",
+   "time_period": "Quý 2/2026",
+   "unit": "%",
+   "raw_value": 40,
+   "current_value": 40,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_041",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 9,
+    "bbox": [
+     50.0,
+     114.0,
+     420.0,
+     126.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận trước thuế",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 300,
+   "current_value": 300,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_042",
+   "source_type": "chart_bar",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 9,
+    "bbox": [
+     50.0,
+     128.0,
+     420.0,
+     140.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận trước thuế",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 360,
+   "current_value": 360,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_043",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     212.0,
+     420.0,
+     224.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Ghi chú về thuê bao",
+   "time_period": "",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Số thuê bao được tính tại thời điểm cuối mỗi kỳ báo cáo.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_044",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     156.0,
+     420.0,
+     168.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Định nghĩa ARPU",
+   "time_period": "",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "ARPU là doanh thu bình quân trên một thuê bao trong một tháng.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "J1_EVD_045",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 9,
+    "bbox": [
+     50.0,
+     142.0,
+     420.0,
+     154.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Định nghĩa Biên EBITDA",
+   "time_period": "",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Biên EBITDA bằng EBITDA chia cho Tổng doanh thu của cùng kỳ.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  }
+ ]
+}

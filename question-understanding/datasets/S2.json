@@ -1,0 +1,2177 @@
+{
+ "document_code": "S2_LOGISTICS",
+ "file_name": "S2-logistics-bac-nam-scan.pdf",
+ "page_count": 4,
+ "evidences": [
+  {
+   "evidence_code": "EVD_0001",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường bộ",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": 152340,
+   "current_value": 152340,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0002",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường bộ",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 160215,
+   "current_value": 160215,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0003",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường bộ",
+   "time_period": "Quý 3/2026",
+   "unit": "triệu đồng",
+   "raw_value": 171560,
+   "current_value": 171560,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0004",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường bộ",
+   "time_period": "9 tháng 2026",
+   "unit": "triệu đồng",
+   "raw_value": 484115,
+   "current_value": 484115,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0005",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường bộ",
+   "time_period": "9 tháng 2025",
+   "unit": "triệu đồng",
+   "raw_value": 431900,
+   "current_value": 431900,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0006",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường biển",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": 101870,
+   "current_value": 101870,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0007",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường biển",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 108430,
+   "current_value": 108430,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0008",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường biển",
+   "time_period": "Quý 3/2026",
+   "unit": "triệu đồng",
+   "raw_value": 119725,
+   "current_value": 119725,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0009",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường biển",
+   "time_period": "9 tháng 2026",
+   "unit": "triệu đồng",
+   "raw_value": 330025,
+   "current_value": 330025,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0010",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     220.0,
+     300.0,
+     232.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường biển",
+   "time_period": "9 tháng 2025",
+   "unit": "triệu đồng",
+   "raw_value": 301480,
+   "current_value": 301480,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0011",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     232.0,
+     300.0,
+     244.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường sắt",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": 4905,
+   "current_value": 4905,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_RAIL_Q2_PRELIM",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     244.0,
+     300.0,
+     256.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường sắt",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 4813,
+   "current_value": 4813,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0013",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     256.0,
+     300.0,
+     268.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường sắt",
+   "time_period": "Quý 3/2026",
+   "unit": "triệu đồng",
+   "raw_value": 5632,
+   "current_value": 5632,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_RAIL_9M_PRELIM",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     268.0,
+     300.0,
+     280.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường sắt",
+   "time_period": "9 tháng 2026",
+   "unit": "triệu đồng",
+   "raw_value": 15350,
+   "current_value": 15350,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0015",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     280.0,
+     300.0,
+     292.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Đường sắt",
+   "time_period": "9 tháng 2025",
+   "unit": "triệu đồng",
+   "raw_value": 13240,
+   "current_value": 13240,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0016",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     292.0,
+     300.0,
+     304.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Tổng",
+   "time_period": "Quý 1/2026",
+   "unit": "triệu đồng",
+   "raw_value": 259115,
+   "current_value": 259115,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_TOTAL_Q2_PRELIM",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     304.0,
+     300.0,
+     316.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Tổng",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 273458,
+   "current_value": 273458,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0018",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     316.0,
+     300.0,
+     328.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Tổng",
+   "time_period": "Quý 3/2026",
+   "unit": "triệu đồng",
+   "raw_value": 296917,
+   "current_value": 296917,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_TOTAL_9M_PRELIM",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     328.0,
+     300.0,
+     340.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Tổng",
+   "time_period": "9 tháng 2026",
+   "unit": "triệu đồng",
+   "raw_value": 829490,
+   "current_value": 829490,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0020",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     340.0,
+     300.0,
+     352.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần - Tổng",
+   "time_period": "9 tháng 2025",
+   "unit": "triệu đồng",
+   "raw_value": 746620,
+   "current_value": 746620,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_RAIL_Q2",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     352.0,
+     300.0,
+     364.0
+    ],
+    "meta": {
+     "revises": "EVD_RAIL_Q2_PRELIM"
+    }
+   },
+   "series_name": "Doanh thu thuần - Đường sắt",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 4318,
+   "current_value": 4318,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_RAIL_9M",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     364.0,
+     300.0,
+     376.0
+    ],
+    "meta": {
+     "revises": "EVD_RAIL_9M_PRELIM"
+    }
+   },
+   "series_name": "Doanh thu thuần - Đường sắt",
+   "time_period": "9 tháng 2026",
+   "unit": "triệu đồng",
+   "raw_value": 14855,
+   "current_value": 14855,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_TOTAL_Q2",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     376.0,
+     300.0,
+     388.0
+    ],
+    "meta": {
+     "revises": "EVD_TOTAL_Q2_PRELIM"
+    }
+   },
+   "series_name": "Doanh thu thuần - Tổng",
+   "time_period": "Quý 2/2026",
+   "unit": "triệu đồng",
+   "raw_value": 272963,
+   "current_value": 272963,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_TOTAL_9M",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     388.0,
+     300.0,
+     400.0
+    ],
+    "meta": {
+     "revises": "EVD_TOTAL_9M_PRELIM"
+    }
+   },
+   "series_name": "Doanh thu thuần - Tổng",
+   "time_period": "9 tháng 2026",
+   "unit": "triệu đồng",
+   "raw_value": 828995,
+   "current_value": 828995,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0025",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     400.0,
+     300.0,
+     412.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Định nghĩa Doanh thu thuần",
+   "time_period": "",
+   "unit": "text",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Doanh thu thuần chưa gồm thuế GTGT.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0026",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     412.0,
+     300.0,
+     424.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Định nghĩa Tỷ lệ giao hàng đúng hạn",
+   "time_period": "",
+   "unit": "text",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Tỷ lệ giao hàng đúng hạn là số lô hàng giao không muộn hơn thời điểm cam kết trong hợp đồng, chia cho tổng số lô hàng đã giao trong tháng.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0027",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     424.0,
+     300.0,
+     436.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Thuế suất GTGT",
+   "time_period": "",
+   "unit": "%",
+   "raw_value": 10,
+   "current_value": 10,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0028",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     436.0,
+     300.0,
+     448.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kế hoạch doanh thu thuần",
+   "time_period": "Năm 2026",
+   "unit": "nghìn tỷ đồng",
+   "raw_value": 1.25,
+   "current_value": 1.25,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0029",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     448.0,
+     300.0,
+     460.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần theo quý",
+   "time_period": "Quý 1/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 236.1,
+   "current_value": 236.1,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0030",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     460.0,
+     300.0,
+     472.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên lợi nhuận gộp",
+   "time_period": "Quý 1/2025",
+   "unit": "%",
+   "raw_value": 17.2,
+   "current_value": 17.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0031",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     472.0,
+     300.0,
+     484.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần theo quý",
+   "time_period": "Quý 2/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 248.0,
+   "current_value": 248.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0032",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     484.0,
+     300.0,
+     496.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên lợi nhuận gộp",
+   "time_period": "Quý 2/2025",
+   "unit": "%",
+   "raw_value": 16.4,
+   "current_value": 16.4,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0033",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     496.0,
+     300.0,
+     508.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần theo quý",
+   "time_period": "Quý 3/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 262.5,
+   "current_value": 262.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0034",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     508.0,
+     300.0,
+     520.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên lợi nhuận gộp",
+   "time_period": "Quý 3/2025",
+   "unit": "%",
+   "raw_value": 18.1,
+   "current_value": 18.1,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0035",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     520.0,
+     300.0,
+     532.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần theo quý",
+   "time_period": "Quý 4/2025",
+   "unit": "tỷ đồng",
+   "raw_value": 281.4,
+   "current_value": 281.4,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0036",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     532.0,
+     300.0,
+     544.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên lợi nhuận gộp",
+   "time_period": "Quý 4/2025",
+   "unit": "%",
+   "raw_value": 19.6,
+   "current_value": 19.6,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0037",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     544.0,
+     300.0,
+     556.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần theo quý",
+   "time_period": "Quý 1/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 259.1,
+   "current_value": 259.1,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0038",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     556.0,
+     300.0,
+     568.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên lợi nhuận gộp",
+   "time_period": "Quý 1/2026",
+   "unit": "%",
+   "raw_value": 15.3,
+   "current_value": 15.3,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0039",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     568.0,
+     300.0,
+     580.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần theo quý",
+   "time_period": "Quý 2/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 273.0,
+   "current_value": 273.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0040",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên lợi nhuận gộp",
+   "time_period": "Quý 2/2026",
+   "unit": "%",
+   "raw_value": 16.9,
+   "current_value": 16.9,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0041",
+   "source_type": "chart_bar",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần theo quý",
+   "time_period": "Quý 3/2026",
+   "unit": "tỷ đồng",
+   "raw_value": 296.9,
+   "current_value": 296.9,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0042",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Biên lợi nhuận gộp",
+   "time_period": "Quý 3/2026",
+   "unit": "%",
+   "raw_value": 18.8,
+   "current_value": 18.8,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0043",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường sắt",
+   "time_period": "Tháng 1/2026",
+   "unit": "%",
+   "raw_value": 95.1,
+   "current_value": 95.1,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0044",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường sắt",
+   "time_period": "Tháng 2/2026",
+   "unit": "%",
+   "raw_value": 94.0,
+   "current_value": 94.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0045",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường sắt",
+   "time_period": "Tháng 3/2026",
+   "unit": "%",
+   "raw_value": 90.2,
+   "current_value": 90.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0046",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường sắt",
+   "time_period": "Tháng 4/2026",
+   "unit": "%",
+   "raw_value": 88.5,
+   "current_value": 88.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0047",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường sắt",
+   "time_period": "Tháng 5/2026",
+   "unit": "%",
+   "raw_value": 90.0,
+   "current_value": 90.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0048",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường sắt",
+   "time_period": "Tháng 6/2026",
+   "unit": "%",
+   "raw_value": 89.2,
+   "current_value": 89.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0049",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường sắt",
+   "time_period": "Tháng 7/2026",
+   "unit": "%",
+   "raw_value": 87.6,
+   "current_value": 87.6,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0050",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     220.0,
+     300.0,
+     232.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường sắt",
+   "time_period": "Tháng 8/2026",
+   "unit": "%",
+   "raw_value": 90.4,
+   "current_value": 90.4,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0051",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     232.0,
+     300.0,
+     244.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường sắt",
+   "time_period": "Tháng 9/2026",
+   "unit": "%",
+   "raw_value": 91.0,
+   "current_value": 91.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0052",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     244.0,
+     300.0,
+     256.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường bộ",
+   "time_period": "Tháng 1/2026",
+   "unit": "%",
+   "raw_value": 91.2,
+   "current_value": 91.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0053",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     256.0,
+     300.0,
+     268.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường bộ",
+   "time_period": "Tháng 2/2026",
+   "unit": "%",
+   "raw_value": 89.5,
+   "current_value": 89.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0054",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     268.0,
+     300.0,
+     280.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường bộ",
+   "time_period": "Tháng 3/2026",
+   "unit": "%",
+   "raw_value": 92.0,
+   "current_value": 92.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0055",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     280.0,
+     300.0,
+     292.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường bộ",
+   "time_period": "Tháng 4/2026",
+   "unit": "%",
+   "raw_value": 93.1,
+   "current_value": 93.1,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0056",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     292.0,
+     300.0,
+     304.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường bộ",
+   "time_period": "Tháng 5/2026",
+   "unit": "%",
+   "raw_value": 94.0,
+   "current_value": 94.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0057",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     304.0,
+     300.0,
+     316.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường bộ",
+   "time_period": "Tháng 6/2026",
+   "unit": "%",
+   "raw_value": 92.6,
+   "current_value": 92.6,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0058",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     316.0,
+     300.0,
+     328.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường bộ",
+   "time_period": "Tháng 7/2026",
+   "unit": "%",
+   "raw_value": 90.8,
+   "current_value": 90.8,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0059",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     328.0,
+     300.0,
+     340.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường bộ",
+   "time_period": "Tháng 8/2026",
+   "unit": "%",
+   "raw_value": 91.5,
+   "current_value": 91.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0060",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     340.0,
+     300.0,
+     352.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường bộ",
+   "time_period": "Tháng 9/2026",
+   "unit": "%",
+   "raw_value": 93.4,
+   "current_value": 93.4,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0061",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     352.0,
+     300.0,
+     364.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường biển",
+   "time_period": "Tháng 1/2026",
+   "unit": "%",
+   "raw_value": 84.0,
+   "current_value": 84.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0062",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     364.0,
+     300.0,
+     376.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường biển",
+   "time_period": "Tháng 2/2026",
+   "unit": "%",
+   "raw_value": 86.5,
+   "current_value": 86.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0063",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     376.0,
+     300.0,
+     388.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường biển",
+   "time_period": "Tháng 3/2026",
+   "unit": "%",
+   "raw_value": 88.2,
+   "current_value": 88.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0064",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     388.0,
+     300.0,
+     400.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường biển",
+   "time_period": "Tháng 4/2026",
+   "unit": "%",
+   "raw_value": 87.0,
+   "current_value": 87.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0065",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     400.0,
+     300.0,
+     412.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường biển",
+   "time_period": "Tháng 5/2026",
+   "unit": "%",
+   "raw_value": 89.6,
+   "current_value": 89.6,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0066",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     412.0,
+     300.0,
+     424.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường biển",
+   "time_period": "Tháng 6/2026",
+   "unit": "%",
+   "raw_value": 91.8,
+   "current_value": 91.8,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0067",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     424.0,
+     300.0,
+     436.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường biển",
+   "time_period": "Tháng 7/2026",
+   "unit": "%",
+   "raw_value": 93.0,
+   "current_value": 93.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0068",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     436.0,
+     300.0,
+     448.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường biển",
+   "time_period": "Tháng 8/2026",
+   "unit": "%",
+   "raw_value": 92.1,
+   "current_value": 92.1,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0069",
+   "source_type": "chart_line",
+   "extraction_method": "axis_estimation",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     448.0,
+     300.0,
+     460.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ lệ giao hàng đúng hạn - Đường biển",
+   "time_period": "Tháng 9/2026",
+   "unit": "%",
+   "raw_value": 94.2,
+   "current_value": 94.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0070",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     460.0,
+     300.0,
+     472.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Hà Nội – TP. Hồ Chí Minh",
+   "time_period": "9 tháng 2026",
+   "unit": "nghìn tấn",
+   "raw_value": 312.4,
+   "current_value": 312.4,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0071",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     472.0,
+     300.0,
+     484.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Hà Nội – TP. Hồ Chí Minh",
+   "time_period": "9 tháng 2025",
+   "unit": "nghìn tấn",
+   "raw_value": 290.1,
+   "current_value": 290.1,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0072",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     484.0,
+     300.0,
+     496.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Hải Phòng – Hà Nội",
+   "time_period": "9 tháng 2026",
+   "unit": "nghìn tấn",
+   "raw_value": 185.6,
+   "current_value": 185.6,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0073",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     496.0,
+     300.0,
+     508.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Hải Phòng – Hà Nội",
+   "time_period": "9 tháng 2025",
+   "unit": "nghìn tấn",
+   "raw_value": 170.2,
+   "current_value": 170.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0074",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     508.0,
+     300.0,
+     520.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - TP. Hồ Chí Minh – Cần Thơ",
+   "time_period": "9 tháng 2026",
+   "unit": "nghìn tấn",
+   "raw_value": 142.8,
+   "current_value": 142.8,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0075",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     520.0,
+     300.0,
+     532.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - TP. Hồ Chí Minh – Cần Thơ",
+   "time_period": "9 tháng 2025",
+   "unit": "nghìn tấn",
+   "raw_value": 150.5,
+   "current_value": 150.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0076",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     532.0,
+     300.0,
+     544.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Đà Nẵng – TP. Hồ Chí Minh",
+   "time_period": "9 tháng 2026",
+   "unit": "nghìn tấn",
+   "raw_value": 98.3,
+   "current_value": 98.3,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0077",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     544.0,
+     300.0,
+     556.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Đà Nẵng – TP. Hồ Chí Minh",
+   "time_period": "9 tháng 2025",
+   "unit": "nghìn tấn",
+   "raw_value": 88.0,
+   "current_value": 88.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0078",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     556.0,
+     300.0,
+     568.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Hải Phòng – Quảng Ninh",
+   "time_period": "9 tháng 2026",
+   "unit": "nghìn tấn",
+   "raw_value": 76.5,
+   "current_value": 76.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0079",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     568.0,
+     300.0,
+     580.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Hải Phòng – Quảng Ninh",
+   "time_period": "9 tháng 2025",
+   "unit": "nghìn tấn",
+   "raw_value": 71.9,
+   "current_value": 71.9,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0080",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Hà Nội – Lào Cai",
+   "time_period": "9 tháng 2026",
+   "unit": "nghìn tấn",
+   "raw_value": 54.2,
+   "current_value": 54.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0081",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Hà Nội – Lào Cai",
+   "time_period": "9 tháng 2025",
+   "unit": "nghìn tấn",
+   "raw_value": 49.8,
+   "current_value": 49.8,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0082",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Cái Mép – TP. Hồ Chí Minh",
+   "time_period": "9 tháng 2026",
+   "unit": "nghìn tấn",
+   "raw_value": 412.6,
+   "current_value": 412.6,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0083",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Cái Mép – TP. Hồ Chí Minh",
+   "time_period": "9 tháng 2025",
+   "unit": "nghìn tấn",
+   "raw_value": 365.0,
+   "current_value": 365.0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0084",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - TP. Hồ Chí Minh – Phnom Penh",
+   "time_period": "9 tháng 2026",
+   "unit": "nghìn tấn",
+   "raw_value": 2.2,
+   "current_value": 2.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0085",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - TP. Hồ Chí Minh – Phnom Penh",
+   "time_period": "9 tháng 2025",
+   "unit": "nghìn tấn",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0086",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Tổng",
+   "time_period": "9 tháng 2026",
+   "unit": "nghìn tấn",
+   "raw_value": 1284.6,
+   "current_value": 1284.6,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0087",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - Tổng",
+   "time_period": "9 tháng 2025",
+   "unit": "nghìn tấn",
+   "raw_value": 1185.5,
+   "current_value": 1185.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0088",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu đã gồm GTGT - Khách hàng A",
+   "time_period": "9 tháng 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 109.4,
+   "current_value": 109.4,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0089",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu đã gồm GTGT - Khách hàng B",
+   "time_period": "9 tháng 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 72.6,
+   "current_value": 72.6,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0090",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     220.0,
+     300.0,
+     232.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu đã gồm GTGT - Khách hàng C",
+   "time_period": "9 tháng 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 51.2,
+   "current_value": 51.2,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0091",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     232.0,
+     300.0,
+     244.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu đã gồm GTGT - Khách hàng D",
+   "time_period": "9 tháng 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 38.5,
+   "current_value": 38.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0092",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     244.0,
+     300.0,
+     256.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu đã gồm GTGT - Khách hàng E",
+   "time_period": "9 tháng 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 30.1,
+   "current_value": 30.1,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0093",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     256.0,
+     300.0,
+     268.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu đã gồm GTGT - Cộng 5 khách hàng",
+   "time_period": "9 tháng 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 301.8,
+   "current_value": 301.8,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "EVD_0094",
+   "source_type": "text_paragraph",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     268.0,
+     300.0,
+     280.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tỷ trọng doanh thu thuần - Khách hàng A",
+   "time_period": "9 tháng 2026",
+   "unit": "%",
+   "raw_value": 12,
+   "current_value": 12,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  }
+ ]
+}

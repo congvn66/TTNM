@@ -1,0 +1,20 @@
+{"key":"9a0c075f8df7e708","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Doanh thu thuần","period":"9 tháng 2025"}]}}
+{"key":"63cb1869064cbfe8","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Giá mục tiêu","period":"-"}]}}
+{"key":"769e48de438d7d59","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Số cửa hàng - BHX","period":"Quý 3/2025"}]}}
+{"key":"3ab2671a57e6dff4","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Biên lợi nhuận gộp","period":"Quý 3/2025"}]}}
+{"key":"b2cb6a843cc1ecc7","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Doanh thu 1 cửa hàng 1 tháng - ĐMX","period":"Quý 3/2025"}]}}
+{"key":"f000c86e76cba622","reply":{"intent":"answer","operation":"pct_growth","operands":[{"role":"target","series":"Doanh thu thuần","period":"Quý 3/2025"},{"role":"base","series":"Doanh thu thuần","period":"Quý 3/2024"}]}}
+{"key":"7cf4d1d9fba4b36c","reply":{"intent":"answer","operation":"diff","operands":[{"role":"target","series":"Dự phóng LNST công ty mẹ - KBSV","period":"Năm 2026"},{"role":"base","series":"Dự phóng LNST công ty mẹ - Đồng thuận","period":"Năm 2026"}]}}
+{"key":"f1af0dcff00d40d3","reply":{"intent":"answer","operation":"pct_growth","operands":[{"role":"target","series":"Giá mục tiêu","period":"-"},{"role":"base","series":"Giá hiện tại","period":"-"}]}}
+{"key":"f95f87594974bef8","reply":{"intent":"answer","operation":"diff","operands":[{"role":"target","series":"Giá mục tiêu kịch bản tích cực","period":"-"},{"role":"base","series":"Giá mục tiêu kịch bản tiêu cực","period":"-"}]}}
+{"key":"f487c916565d59b0","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Số cửa hàng BHX mở mới theo mục tiêu","period":"Năm 2026"}]}}
+{"key":"b17102e2d828e8be","reply":{"intent":"unanswerable","reason":"CATALOG không có doanh thu của chuỗi An Khang."}}
+{"key":"fa318b6876cefe58","reply":{"intent":"unanswerable","reason":"CATALOG không có doanh thu quý 4/2025."}}
+{"key":"4c2f42ce373cd5a2","reply":{"intent":"answer","operation":"rank_group","group_series":["Số cửa hàng - TGDĐ","Số cửa hàng - ĐMX","Số cửa hàng - BHX","Số cửa hàng - An Khang","Số cửa hàng - Erablue"],"order":"DESC","metric_type":"absolute","base_period":"Năm 2024","target_period":"Quý 3/2025"}}
+{"key":"58dc82728fd7e8b1","reply":{"intent":"answer","operation":"sum","operands":[{"role":"item","series":"Số cửa hàng - TGDĐ","period":"Quý 3/2025"},{"role":"item","series":"Số cửa hàng - ĐMX","period":"Quý 3/2025"}]}}
+{"key":"294b397ea7d705c8","reply":{"intent":"answer","operation":"pct_growth","operands":[{"role":"target","series":"Lợi nhuận sau thuế","period":"9 tháng 2025"},{"role":"base","series":"Lợi nhuận sau thuế","period":"9 tháng 2024"}]}}
+{"key":"8bfdda6d0577d314","reply":{"intent":"answer","operation":"rank_group","group_series":["Tăng trưởng doanh thu ICT&CE - TGDĐ+ĐMX","Tăng trưởng doanh thu ICT&CE - FPT Shop","Tăng trưởng doanh thu ICT&CE - DGW ICT&CE"],"order":"DESC","metric_type":"value","period":"Quý 3/2025"}}
+{"key":"68f3d8c93931115f","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Doanh thu - BHX","period":"Quý 3/2025"}]}}
+{"key":"11b27909c84a7bbc","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Doanh thu - BHX","period":"Quý 3/2024"}]}}
+{"key":"fa8ac214e88ab53a","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Số cửa hàng - An Khang","period":"Quý 3/2025"}]}}
+{"key":"27246fe832261170","reply":{"intent":"answer","operation":"pct_growth","operands":[{"role":"target","series":"Số cửa hàng - An Khang","period":"Quý 3/2025"},{"role":"base","series":"Số cửa hàng - An Khang","period":"Năm 2024"}]}}

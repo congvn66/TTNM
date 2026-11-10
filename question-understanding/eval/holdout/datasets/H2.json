@@ -1,0 +1,1157 @@
+{
+ "document_code": "H2",
+ "file_name": "nong_san_dong_xanh_bao_cao_6t_2026.pdf",
+ "page_count": 5,
+ "evidences": [
+  {
+   "evidence_code": "H2_EVD_0001",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Cà phê",
+   "time_period": "Năm 2024",
+   "unit": "tấn",
+   "raw_value": 40000,
+   "current_value": 40000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0002",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Cà phê",
+   "time_period": "Năm 2025",
+   "unit": "tấn",
+   "raw_value": 50000,
+   "current_value": 50000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0003",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Cà phê",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "tấn",
+   "raw_value": 24000,
+   "current_value": 24000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0004",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Cà phê",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "tấn",
+   "raw_value": 30000,
+   "current_value": 30000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0005",
+   "source_type": "table_cell",
+   "extraction_method": "none",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Hồ tiêu",
+   "time_period": "Năm 2024",
+   "unit": "tấn",
+   "raw_value": null,
+   "current_value": null,
+   "text_content": null,
+   "data_status": "missing",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0006",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Hồ tiêu",
+   "time_period": "Năm 2025",
+   "unit": "tấn",
+   "raw_value": 10000,
+   "current_value": 10000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0007",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Hồ tiêu",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "tấn",
+   "raw_value": 5000,
+   "current_value": 5000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0008",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Hồ tiêu",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "tấn",
+   "raw_value": 6000,
+   "current_value": 6000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0009",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Gạo",
+   "time_period": "Năm 2024",
+   "unit": "nghìn tấn",
+   "raw_value": 120,
+   "current_value": 120,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0010",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Gạo",
+   "time_period": "Năm 2025",
+   "unit": "nghìn tấn",
+   "raw_value": 150,
+   "current_value": 150,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0011",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     220.0,
+     300.0,
+     232.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Gạo",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "nghìn tấn",
+   "raw_value": 70,
+   "current_value": 70,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0012",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     232.0,
+     300.0,
+     244.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Gạo",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "nghìn tấn",
+   "raw_value": 90,
+   "current_value": 90,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0013",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     244.0,
+     300.0,
+     256.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Điều",
+   "time_period": "Năm 2024",
+   "unit": "tấn",
+   "raw_value": 2000,
+   "current_value": 2000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0014",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     256.0,
+     300.0,
+     268.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Điều",
+   "time_period": "Năm 2025",
+   "unit": "tấn",
+   "raw_value": 3000,
+   "current_value": 3000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0015",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     268.0,
+     300.0,
+     280.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Điều",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "tấn",
+   "raw_value": 0,
+   "current_value": 0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0016",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 1,
+    "bbox": [
+     50.0,
+     280.0,
+     300.0,
+     292.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng xuất khẩu - Điều",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "tấn",
+   "raw_value": 1500,
+   "current_value": 1500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0017",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Cà phê",
+   "time_period": "Năm 2024",
+   "unit": "triệu USD",
+   "raw_value": 120,
+   "current_value": 120,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0018",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Cà phê",
+   "time_period": "Năm 2025",
+   "unit": "triệu USD",
+   "raw_value": 150,
+   "current_value": 150,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0019",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Cà phê",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "triệu USD",
+   "raw_value": 72,
+   "current_value": 72,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0020",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Cà phê",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "triệu USD",
+   "raw_value": 99,
+   "current_value": 99,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0021",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Cà phê",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 3750,
+   "current_value": 3750,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0022",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Hồ tiêu",
+   "time_period": "Năm 2024",
+   "unit": "triệu USD",
+   "raw_value": 32,
+   "current_value": 32,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0023",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Hồ tiêu",
+   "time_period": "Năm 2025",
+   "unit": "triệu USD",
+   "raw_value": 50,
+   "current_value": 50,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0024",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Hồ tiêu",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "triệu USD",
+   "raw_value": 20,
+   "current_value": 20,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0025",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Hồ tiêu",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "triệu USD",
+   "raw_value": 30,
+   "current_value": 30,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0026",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Gạo",
+   "time_period": "Năm 2024",
+   "unit": "tỷ đồng",
+   "raw_value": 1500,
+   "current_value": 1500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0027",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     220.0,
+     300.0,
+     232.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Gạo",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 1800,
+   "current_value": 1800,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0028",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     232.0,
+     300.0,
+     244.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Điều",
+   "time_period": "Năm 2025",
+   "unit": "triệu USD",
+   "raw_value": 9,
+   "current_value": 9,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0029",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     244.0,
+     300.0,
+     256.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Điều",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "triệu USD",
+   "raw_value": 0,
+   "current_value": 0,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0030",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 2,
+    "bbox": [
+     50.0,
+     256.0,
+     300.0,
+     268.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch xuất khẩu - Điều",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "triệu USD",
+   "raw_value": 4.5,
+   "current_value": 4.5,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0031",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch theo thị trường - EU",
+   "time_period": "Năm 2024",
+   "unit": "triệu USD",
+   "raw_value": 100,
+   "current_value": 100,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0032",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch theo thị trường - EU",
+   "time_period": "Năm 2025",
+   "unit": "triệu USD",
+   "raw_value": 125,
+   "current_value": 125,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0033",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch theo thị trường - Mỹ",
+   "time_period": "Năm 2024",
+   "unit": "triệu USD",
+   "raw_value": 95,
+   "current_value": 95,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0034",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch theo thị trường - Mỹ",
+   "time_period": "Năm 2025",
+   "unit": "triệu USD",
+   "raw_value": 90,
+   "current_value": 90,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0035",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch theo thị trường - Trung Quốc",
+   "time_period": "Năm 2024",
+   "unit": "triệu USD",
+   "raw_value": 40,
+   "current_value": 40,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0036",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch theo thị trường - Trung Quốc",
+   "time_period": "Năm 2025",
+   "unit": "triệu USD",
+   "raw_value": 60,
+   "current_value": 60,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0037",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch theo thị trường - Nhật Bản",
+   "time_period": "Năm 2024",
+   "unit": "triệu USD",
+   "raw_value": 15,
+   "current_value": 15,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0038",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch theo thị trường - Nhật Bản",
+   "time_period": "Năm 2025",
+   "unit": "triệu USD",
+   "raw_value": 25,
+   "current_value": 25,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0039",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     196.0,
+     300.0,
+     208.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tổng kim ngạch xuất khẩu",
+   "time_period": "Năm 2024",
+   "unit": "triệu USD",
+   "raw_value": 250,
+   "current_value": 250,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0040",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 3,
+    "bbox": [
+     50.0,
+     208.0,
+     300.0,
+     220.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Tổng kim ngạch xuất khẩu",
+   "time_period": "Năm 2025",
+   "unit": "triệu USD",
+   "raw_value": 300,
+   "current_value": 300,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0041",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần",
+   "time_period": "Năm 2024",
+   "unit": "tỷ đồng",
+   "raw_value": 6000,
+   "current_value": 6000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0042",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 7500,
+   "current_value": 7500,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0043",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     124.0,
+     300.0,
+     136.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 3400,
+   "current_value": 3400,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0044",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     136.0,
+     300.0,
+     148.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Doanh thu thuần",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 4000,
+   "current_value": 4000,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0045",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     148.0,
+     300.0,
+     160.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "Năm 2024",
+   "unit": "tỷ đồng",
+   "raw_value": -80,
+   "current_value": -80,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0046",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     160.0,
+     300.0,
+     172.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "Năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": 120,
+   "current_value": 120,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0047",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     172.0,
+     300.0,
+     184.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "6 tháng đầu năm 2025",
+   "unit": "tỷ đồng",
+   "raw_value": -30,
+   "current_value": -30,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0048",
+   "source_type": "table_cell",
+   "extraction_method": "direct_label",
+   "location": {
+    "page": 4,
+    "bbox": [
+     50.0,
+     184.0,
+     300.0,
+     196.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Lợi nhuận sau thuế",
+   "time_period": "6 tháng đầu năm 2026",
+   "unit": "tỷ đồng",
+   "raw_value": 60,
+   "current_value": 60,
+   "text_content": null,
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0049",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     100.0,
+     300.0,
+     112.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Sản lượng - ghi chú",
+   "time_period": "Năm 2025",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Sản lượng gạo được báo cáo theo nghìn tấn, các mặt hàng khác theo tấn.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  },
+  {
+   "evidence_code": "H2_EVD_0050",
+   "source_type": "text_paragraph",
+   "extraction_method": "none",
+   "location": {
+    "page": 5,
+    "bbox": [
+     50.0,
+     112.0,
+     300.0,
+     124.0
+    ],
+    "meta": {}
+   },
+   "series_name": "Kim ngạch - ghi chú",
+   "time_period": "Năm 2025",
+   "unit": null,
+   "raw_value": null,
+   "current_value": null,
+   "text_content": "Kim ngạch gạo chỉ được công bố bằng đồng Việt Nam vì bán qua đơn vị ủy thác trong nước.",
+   "data_status": "valid",
+   "verification_status": "unverified"
+  }
+ ]
+}

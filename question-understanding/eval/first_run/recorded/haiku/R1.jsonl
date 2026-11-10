@@ -1,0 +1,25 @@
+{"key":"8baf98ca64750b9c","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Doanh thu thuần","period":"Quý 2/2025"}]}}
+{"key":"d0481436ca0ff27d","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Biên lợi nhuận gộp","period":"Quý 1/2026"}]}}
+{"key":"03163853d9da98b8","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Số ngày tồn kho","period":"Quý 4/2025"}]}}
+{"key":"8fe07427760a2ad1","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Tăng trưởng lợi nhuận trước thuế so với cùng kỳ","period":"Quý 1/2026"}]}}
+{"key":"05d7aba670871116","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Sản lượng tiêu thụ - Ống thép","period":"Quý 2/2026"}]}}
+{"key":"a20eea799efe034c","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Giá dự phóng theo P/B","period":"-"}]}}
+{"key":"5bad100308ce1c1e","reply":{"intent":"answer","operation":"ratio","operands":[{"role":"numerator","series":"Giá hiện tại","period":"-"},{"role":"denominator","series":"EPS 4 quý gần nhất","period":"-"}]}}
+{"key":"1e69ab425eca43ce","reply":{"intent":"answer","operation":"pct_growth","operands":[{"role":"target","series":"Giá mục tiêu","period":"Năm 2026"},{"role":"base","series":"Giá hiện tại","period":"-"}]}}
+{"key":"1389647bf514022f","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Doanh thu thuần","period":"Quý 2/2026"}]}}
+{"key":"14ba306d230e1e9d","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Lợi nhuận sau thuế lũy kế","period":"6 tháng 2026"}]}}
+{"key":"50353990ef3fca8f","reply":{"intent":"unanswerable","reason":"Báo cáo không có doanh thu xuất khẩu thép."}}
+{"key":"61c053b2e25ea243","reply":{"intent":"unanswerable","reason":"Báo cáo không có lợi nhuận sau thuế quý 3/2026."}}
+{"key":"e4273444ee609d4c","reply":{"intent":"answer","operation":"pct_point_diff","operands":[{"role":"target","series":"Biên lợi nhuận gộp","period":"Quý 2/2026"},{"role":"base","series":"Biên lợi nhuận gộp","period":"Quý 2/2025"}]}}
+{"key":"8e87a0fb67ea3b8f","reply":{"intent":"answer","operation":"rank_group","group_series":["Số ngày tồn kho"],"order":"DESC","metric_type":"value"}}
+{"key":"3e4e091e7ec14ef6","reply":{"intent":"unanswerable","reason":"Báo cáo không có doanh thu thuần quý 1/2026."}}
+{"key":"ec5190834d949a94","reply":{"intent":"unanswerable","reason":"Dự phóng trong báo cáo là của HPG, không phải của DSC."}}
+{"key":"07770ea8b1c36dc4","reply":{"intent":"unanswerable","reason":"Báo cáo không có doanh thu mảng nông nghiệp quý 2/2025."}}
+{"key":"a1e58db0f22b68dd","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Định nghĩa LNST sau CĐTS"},{"role":"subject","series":"Lợi nhuận sau thuế cổ đông công ty mẹ","period":"Quý 2/2026"}]}}
+{"key":"65b4e2db04265108","reply":{"intent":"clarify","question":"Bạn muốn hỏi lợi nhuận nào?","options":[{"label":"Lợi nhuận sau thuế","request":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Tăng trưởng lợi nhuận sau thuế so với cùng kỳ","period":"Quý 2/2026"}]}},{"label":"Lợi nhuận sau thuế cổ đông công ty mẹ","request":{"intent":"answer","operation":"pct_growth","operands":[{"role":"target","series":"Lợi nhuận sau thuế cổ đông công ty mẹ","period":"Quý 2/2026"},{"role":"base","series":"Lợi nhuận sau thuế cổ đông công ty mẹ","period":"Quý 2/2025"}]}},{"label":"Lợi nhuận trước thuế","request":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Tăng trưởng lợi nhuận trước thuế so với cùng kỳ","period":"Quý 2/2026"}]}}]}}
+{"key":"5adb616868426301","reply":{"intent":"unanswerable","reason":"Báo cáo không có thông tin ngày cập nhật."}}
+{"key":"af945272a5f6094c","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Biên lợi nhuận gộp","period":"Quý 2/2026"}]}}
+{"key":"981bd626e24617c4","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Biên lợi nhuận trước thuế","period":"Quý 2/2026"}]}}
+{"key":"6beb5e5aaeb11702","reply":{"intent":"answer","operation":"pct_point_diff","operands":[{"role":"target","series":"Biên lợi nhuận trước thuế","period":"Quý 2/2026"},{"role":"base","series":"Biên lợi nhuận trước thuế","period":"Quý 1/2026"}]}}
+{"key":"060c2c474b6c7acf","reply":{"intent":"answer","operation":"lookup","operands":[{"role":"subject","series":"Số ngày tồn kho","period":"Quý 2/2026"}]}}
+{"key":"e36c7fa4573990dd","reply":{"intent":"answer","operation":"diff","operands":[{"role":"target","series":"Số ngày tồn kho","period":"Quý 2/2026"},{"role":"base","series":"Số ngày tồn kho","period":"Quý 2/2025"}]}}

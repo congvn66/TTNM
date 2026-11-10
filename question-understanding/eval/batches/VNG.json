@@ -1,0 +1,10 @@
+{
+ "catalog": "CATALOG (series | period | unit | kind):\nLợi nhuận thuần từ HĐKD sau điều chỉnh | Quý 1/2025 | tỷ đồng | number\nLợi nhuận thuần từ HĐKD sau điều chỉnh | Quý 2/2025 | tỷ đồng | number\nLợi nhuận thuần từ HĐKD sau điều chỉnh | Quý 3/2025 | tỷ đồng | number\nLợi nhuận thuần từ HĐKD sau điều chỉnh | Quý 4/2025 | tỷ đồng | number\nLợi nhuận thuần từ HĐKD sau điều chỉnh | Quý 1/2026 | tỷ đồng | number",
+ "items": [
+  {
+   "key": "69f28d13ca792f80",
+   "history": [],
+   "question": "Lợi nhuận thuần từ HĐKD sau điều chỉnh quý 1/2026 tăng bao nhiêu phần trăm so với cùng kỳ?"
+  }
+ ]
+}

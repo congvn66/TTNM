@@ -1,0 +1,10 @@
+{
+ "catalog": "CATALOG (series | period | unit | kind):\nĐịnh nghĩa doanh thu | - | text | text\nDoanh thu - Miền Bắc | Quý 1 | triệu đồng | number\nDoanh thu - Miền Bắc | Quý 3 | triệu đồng | number\nDoanh thu - Miền Nam | Quý 1 | triệu đồng | number\nDoanh thu - Miền Nam | Quý 3 | triệu đồng | number",
+ "items": [
+  {
+   "key": "97cc489368538b42",
+   "history": [],
+   "question": "Trong quý 3, khu vực nào tăng nhiều nhất so với quý 1?"
+  }
+ ]
+}
