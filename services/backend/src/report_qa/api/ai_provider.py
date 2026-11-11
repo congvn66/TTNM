@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import time
 import unicodedata
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, localcontext
@@ -472,6 +473,7 @@ class PlannerChatClient:
                 if attempt >= self.max_retries or not retryable:
                     code = "AI_PROVIDER_UNAVAILABLE" if retryable else ("AI_MODEL_UNAVAILABLE" if exc.code == 404 else "AI_PROVIDER_HTTP_ERROR")
                     raise ProviderError(code, f"{self.mode} planner request failed (HTTP {exc.code})") from exc
+                time.sleep(min(8.0, 2.0 * (attempt + 1)))
             except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
                 if attempt >= self.max_retries:
                     raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"{self.mode} planner is unreachable") from exc

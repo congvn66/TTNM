@@ -171,3 +171,11 @@ Cấu hình bằng biến môi trường, đặt trong `.env` (không commit):
 | `REPORT_QA_PLANNER_MODEL` | Ghi đè model riêng cho planner |
 
 Test không cần mạng: `services/backend/tests/unit/test_question_planner.py` (10 acceptance test ở mục 8 cùng các ca dự phòng) và ba test API trong `tests/integration/test_session_api.py`. Integration test đặt `REPORT_QA_PLANNER_MODE=rules`.
+
+Đánh giá trên 296 câu của bộ test phần hiểu câu hỏi (branch `ducanh`, thư mục `question-understanding`), chạy qua planner, resolver và calculator:
+
+```bash
+python scripts/eval_question_planner.py --qu-root ../question-understanding --model rules
+```
+
+Với một model trên OpenRouter, đặt `OPENROUTER_API_KEY` và giới hạn chi phí bằng `--budget`, ví dụ `--model meta-llama/llama-3.1-8b-instruct --budget 0.06 --record run.jsonl`. Dùng `--replay run.jsonl` để chạy lại mà không gọi model.

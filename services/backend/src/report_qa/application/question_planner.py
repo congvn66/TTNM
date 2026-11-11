@@ -298,12 +298,92 @@ _PROFIT = re.compile(r"\bloi nhuan\b(?!\s+(gop|rong|thuan|sau|truoc|hoat dong|co
 _PROFIT_KINDS = re.compile(r"loi nhuan (gop|sau thue|truoc thue|rong|thuan|hoat dong)|gross profit|net profit|operating profit|profit before tax|profit after tax|lnst|lntt|lnst")
 _FOLLOW_UP = re.compile(r"^(con|vay|the con|what about|and)\b|thi sao\b|how about\b")
 _QUARTER_NO_YEAR = re.compile(r"\b(?:quy|q)\s*([1-4])\b(?!\s*[/\- ]\s*(?:19|20)?\d{2})")
+_MONTH_NO_YEAR = re.compile(r"\b(?:thang|t)\s*(1[0-2]|0?[1-9])\b(?!\s*[/\- ]\s*(?:19|20)?\d{2})(?!\s*thang)")
+_YEAR = re.compile(r"(?<![\d/])((?:19|20)\d{2})(?![\d/-])")
+_NOT_IN_DOCUMENT = "khong_co_trong_tai_lieu"
+_CALC_WORDS = re.compile(r"\bcong\b(?!\s+ty)|\btong\b|tren moi|moi (cua hang|thang|don)|binh quan|trung binh|\bchia\b|nhan voi|ty so|\bper\b|average|\bratio\b|\bsum\b|\btotal\b")
+
+
+def _label_period(label: str | None) -> tuple[str, int, int] | None:
+    """('Q', 2, 2026) for Q2/2026 or Quý 2/2026; ('M', 3, 2025) for Tháng 3/2025, T3/2025 or 03/2025."""
+    text = _plain(label)
+    for kind, pattern in (("Q", r"(?:q|quy)\s*([1-4])\s*[/\- ]\s*(?:nam\s*)?((?:19|20)\d{2})"), ("M", r"(?:thang|t)?\s*(1[0-2]|0?[1-9])\s*/\s*((?:19|20)\d{2})")):
+        match = re.fullmatch(pattern, text)
+        if match:
+            return kind, int(match.group(1)), int(match.group(2))
+    return None
+
+
+def _period_without_year(text: str, catalog: list[CatalogEntry], history: list[dict[str, Any]]) -> tuple[str, list[str]] | None:
+    """The question names a quarter or month but no year, and the document has it in more than one year."""
+    if _YEAR.search(text):
+        return None
+    history_years = {int(y) for h in history[-1:] for f in (h.get("plan") or {}).get("facts", []) for y in _YEAR.findall(f.get("period") or "")}
+    asked = [("Q", int(m.group(1))) for m in _QUARTER_NO_YEAR.finditer(text)] + [("M", int(m.group(1))) for m in _MONTH_NO_YEAR.finditer(text)]
+    for kind, number in asked:
+        labels = {}
+        for entry in catalog:
+            found = _label_period(entry.period)
+            if found and found[:2] == (kind, number):
+                labels.setdefault(found[2], entry.period)
+        if len(labels) > 1 and not (history_years & set(labels)):
+            name = f"Quý {number}" if kind == "Q" else f"Tháng {number}"
+            return name, [labels[year] for year in sorted(labels)]
+    return None
+
+
+def _school_year_for_calendar_year(text: str, catalog: list[CatalogEntry]) -> list[str] | None:
+    """'năm 2025' when the document only has school years such as 2024-2025 and 2025-2026."""
+    for year in _YEAR.findall(text):
+        exact = [e.period for e in catalog if e.period and re.fullmatch(rf"(?:nam\s*|fy\s*)?{year}", _plain(e.period))]
+        spans = sorted({e.period for e in catalog if e.period and re.search(rf"\b{year}\s*-\s*(?:19|20)\d{{2}}\b|\b(?:19|20)\d{{2}}\s*-\s*{year}\b", e.period)})
+        if not exact and len(spans) > 1:
+            return spans
+    return None
+
+
+def _bind_names(plan: dict[str, Any], catalog: list[CatalogEntry]) -> list[str]:
+    """Make each fact name what the document calls it, so the resolver cannot treat a blank as 'anything'."""
+    applied = []
+    measures = {e.measure for e in catalog}
+    for fact in plan["facts"]:
+        if fact["measure"] not in measures:
+            match = next((m for m in measures if m != "unknown" and _plain(m).replace(" ", "_") == _plain(fact["measure"]).replace(" ", "_")), None)
+            if match:
+                fact["measure"] = match
+                applied.append("measure_name_matched")
+            elif fact["measure"] == "unknown":
+                fact["measure"] = _NOT_IN_DOCUMENT
+                applied.append("measure_not_in_document")
+    return applied
+
+
+def _subject_choice(plan: dict[str, Any], question: str, catalog: list[CatalogEntry]) -> tuple[str, list[str]] | None:
+    """A blank subject where the document only has named subjects for that measure: take the one the question names, else ask."""
+    text = _plain(question)
+    for fact in plan["facts"]:
+        if fact["subject"] is not None or fact["measure"] in {"unknown", _NOT_IN_DOCUMENT}:
+            continue
+        rows = [e for e in catalog if e.measure == fact["measure"] and (fact["period"] is None or e.period == fact["period"])]
+        subjects = sorted({e.subject for e in rows if e.subject})
+        if not rows or any(e.subject is None for e in rows) or len(subjects) < 2:
+            continue
+        named = [s for s in subjects if _plain(s) and re.search(rf"(?<!\w){re.escape(_plain(s))}(?!\w)", text)]
+        if len(named) == 1:
+            fact["subject"] = named[0]
+            continue
+        total = [s for s in subjects if _plain(s) in {"tong", "tong cong", "toan cong ty", "total", "hop nhat", "tap doan"}]
+        if len(total) == 1 and not named:
+            fact["subject"] = total[0]
+            continue
+        return fact["fact_key"], subjects
+    return None
 
 
 def _is_percent_fact(fact: dict[str, Any], catalog: list[CatalogEntry]) -> bool:
     if fact.get("unit") == "PERCENT":
         return True
-    return any(e.unit == "PERCENT" and e.measure == fact["measure"] and (fact["subject"] is None or e.subject == fact["subject"])
+    return any(e.unit == "PERCENT" and _plain(e.measure) == _plain(fact["measure"]) and (fact["subject"] is None or e.subject == fact["subject"])
                and (fact["period"] is None or e.period == fact["period"]) and fact["measure"] != "unknown" for e in catalog)
 
 
@@ -319,7 +399,30 @@ def apply_rules(plan: dict[str, Any], question: str, catalog: list[CatalogEntry]
 
     if plan["status"] != "ready":
         return plan, applied
+    plan = json.loads(json.dumps(plan))
+    applied += _bind_names(plan, catalog)
+    plan["source_strategy"]["chart_fact_keys"] = [k for k in plan["source_strategy"]["chart_fact_keys"] if k in {f["fact_key"] for f in plan["facts"]}]
     operation = plan["operation"]["type"]
+
+    previous = (history[-1].get("plan") or {}) if history else {}
+    previous_operation = (previous.get("operation") or {}).get("type")
+    if chosen_reason is None and history and _FOLLOW_UP.search(text) and previous.get("status") != "ready":
+        options = _measure_options(catalog) or ["Doanh thu", "Lợi nhuận"]
+        return clarification_plan(question, doc, "MISSING_CONTEXT", "Câu trước chưa được trả lời nên chưa rõ bạn đang hỏi về số nào. Bạn muốn xem chỉ tiêu nào?",
+                                  options if len(options) >= 2 else options + ["Chỉ tiêu khác"]), applied + ["follow_up_after_unanswered_turn"]
+    if (chosen_reason is None and _FOLLOW_UP.search(text) and operation == "lookup" and previous_operation in TWO_OPERAND
+            and not re.search(r"bao nhieu|la gi|gia tri|value", text)):
+        return clarification_plan(question, doc, "AMBIGUOUS_OPERATION", "Bạn muốn xem giá trị, hay mức thay đổi như câu trước?",
+                                  ["Xem giá trị", "Xem mức thay đổi như câu trước"]), applied + ["follow_up_lost_operation"]
+
+    if operation == "lookup":
+        label_text = " ".join(_plain(e.label) + " " + _plain(e.measure).replace("_", " ") for e in catalog if e.measure == plan["facts"][0]["measure"])
+        asked = [m.group(0) for m in _CALC_WORDS.finditer(text) if m.group(0) not in label_text]
+        if asked:
+            return unsupported_plan(question, doc), applied + ["calculation_words_but_lookup"]
+
+    if operation == "sum" and len({f["period"] for f in plan["facts"]}) > 1 and all(_is_percent_fact(f, catalog) for f in plan["facts"]):
+        return unsupported_plan(question, doc), applied + ["percent_sum_over_periods"]
 
     if chosen_reason != "AMBIGUOUS_OPERATION" and operation in {"growth_rate", "absolute_change", "difference", "percentage_point_change"} and _CHANGE.search(text):
         facts = plan["facts"]
@@ -349,11 +452,19 @@ def apply_rules(plan: dict[str, Any], question: str, catalog: list[CatalogEntry]
             return clarification_plan(question, doc, "AMBIGUOUS_MEASURE", "Báo cáo có nhiều loại lợi nhuận. Bạn muốn xem loại nào?", kinds), ["profit_kind_ambiguous"]
 
     if chosen_reason != "AMBIGUOUS_PERIOD":
-        quarters = {int(m.group(1)) for m in _QUARTER_NO_YEAR.finditer(text)}
-        for quarter in sorted(quarters):
-            labels = sorted({e.period for e in catalog if e.period and re.fullmatch(rf"Q{quarter}/\d{{4}}", e.period)})
-            if len(labels) > 1 and not any(f["period"] in labels for f in plan["facts"] if f["period"]):
-                return clarification_plan(question, doc, "AMBIGUOUS_PERIOD", f"Quý {quarter} có ở nhiều năm. Bạn muốn xem năm nào?", labels), ["quarter_year_ambiguous"]
+        missing_year = _period_without_year(text, catalog, history)
+        if missing_year:
+            name, labels = missing_year
+            return clarification_plan(question, doc, "AMBIGUOUS_PERIOD", f"{name} có ở nhiều năm. Bạn muốn xem năm nào?", labels), applied + ["period_year_ambiguous"]
+        measures = {f["measure"] for f in plan["facts"]}
+        school_years = _school_year_for_calendar_year(text, [e for e in catalog if e.measure in measures] or catalog)
+        if school_years:
+            return clarification_plan(question, doc, "AMBIGUOUS_PERIOD", "Báo cáo ghi theo năm học. Bạn muốn xem năm học nào?", school_years), applied + ["school_year_ambiguous"]
+
+    if chosen_reason != "AMBIGUOUS_SUBJECT":
+        subject = _subject_choice(plan, question, catalog)
+        if subject:
+            return clarification_plan(question, doc, "AMBIGUOUS_SUBJECT", "Số này có cho nhiều đối tượng. Bạn muốn xem đối tượng nào?", subject[1]), applied + ["subject_ambiguous"]
     return plan, applied
 
 
