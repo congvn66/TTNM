@@ -150,3 +150,24 @@ Tương tự phải hỏi lại khi mơ hồ về measure, subject hoặc kỳ. 
 - Không chạy phép tính.
 - Không viết giá trị số vào answer.
 - Không quyết định retry/provider timeout.
+
+## 10. Trạng thái triển khai (branch `tien-fork`)
+
+Planner nằm ở `services/backend/src/report_qa/application/question_planner.py`, được gọi trong `POST /api/v1/sessions/{session_id}/messages`.
+
+- AI là planner mặc định khi có key. AI chỉ thấy catalog gồm measure, subject, kỳ, unit và tên cột, tên dòng. Mọi số trong đoạn chữ đều bị che, nên AI không thấy giá trị.
+- Code dựng `question-plan-v2` từ output ngắn của AI và kiểm tra lại. Output sai format thì dùng planner regex cũ trong `p0_pipeline.py`. Trace ghi `planner`, `planner_fallback` và `rules_applied`.
+- Luật hỏi lại chạy trên mọi plan, dù AI hay regex tạo ra: mức tăng tuyệt đối hay phần trăm, điểm phần trăm hay tương đối, nhiều loại lợi nhuận, quý không có năm, câu nối tiếp khi chưa có ngữ cảnh. Khi người dùng vừa chọn một lựa chọn, luật đó không hỏi lại lần nữa.
+- `unsupported`, ví dụ dự báo hay xin ý kiến, dừng trước bước truy hồi, mode `question_unsupported`.
+
+Cấu hình bằng biến môi trường, đặt trong `.env` (không commit):
+
+| Biến | Ý nghĩa |
+|---|---|
+| `REPORT_QA_PLANNER_MODE` | `openrouter`, `sambanova`, `gemini` hoặc `rules`. Bỏ trống thì tự dùng provider đầu tiên có key. |
+| `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` | Model mặc định `openai/gpt-6-luna` |
+| `SAMBANOVA_API_KEY`, `SAMBANOVA_MODEL` | Model mặc định `Meta-Llama-3.3-70B-Instruct` |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | Gọi qua endpoint tương thích OpenAI |
+| `REPORT_QA_PLANNER_MODEL` | Ghi đè model riêng cho planner |
+
+Test không cần mạng: `services/backend/tests/unit/test_question_planner.py` (10 acceptance test ở mục 8 cùng các ca dự phòng) và ba test API trong `tests/integration/test_session_api.py`. Integration test đặt `REPORT_QA_PLANNER_MODE=rules`.

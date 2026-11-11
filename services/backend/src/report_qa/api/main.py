@@ -20,10 +20,11 @@ from pydantic import BaseModel, Field
 from report_qa.application.evidence_extraction import extract_pdf_artifact
 from report_qa.application.chart_reading import ChartReadRequest, PdfVectorChartReader
 from report_qa.application.deplot_reading import DeplotChartReader
-from report_qa.application.p0_pipeline import build_question_plan, calculation_answer, execute_calculation, resolve_evidence
+from report_qa.application.p0_pipeline import calculation_answer, execute_calculation, resolve_evidence
+from report_qa.application.question_planner import build_catalog, plan_question
 from report_qa.domain.contracts import validate_calculation_result_v1, validate_question_plan_v2
 from report_qa.domain.types import validate_decimal_text
-from .ai_provider import ProviderError, live_provider, provider_mode
+from .ai_provider import ProviderError, live_provider, planner_client, provider_mode
 from report_qa.config import settings
 from report_qa.infrastructure.postgres import postgres_health
 from .session_storage import EXTRACTION_ROOT, UPLOAD_ROOT, document_path, extraction_path, load_catalog, save_catalog, utc_now
@@ -659,6 +660,53 @@ def mark_answers_needing_update(session: dict[str, Any], document_id: str, evide
     return affected
 
 
+def _base_extraction_or_none(document: dict[str, Any]) -> dict[str, Any] | None:
+    try:
+        return json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
+    except (KeyError, OSError, json.JSONDecodeError):
+        return None
+
+
+def _planner_history(session: dict[str, Any], document_id: str) -> list[dict[str, Any]]:
+    """Earlier questions on this document with the plan each one got, newest last."""
+    turns, question = [], None
+    for message in session.get("messages", []):
+        if message.get("document_id") != document_id:
+            continue
+        if message.get("role") == "user":
+            question = message.get("body")
+        elif message.get("role") == "assistant" and question and message.get("question_plan"):
+            turns.append({"question": question, "plan": message["question_plan"]})
+            question = None
+    return turns[-4:]
+
+
+def _planner_call() -> dict[str, Any]:
+    client = planner_client()
+    return {"complete": client.complete, "model_name": f"{client.mode}/{client.model}"} if client else {}
+
+
+def _persist_unsupported(session, session_id, document, question, question_plan, trace, trace_id) -> dict[str, Any]:
+    message = "Câu hỏi này nằm ngoài phạm vi hệ thống hỗ trợ, ví dụ dự báo, xin ý kiến hoặc phép tính nhiều bước. Hệ thống không đưa ra con số nào."
+    trace.append(trace_event("question_unsupported", "stopped", code="QUESTION_UNSUPPORTED"))
+    now = utc_now()
+    user_message = {"id": str(uuid4()), "role": "user", "body": question, "document_id": document["id"], "created_at": now}
+    assistant_message = {
+        "id": str(uuid4()), "role": "assistant", "body": message, "document_id": document["id"], "created_at": now, "mode": "question_unsupported",
+        "citations": [], "trace_id": trace_id, "question_plan": question_plan,
+        "structured_answer": {"presentation": "unsupported_v1", "answer": message, "summary": "Hệ thống chưa truy hồi dữ liệu hoặc thực hiện phép tính.",
+                              "sections": [], "formulas": [], "tables": [], "claims": [], "warnings": [], "cited_pages": []},
+    }
+    snapshot_answer_revision(assistant_message)
+    trace.append(trace_event("persistence", "committed", artifact="runtime/sessions.json", assistant_message_id=assistant_message["id"], citation_pages=[]))
+    assistant_message["trace"] = trace
+    session["messages"].extend([user_message, assistant_message])
+    session["updated_at"] = now
+    save_catalog(catalog)
+    flow_log("UNSUPPORTED_PERSISTED", trace_id=trace_id, session_id=session_id, document_id=document["id"], assistant_message_id=assistant_message["id"])
+    return {"user_message": user_message, "assistant_message": assistant_message, "limitations": ["Câu hỏi ngoài phạm vi; không truy hồi hoặc tính toán"], "trace_id": trace_id}
+
+
 @app.post(
     "/api/v1/sessions/{session_id}/messages",
     tags=["sessions"],
@@ -689,9 +737,15 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         if previous_assistant and previous_assistant.get("mode") == "question_clarification"
         else None
     )
-    question_plan = validate_question_plan_v2(
-        build_question_plan(payload.question, document["id"], prior_clarification_plan)
+    planning = plan_question(
+        payload.question,
+        document["id"],
+        catalog=build_catalog(_base_extraction_or_none(document)),
+        history=_planner_history(session, document["id"]),
+        prior_clarification_plan=prior_clarification_plan,
+        **_planner_call(),
     )
+    question_plan = validate_question_plan_v2(planning.plan)
     trace.append(
         trace_event(
             "question_plan",
@@ -699,8 +753,13 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
             question_plan_id=question_plan["question_plan_id"],
             operation=(question_plan.get("operation") or {}).get("type"),
             fact_keys=[item["fact_key"] for item in question_plan["facts"]],
+            planner=planning.planner,
+            planner_fallback=planning.fallback_code,
+            rules_applied=planning.rules_applied,
         )
     )
+    if question_plan["status"] == "unsupported":
+        return _persist_unsupported(session, session_id, document, payload.question, question_plan, trace, trace_id)
     if question_plan["status"] == "needs_clarification":
         clarification = question_plan["clarification"]
         trace.append(trace_event("clarification_requested", "waiting_for_user", reason_code=clarification["reason_code"]))
