@@ -19,6 +19,8 @@ _LOCAL_ENV_KEYS = {
     "REPORT_QA_AI_MODE", "REPORT_QA_AI_TIMEOUT_SECONDS", "REPORT_QA_AI_RETRIES",
     "GEMINI_API_KEY", "GEMINI_MODEL", "GEMINI_API_BASE_URL",
     "OPENROUTER_API_KEY", "OPENROUTER_MODEL", "OPENROUTER_BASE_URL",
+    "SAMBANOVA_API_KEY", "SAMBANOVA_MODEL", "SAMBANOVA_BASE_URL",
+    "REPORT_QA_PLANNER_MODE", "REPORT_QA_PLANNER_MODEL",
 }
 
 
@@ -417,4 +419,81 @@ def live_provider() -> GeminiProvider | OpenRouterProvider | None:
     return None
 
 
-__all__ = ["GEMINI_RESPONSE_SCHEMA", "OPENROUTER_RESPONSE_SCHEMA", "GeminiProvider", "OpenRouterProvider", "ProviderAnswer", "ProviderError", "_json_from_content", "live_provider", "provider_mode", "validate_answer", "validate_structured_answer"]
+PLANNER_PROVIDERS = {
+    "openrouter": ("OPENROUTER_API_KEY", "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1", "OPENROUTER_MODEL", "openai/gpt-6-luna"),
+    "sambanova": ("SAMBANOVA_API_KEY", "SAMBANOVA_BASE_URL", "https://api.sambanova.ai/v1", "SAMBANOVA_MODEL", "Meta-Llama-3.3-70B-Instruct"),
+    "gemini": ("GEMINI_API_KEY", "GEMINI_API_BASE_URL", "https://generativelanguage.googleapis.com/v1beta", "GEMINI_MODEL", "gemini-2.5-flash"),
+}
+
+
+def planner_mode() -> str:
+    """AI is the default planner whenever a key is configured. 'rules' only when no key exists or it is asked for."""
+    _load_local_env()
+    explicit = os.getenv("REPORT_QA_PLANNER_MODE", "").strip().lower()
+    if explicit:
+        return explicit
+    ai_mode = provider_mode()
+    if ai_mode in PLANNER_PROVIDERS and os.getenv(PLANNER_PROVIDERS[ai_mode][0]):
+        return ai_mode
+    return next((name for name, spec in PLANNER_PROVIDERS.items() if os.getenv(spec[0])), "rules")
+
+
+class PlannerChatClient:
+    """OpenAI-compatible chat completions for the question planner. OpenRouter, SambaNova and Gemini all speak it."""
+
+    def __init__(self, mode: str) -> None:
+        _load_local_env()
+        if mode not in PLANNER_PROVIDERS:
+            raise ProviderError("AI_NOT_CONFIGURED", f"planner mode {mode!r} is not supported")
+        key_name, base_name, base_default, model_name, model_default = PLANNER_PROVIDERS[mode]
+        self.mode = mode
+        self.api_key = os.getenv(key_name, "")
+        base = os.getenv(base_name, base_default).rstrip("/")
+        self.base_url = f"{base}/openai" if mode == "gemini" and not base.endswith("/openai") else base
+        self.model = os.getenv("REPORT_QA_PLANNER_MODEL") or os.getenv(model_name, model_default)
+        self.timeout_seconds = float(os.getenv("REPORT_QA_AI_TIMEOUT_SECONDS", "20"))
+        self.max_retries = min(2, max(0, int(os.getenv("REPORT_QA_AI_RETRIES", "1"))))
+        if not self.api_key:
+            raise ProviderError("AI_NOT_CONFIGURED", f"{key_name} is not configured")
+
+    def complete(self, system: str, user: str) -> str:
+        body = {"model": self.model, "temperature": 0, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        if self.mode == "openrouter":
+            headers.update({"HTTP-Referer": "http://127.0.0.1:4173", "X-Title": "SourceLens"})
+        request = Request(f"{self.base_url}/chat/completions", data=json.dumps(body, ensure_ascii=False).encode("utf-8"), method="POST", headers=headers)
+        for attempt in range(self.max_retries + 1):
+            try:
+                with urlopen(request, timeout=self.timeout_seconds) as response:
+                    envelope = json.loads(response.read().decode("utf-8"))
+                break
+            except HTTPError as exc:
+                retryable = exc.code in {408, 429, 500, 502, 503, 504}
+                if attempt >= self.max_retries or not retryable:
+                    code = "AI_PROVIDER_UNAVAILABLE" if retryable else ("AI_MODEL_UNAVAILABLE" if exc.code == 404 else "AI_PROVIDER_HTTP_ERROR")
+                    raise ProviderError(code, f"{self.mode} planner request failed (HTTP {exc.code})") from exc
+            except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+                if attempt >= self.max_retries:
+                    raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"{self.mode} planner is unreachable") from exc
+        try:
+            content = envelope["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise ProviderError("AI_INVALID_OUTPUT", f"{self.mode} planner response envelope is invalid") from exc
+        if isinstance(content, list):
+            content = "".join(str(part.get("text", "")) if isinstance(part, dict) else str(part) for part in content)
+        if not isinstance(content, str):
+            raise ProviderError("AI_INVALID_OUTPUT", "planner output is not text")
+        return content
+
+
+def planner_client() -> PlannerChatClient | None:
+    mode = planner_mode()
+    if mode in {"rules", "deterministic", "off", "none"}:
+        return None
+    try:
+        return PlannerChatClient(mode)
+    except ProviderError:
+        return None
+
+
+__all__ = ["PLANNER_PROVIDERS", "PlannerChatClient", "planner_client", "planner_mode", "GEMINI_RESPONSE_SCHEMA", "OPENROUTER_RESPONSE_SCHEMA", "GeminiProvider", "OpenRouterProvider", "ProviderAnswer", "ProviderError", "_json_from_content", "live_provider", "provider_mode", "validate_answer", "validate_structured_answer"]

@@ -437,3 +437,65 @@ def test_ready_missing_fact_calls_only_selected_chart(monkeypatch):
         assert len(calls[0].fact_requirements) == 1
     finally:
         cleanup_session(created['id'])
+
+
+class _FakePlanner:
+    mode, model = "fake", "planner"
+
+    def __init__(self, reply):
+        self.reply, self.calls = reply, []
+
+    def complete(self, system, user):
+        self.calls.append(user)
+        if isinstance(self.reply, Exception):
+            raise self.reply
+        return json.dumps(self.reply)
+
+
+def _ask_with_planner(monkeypatch, reply, question, text="Revenue Q1/2025 was 100. Revenue Q1/2026 was 120."):
+    planner = _FakePlanner(reply)
+    monkeypatch.setattr(api_main, "planner_client", lambda: planner)
+    created = client.post("/api/v1/sessions", json={"title": "AI planner"}).json()["session"]
+    uploaded = client.post(f"/api/v1/sessions/{created['id']}/documents", files={"file": ("ai.pdf", pdf_with_text(text), "application/pdf")})
+    document_id = uploaded.json()["document"]["id"]
+    response = client.post(f"/api/v1/sessions/{created['id']}/messages", json={"document_id": document_id, "question": question})
+    return created, planner, response
+
+
+def test_ai_planner_is_used_by_default_and_the_program_calculates(monkeypatch):
+    reply = {"status": "ready", "operation": "growth_rate", "facts": [
+        {"key": "current", "measure": "doanh_thu", "subject": None, "period": "Q1/2026", "unit": None},
+        {"key": "baseline", "measure": "doanh_thu", "subject": None, "period": "Q1/2025", "unit": None}]}
+    created, planner, response = _ask_with_planner(monkeypatch, reply, "Doanh thu Q1/2026 tăng bao nhiêu phần trăm so với Q1/2025?")
+    try:
+        assert response.status_code == 200, response.text
+        assistant = response.json()["assistant_message"]
+        assert assistant["calculation_result"]["value"] == "20"
+        plan_event = next(event for event in assistant["trace"] if event["stage"] == "question_plan")
+        assert plan_event["planner"] == "ai:fake/planner" and plan_event["planner_fallback"] is None
+        assert "120" not in planner.calls[0] and "100" not in planner.calls[0]
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_unsupported_question_stops_before_retrieval(monkeypatch):
+    created, _, response = _ask_with_planner(monkeypatch, {"status": "unsupported", "reason": "dự báo"}, "Dự báo doanh thu năm 2027?")
+    try:
+        assert response.status_code == 200, response.text
+        assistant = response.json()["assistant_message"]
+        assert assistant["mode"] == "question_unsupported" and assistant["citations"] == []
+        assert [event["stage"] for event in assistant["trace"]] == ["question_received", "question_plan", "question_unsupported", "persistence"]
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_planner_provider_failure_falls_back_to_rules(monkeypatch):
+    created, _, response = _ask_with_planner(monkeypatch, TimeoutError("slow"), "By what percent did revenue change from Q1/2025 to Q1/2026?")
+    try:
+        assert response.status_code == 200, response.text
+        assistant = response.json()["assistant_message"]
+        assert assistant["calculation_result"]["value"] == "20"
+        plan_event = next(event for event in assistant["trace"] if event["stage"] == "question_plan")
+        assert plan_event["planner"] == "rules" and plan_event["planner_fallback"] == "PLANNER_PROVIDER_FAILED"
+    finally:
+        cleanup_session(created["id"])
