@@ -194,3 +194,65 @@ def test_text_labels_hide_every_number_but_keep_period_names():
     label = build_catalog(extraction)[0].label
     assert "Q1/2025" in label and "Q1/2026" in label
     assert not any(number in label for number in ("100", "120", "20%", "1,250"))
+
+
+# --- rules added after the Llama 3.1 8B run on 296 questions (scripts/eval_question_planner.py) ---
+
+def test_month_without_year_asks_even_when_the_model_picks_a_year():
+    catalog = [CatalogEntry("luot_kham", None, f"Tháng 1/{y}", "lượt", "Lượt khám", "table") for y in (2025, 2026)]
+    reply = {"status": "ready", "operation": "lookup", "facts": [fact("value", "luot_kham", "Tháng 1/2026", "lượt", None)]}
+    result = plan("Tháng 1 có bao nhiêu lượt khám?", reply, catalog=catalog).plan
+    assert result["status"] == "needs_clarification" and result["clarification"]["options"] == ["Tháng 1/2025", "Tháng 1/2026"]
+
+
+def test_quarter_without_year_is_fine_when_the_last_turn_set_the_year():
+    first = plan("Doanh thu Q1/2026 là bao nhiêu?", {"status": "ready", "operation": "lookup", "facts": [fact("value")]}).plan
+    second = plan("Còn quý 2 thì sao?", {"status": "ready", "operation": "lookup", "facts": [fact("value", period="Q2/2026")]},
+                  history=[{"question": "Doanh thu Q1/2026 là bao nhiêu?", "plan": first}]).plan
+    assert second["status"] == "ready"
+
+
+def test_calendar_year_against_school_years_asks_back():
+    catalog = [CatalogEntry("so_sinh_vien", "Khoa Y", p, "sinh viên", "Số sinh viên", "table") for p in ("Năm học 2024-2025", "Năm học 2025-2026")]
+    reply = {"status": "ready", "operation": "lookup", "facts": [fact("value", "so_sinh_vien", "Năm học 2025-2026", "sinh viên", "Khoa Y")]}
+    assert plan("Số sinh viên khoa Y năm 2025 là bao nhiêu?", reply, catalog=catalog).plan["clarification"]["reason_code"] == "AMBIGUOUS_PERIOD"
+
+
+def test_percent_values_of_two_months_are_not_added():
+    catalog = [CatalogEntry("ty_le_lap_day", None, f"Tháng {m}/2026", "PERCENT", "Tỷ lệ lấp đầy", "table") for m in (1, 2)]
+    reply = {"status": "ready", "operation": "sum", "facts": [fact("item_1", "ty_le_lap_day", "Tháng 1/2026", "PERCENT", None), fact("item_2", "ty_le_lap_day", "Tháng 2/2026", "PERCENT", None)]}
+    assert plan("Cộng tỷ lệ lấp đầy tháng 1/2026 với tháng 2/2026?", reply, catalog=catalog).plan["status"] == "unsupported"
+
+
+def test_blank_subject_takes_the_named_one_or_asks():
+    catalog = [CatalogEntry("doanh_thu", s, "Q1/2026", "VND_BILLION", "Doanh thu", "table") for s in ("Dịch vụ AI", "Di động")]
+    reply = {"status": "ready", "operation": "lookup", "facts": [fact("value", subject=None)]}
+    named = plan("Doanh thu dịch vụ AI Q1/2026?", reply, catalog=catalog).plan
+    assert named["status"] == "ready" and named["facts"][0]["subject"] == "Dịch vụ AI"
+    assert plan("Doanh thu Q1/2026?", reply, catalog=catalog).plan["clarification"]["reason_code"] == "AMBIGUOUS_SUBJECT"
+
+
+def test_unknown_measure_cannot_match_any_number():
+    reply = {"status": "ready", "operation": "lookup", "facts": [fact("value", "unknown")]}
+    result = plan("Lợi nhuận gộp quý 1/2026 là bao nhiêu?", reply, catalog=CATALOG[:3])
+    assert result.plan["facts"][0]["measure"] == "khong_co_trong_tai_lieu" and "measure_not_in_document" in result.rules_applied
+
+
+def test_short_follow_up_after_a_change_does_not_turn_into_a_lookup():
+    first = plan("Doanh thu Q1/2026 tăng bao nhiêu phần trăm so với Q1/2025?", GROWTH).plan
+    second = plan("Còn Tập đoàn?", {"status": "ready", "operation": "lookup", "facts": [fact("value")]},
+                  history=[{"question": "Doanh thu Q1/2026 tăng bao nhiêu phần trăm so với Q1/2025?", "plan": first}]).plan
+    assert second["status"] == "needs_clarification"
+
+
+def test_follow_up_after_an_unanswered_turn_asks_for_context():
+    first = plan("Dự báo doanh thu 2027?", {"status": "unsupported", "reason": "dự báo"}).plan
+    second = plan("Còn Tập đoàn?", {"status": "ready", "operation": "lookup", "facts": [fact("value")]}, history=[{"question": "Dự báo doanh thu 2027?", "plan": first}]).plan
+    assert second["clarification"]["reason_code"] == "MISSING_CONTEXT"
+
+
+def test_school_year_rule_looks_only_at_the_asked_measure():
+    catalog = [CatalogEntry("so_sinh_vien", "Khoa Y", p, "sinh viên", "Số sinh viên", "table") for p in ("Năm học 2024-2025", "Năm học 2025-2026")]
+    catalog.append(CatalogEntry("hoc_phi", "Khoa Y", "Năm 2025", "VND_MILLION", "Học phí", "table"))
+    reply = {"status": "ready", "operation": "lookup", "facts": [fact("value", "so_sinh_vien", "Năm học 2025-2026", "sinh viên", "Khoa Y")]}
+    assert plan("Số sinh viên khoa Y năm 2025 là bao nhiêu?", reply, catalog=catalog).plan["status"] == "needs_clarification"
