@@ -13,7 +13,7 @@ from report_qa.domain.contracts import validate_document_evidence_v2
 def _validator():
     schema = files("report_qa.resources").joinpath("document-evidence-v2.schema.json")
     return Draft202012Validator(
-        json.loads(schema.read_text()), format_checker=FormatChecker()
+        json.loads(schema.read_text(encoding="utf-8")), format_checker=FormatChecker()
     )
 
 

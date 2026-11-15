@@ -238,8 +238,8 @@ def test_packaged_schema_matches_team_contract():
     assert json.loads(
         files("report_qa.resources")
         .joinpath("document-evidence-v2.schema.json")
-        .read_text()
-    ) == json.loads((repo / "contracts/document-evidence-v2.schema.json").read_text())
+        .read_text(encoding="utf-8")
+    ) == json.loads((repo / "contracts/document-evidence-v2.schema.json").read_text(encoding="utf-8"))
 
 
 def test_merged_header_paths_and_repeated_cells_are_not_duplicated():

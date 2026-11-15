@@ -1,19 +1,37 @@
-"""Run the dependency-free backend data-flow skeleton tests."""
+"""Run backend unit/contract tests with the repository virtualenv when present."""
 
 from __future__ import annotations
 
+import subprocess
 import sys
-import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "services" / "backend" / "src"))
-sys.path.insert(0, str(ROOT / "services" / "backend" / "tests"))
+
+
+def test_python() -> str:
+    """Prefer the checked-in development environment over system Python.
+
+    Calling this script as ``python scripts/...`` must not silently run a
+    different interpreter that lacks the PDF/OCR dependencies declared by the
+    project. When no local virtualenv exists, fall back to the caller.
+    """
+    virtualenv_python = ROOT / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    if virtualenv_python.exists() and virtualenv_python.resolve() != Path(sys.executable).resolve():
+        return str(virtualenv_python)
+    return sys.executable
 
 
 if __name__ == "__main__":
-    suite = unittest.defaultTestLoader.discover(str(ROOT / "services" / "backend" / "tests"))
-    result = unittest.TextTestRunner(verbosity=2).run(suite)
-    raise SystemExit(0 if result.wasSuccessful() else 1)
-
+    result = subprocess.call(
+        [
+            test_python(),
+            "-m",
+            "pytest",
+            "services/backend/tests/unit",
+            "services/backend/tests/contract",
+            "-q",
+        ]
+    )
+    raise SystemExit(result)

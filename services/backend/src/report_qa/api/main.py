@@ -242,7 +242,7 @@ def health() -> dict[str, Any]:
 
 
 def public_session(session: dict[str, Any]) -> dict[str, Any]:
-    result = {key: value for key, value in session.items() if key not in {"owner_id", "documents"}}
+    result = {key: value for key, value in session.items() if key not in {"owner_id", "documents", "request_keys"}}
     # Keep the public contract self-healing for documents created by an older
     # local prototype.  Those records may have the binary metadata but no
     # file_url; the reader can still address the immutable stored PDF by id.
@@ -725,6 +725,24 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     session = get_session(session_id)
     trace_id = trace_id_for(request)
     trace = [trace_event("question_received", "ok", trace_id=trace_id, question_chars=len(payload.question))]
+    idempotency_key = request.headers.get("Idempotency-Key")
+    request_fingerprint = sha256(f"{payload.document_id}|{payload.question}".encode("utf-8")).hexdigest()
+    request_keys = session.setdefault("request_keys", {})
+    if idempotency_key and len(idempotency_key) > 200:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_IDEMPOTENCY_KEY", "message": "Idempotency-Key quá dài"})
+    if idempotency_key and idempotency_key in request_keys:
+        stored = request_keys[idempotency_key]
+        if stored.get("request_hash") != request_fingerprint:
+            raise HTTPException(status_code=409, detail={"code": "IDEMPOTENCY_KEY_REUSED", "message": "Idempotency-Key đã được dùng cho payload khác"})
+        return stored["response"]
+    def finish(response: dict[str, Any]) -> dict[str, Any]:
+        if idempotency_key:
+            request_keys[idempotency_key] = {"request_hash": request_fingerprint, "response": response, "created_at": utc_now()}
+            if len(request_keys) > 128:
+                oldest = min(request_keys, key=lambda key: request_keys[key].get("created_at", ""))
+                request_keys.pop(oldest, None)
+            save_catalog(catalog)
+        return response
     document = next((item for item in session["documents"] if item["id"] == payload.document_id), None)
     if document is None:
         raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
@@ -759,7 +777,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         )
     )
     if question_plan["status"] == "unsupported":
-        return _persist_unsupported(session, session_id, document, payload.question, question_plan, trace, trace_id)
+        return finish(_persist_unsupported(session, session_id, document, payload.question, question_plan, trace, trace_id))
     if question_plan["status"] == "needs_clarification":
         clarification = question_plan["clarification"]
         trace.append(trace_event("clarification_requested", "waiting_for_user", reason_code=clarification["reason_code"]))
@@ -794,7 +812,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         session["updated_at"] = now
         save_catalog(catalog)
         flow_log("CLARIFICATION_PERSISTED", trace_id=trace_id, session_id=session_id, document_id=document["id"], assistant_message_id=assistant_message["id"], reason_code=clarification["reason_code"])
-        return {"user_message": user_message, "assistant_message": assistant_message, "limitations": ["Đang chờ người dùng chọn cách hiểu trước khi truy hồi hoặc tính toán"], "trace_id": trace_id}
+        return finish({"user_message": user_message, "assistant_message": assistant_message, "limitations": ["Đang chờ người dùng chọn cách hiểu trước khi truy hồi hoặc tính toán"], "trace_id": trace_id})
     retrieval_question = question_plan["original_question"]
     ranked_pages = relevant_pages(document, retrieval_question, limit=3)
     page, score = ranked_pages[0]
@@ -934,12 +952,12 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         session["updated_at"] = now
         save_catalog(catalog)
         flow_log("ANSWER_PERSISTED", trace_id=trace_id, session_id=session_id, document_id=document["id"], assistant_message_id=assistant_message["id"], citation_pages=structured_answer["cited_pages"], mode="deterministic_calculation", calculation_status=calculation["status"])
-        return {
+        return finish({
             "user_message": user_message,
             "assistant_message": assistant_message,
             "limitations": (["Chưa xác định được nguồn biểu đồ hoặc số liệu đủ căn cứ; cần chọn vùng nguồn và xác minh nhãn/trục"] if resolution["status"] == "chart_required" else []),
             "trace_id": trace_id,
-        }
+        })
     provider = None
     provider_answer = None
     mode = "deterministic_text_retrieval"
@@ -1021,7 +1039,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         citation_pages=citation_pages,
         mode=mode,
     )
-    return {"user_message": user_message, "assistant_message": assistant_message, "limitations": limitations, "trace_id": trace_id}
+    return finish({"user_message": user_message, "assistant_message": assistant_message, "limitations": limitations, "trace_id": trace_id})
 
 
 @app.get(

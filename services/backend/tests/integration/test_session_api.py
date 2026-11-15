@@ -186,6 +186,33 @@ def test_uploaded_pdf_is_extracted_and_chat_returns_a_page_citation() -> None:
         cleanup_session(created["id"])
 
 
+def test_message_idempotency_replays_without_duplicate_answer() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Idempotency"}).json()["session"]
+    try:
+        uploaded = client.post(
+            f"/api/v1/sessions/{created['id']}/documents",
+            files={"file": ("idempotency.pdf", pdf_with_text("Revenue Q1/2026 was 120."), "application/pdf")},
+        )
+        assert uploaded.status_code == 200, uploaded.text
+        document_id = uploaded.json()["document"]["id"]
+        key = "test-idempotency-key"
+        payload = {"document_id": document_id, "question": "What was revenue in Q1/2026?"}
+        first = client.post(f"/api/v1/sessions/{created['id']}/messages", json=payload, headers={"Idempotency-Key": key})
+        second = client.post(f"/api/v1/sessions/{created['id']}/messages", json=payload, headers={"Idempotency-Key": key})
+        assert first.status_code == second.status_code == 200
+        assert first.json()["assistant_message"]["id"] == second.json()["assistant_message"]["id"]
+        session = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]
+        assert len(session["messages"]) == 2
+        conflict = client.post(
+            f"/api/v1/sessions/{created['id']}/messages",
+            json={"document_id": document_id, "question": "A different question"},
+            headers={"Idempotency-Key": key},
+        )
+        assert conflict.status_code == 409
+        assert conflict.json()["detail"]["code"] == "IDEMPOTENCY_KEY_REUSED"
+    finally:
+        cleanup_session(created["id"])
+
 def test_unmatched_question_is_rejected_instead_of_sent_to_ai() -> None:
     created = client.post("/api/v1/sessions", json={"title": "Retrieval guard"}).json()["session"]
     try:
