@@ -187,3 +187,103 @@ button { -webkit-tap-highlight-color: transparent; }
   .chat-column { height: 680px; }
   .audit-drawer, .evidence-drawer { inset: 62px 8px 8px; }
 }
+/* UI/UX Pro Max alignment: Flat Design workspace system */
+:root {
+  --sl-bg: #f5f3ff;
+  --sl-surface: #ffffff;
+  --sl-surface-soft: #faf9ff;
+  --sl-border: #e2e8f0;
+  --sl-border-strong: #cbd5e1;
+  --sl-ink: #1e1b4b;
+  --sl-muted: #475569;
+  --sl-subtle: #64748b;
+  --sl-navy: #1e1b4b;
+  --sl-navy-2: #6366f1;
+  --sl-teal: #10b981;
+  --sl-teal-soft: #ecfdf5;
+  --sl-purple: #6366f1;
+  --sl-purple-soft: #eef2ff;
+  --sl-amber: #b7791f;
+  --sl-danger: #b4232f;
+  --sl-shadow-sm: none;
+  --sl-shadow-md: none;
+  --sl-transition: 180ms ease;
+  font-family: "Plus Jakarta Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--sl-ink);
+  background: var(--sl-bg);
+}
+
+* { box-shadow: none !important; }
+button, input, textarea { transition: border-color var(--sl-transition), background-color var(--sl-transition), color var(--sl-transition), opacity var(--sl-transition); }
+button:hover, a:hover { transform: none !important; }
+
+.topbar { background: var(--sl-surface); border-bottom-color: var(--sl-border); backdrop-filter: none; }
+.brand { color: var(--sl-ink); }
+.brand span { border-radius: 4px; background: var(--sl-purple); color: #fff; }
+.upload-button { border-radius: 4px; background: var(--sl-teal); color: #fff; }
+.upload-button:hover { background: #0b9b6a; }
+.audit-button { border-radius: 4px; border-color: var(--sl-border-strong); color: var(--sl-ink); }
+.audit-button:hover { border-color: var(--sl-purple); background: var(--sl-purple-soft); color: var(--sl-purple); }
+.storage-pill { border-radius: 4px; border-color: #bbf7d0; background: var(--sl-teal-soft); color: #087f5b; }
+
+.workspace { background: var(--sl-bg); }
+.session-sidebar { background: var(--sl-surface); border-right-color: var(--sl-border); }
+.session-heading button, .session-search, .sidebar-note { border-radius: 4px; border-color: var(--sl-border); }
+.session-heading button:hover { border-color: var(--sl-purple); background: var(--sl-purple-soft); color: var(--sl-purple); }
+.session-search:focus { border-color: var(--sl-purple); box-shadow: 0 0 0 3px rgba(99,102,241,.16) !important; }
+.session-item { border-radius: 4px; }
+.session-item.active { border-color: #c7d2fe; border-left: 3px solid var(--sl-purple); border-radius: 4px; background: var(--sl-purple-soft); }
+.session-icon { border-radius: 4px; background: #eef2ff; color: var(--sl-purple); }
+.document-list > button, .document-list > button:hover, .document-list > button.selected { border-radius: 4px; }
+.document-list > button.selected { border-color: #c7d2fe; background: var(--sl-surface); }
+
+.reader-column { background: #ede9fe; }
+.reader-toolbar { background: var(--sl-surface); border-bottom-color: var(--sl-border); }
+.page-control button, .zoom-control button { border-radius: 4px; border-color: var(--sl-border-strong); }
+.page-control button:hover, .zoom-control button:hover { border-color: var(--sl-purple); background: var(--sl-purple-soft); color: var(--sl-purple); }
+.pdf-viewport { background-color: #ede9fe; background-image: radial-gradient(#c4b5fd 1px, transparent 1px); }
+.canvas-mat canvas { border: 1px solid #dbe4ec; border-radius: 0; }
+.reader-loading, .reader-error, .toast { border-radius: 4px; }
+.toast.info { background: var(--sl-navy); }
+.toast.error { background: var(--sl-danger); }
+
+.chat-column { background: var(--sl-surface); border-left-color: var(--sl-border); }
+.ai-avatar { border-radius: 4px; background: var(--sl-purple); color: #fff; }
+.mode-badge { border-radius: 4px; border-color: #c7d2fe; background: var(--sl-purple-soft); color: #4f46e5; }
+.message-avatar { border-radius: 4px; }
+.message.user .message-avatar { background: var(--sl-navy); }
+.message p { border-radius: 4px; background: #f8fafc; color: var(--sl-ink); }
+.message.user p { border-radius: 4px; background: var(--sl-navy); }
+.chat-composer { border-radius: 4px; border-color: var(--sl-border-strong); }
+.chat-composer:focus-within { border-color: var(--sl-purple); box-shadow: 0 0 0 3px rgba(99,102,241,.16) !important; }
+.chat-composer button { border-radius: 4px; background: var(--sl-teal); }
+.chat-composer button:hover:not(:disabled) { background: #0b9b6a; }
+.welcome-mark { border-radius: 4px; border-color: #c7d2fe; background: var(--sl-purple-soft); color: var(--sl-purple); }
+.welcome button { border-radius: 4px; border-color: #c7d2fe; background: var(--sl-surface); color: var(--sl-purple); }
+
+.claim-card, .evidence-quote, .formula-card, .answer-warnings, .retrieval-excerpt-card, .audit-drawer, .evidence-drawer, .evidence-record, .audit-event { border-radius: 4px; }
+.claim-card { border-color: var(--sl-border); border-left-color: var(--sl-teal); background: var(--sl-surface); }
+.evidence-quote { border-color: #c7d2fe; background: var(--sl-purple-soft); color: #3730a3; }
+.evidence-quote:hover { border-color: var(--sl-purple); background: #e0e7ff; }
+.formula-card { border-left-color: var(--sl-teal); border-radius: 4px; background: var(--sl-teal-soft); }
+.answer-table th { background: var(--sl-purple-soft); color: #3730a3; }
+.answer-table th, .answer-table td { border-color: var(--sl-border); }
+.answer-warnings { border-color: #f5d48a; background: #fffbeb; color: #854d0e; }
+.answer-failure { border-radius: 4px; border-color: #fecaca; background: #fff1f2; color: var(--sl-danger); }
+
+.audit-drawer, .evidence-drawer { border-color: var(--sl-border-strong); }
+.audit-drawer-header { border-bottom-color: var(--sl-border); }
+.audit-drawer-header button { border-radius: 4px; border-color: var(--sl-border); }
+.audit-scope-grid > div, .audit-summary > div { border-radius: 4px; border-color: var(--sl-border); background: var(--sl-surface-soft); }
+.audit-request p { border-radius: 4px; background: var(--sl-teal-soft); color: #065f46; }
+.evidence-record-main:hover { background: var(--sl-purple-soft); }
+.evidence-edit-button { border-radius: 4px; border-color: #a7f3d0; background: var(--sl-teal-soft); color: #047857; }
+
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(99,102,241,.35); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
+
+/* Final Flat Design cleanup: keep the reader and retrieval cards solid. */
+.pdf-viewport { background-image: none; }
+.retrieval-excerpt-card { background: var(--sl-surface); }
