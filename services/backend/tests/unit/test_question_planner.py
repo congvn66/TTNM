@@ -48,7 +48,7 @@ def plan(question, reply, **kwargs):
 GROWTH = {"status": "ready", "operation": "growth_rate", "facts": [fact("current"), fact("baseline", period="Q1/2025")]}
 
 
-# --- the 10 acceptance tests of doc/HANDOUT/duc-anh-question-planning.md section 8 ---
+# --- the 10 acceptance tests of docs/HANDOUT/duc-anh-question-planning.md section 8 ---
 
 def test_1_lookup_has_period_and_subject():
     result = plan("Doanh thu thuần của Tập đoàn Q1/2026 là bao nhiêu?", {"status": "ready", "operation": "lookup", "facts": [fact("value")]})

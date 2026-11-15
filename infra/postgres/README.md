@@ -1,7 +1,7 @@
 # PostgreSQL local runtime
 
 `infra/compose/dev.yml` starts PostgreSQL 16 and mounts
-`doc/initial-schema.sql` as the first-init SQL script. The SQL file is the
+`docs/initial-schema.sql` as the first-init SQL script. The SQL file is the
 reviewed baseline; it is not a substitute for versioned Alembic migrations.
 
 ## Start

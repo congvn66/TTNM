@@ -103,4 +103,3 @@
 - Doi meaning/priority/acceptance cua requirement phai cap nhat `traceability.md`.
 - Them state/operation/error code phai cap nhat domain rules, API contract, mock generator va test.
 - Requirement lien quan privacy/retention/provider can ADR hoac quyet dinh duoc ghi ro.
-

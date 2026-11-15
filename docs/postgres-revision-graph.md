@@ -81,4 +81,3 @@ switch the API read/write repository together.
 | Scanned page | optional PyMuPDF + Tesseract | OCR token bbox/confidence, or `OCR_*` warning; never empty silent success |
 | Single-axis vector bar chart requested by a plan | pypdf vector reader | `direct_label` or `axis_estimation`, each with provenance |
 | Stacked/dual-axis/ambiguous chart | vector reader | no valid numeric evidence; warning/status asks for a safer source |
-

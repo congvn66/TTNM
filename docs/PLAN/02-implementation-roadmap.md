@@ -136,4 +136,3 @@ Exit gate:
 | S5 | S3 + contract freeze | Calculator/unit tests |
 | S6 | S4 + S5 | Correction UI bằng fake API |
 | S7 | S4-S6 | Evaluation/benchmark tooling |
-

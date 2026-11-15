@@ -90,7 +90,7 @@ tests/
 scripts/
   migrate_local_runtime_to_postgres.py
   inspect_trace.py
-doc/
+docs/
   adr/
   data-model.md
   processing-flows.md
@@ -105,7 +105,7 @@ Mỗi PR dưới đây phải nhỏ, chạy độc lập và có rollback. Khôn
 
 ### PR P0.1 - Chốt hợp đồng dữ liệu và mapping 23 bảng
 
-**Mục tiêu:** loại bỏ drift giữa `domain/models.py`, `doc/data-model.md`, `doc/initial-schema.sql`, contracts và repository ports.
+**Mục tiêu:** loại bỏ drift giữa `domain/models.py`, `docs/data-model.md`, `docs/initial-schema.sql`, contracts và repository ports.
 
 **Công việc:**
 
@@ -115,7 +115,7 @@ Mỗi PR dưới đây phải nhỏ, chạy độc lập và có rollback. Khôn
 4. Chốt source replacement: chỉ inactive source được thay; không ảnh hưởng source khác.
 5. Chốt job lease: `lease_token`, expiry, heartbeat, attempt limit, reclaim và terminal states.
 6. Chốt canonical validation path cho bốn JSON Schema trong `contracts/`.
-7. Cập nhật `doc/data-model.md`, `doc/processing-flows.md` và ADR nếu meaning thay đổi.
+7. Cập nhật `docs/data-model.md`, `docs/processing-flows.md` và ADR nếu meaning thay đổi.
 
 **Mapping bắt buộc review:**
 

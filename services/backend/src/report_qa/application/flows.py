@@ -1,7 +1,7 @@
 """Application data-flow skeleton.
 
 Each flow expresses the transaction boundary and fence checks described in
-``doc/processing-flows.md``. Persistence is intentionally delegated to the
+``docs/processing-flows.md``. Persistence is intentionally delegated to the
 repository port; this module contains no SQL or provider SDK calls.
 """
 

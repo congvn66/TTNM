@@ -13,4 +13,4 @@ value, A=50, labelled `đọc từ nhãn`, with its reviewed printed-label bbox.
 Unknown table units/periods remain null rather than invented.
 
 Run instructions and integration limitations:
-[Docling/DePlot handoff](../../doc/HANDOUT/tien-docling-deplot.md).
+[Docling/DePlot handoff](../../docs/HANDOUT/tien-docling-deplot.md).

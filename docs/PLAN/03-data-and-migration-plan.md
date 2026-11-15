@@ -123,4 +123,3 @@ Nếu nhóm giữ một migration 0001 duy nhất cho MVP, vẫn phải tổ ch�
 - Không có application code đọc ORM session/query trực tiếp ngoài repository adapter.
 - Mọi mutation quan trọng có owner predicate, transaction và race test.
 - Migration head dựng được DB từ zero và khớp 23-table inventory.
-

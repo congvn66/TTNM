@@ -107,4 +107,3 @@ Khong dung embedding/LLM de quyet dinh dependency. AI co the de xuat candidate, 
 Toi thieu: `missing_measure`, `missing_period`, `ambiguous_growth_basis`, `source_conflict`, `unit_incompatible`, `zero_denominator`, `incomplete_comparison_group`, `extraction_error`, `provider_invalid_output`, `stale_data_revision`, `revision_conflict`.
 
 UI message co the thay doi/dich; reason code khong doi ngu nghia trong cung API major version.
-

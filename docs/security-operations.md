@@ -68,4 +68,3 @@ Alert P0: cross-owner detection, backup/restore failure, secret leak. P1: queue 
 4. Bao toan log, khong copy du lieu nhay cam vao issue cong khai.
 5. Recover/forward-fix; chay integrity validator va regression test.
 6. Ghi timeline, impact, root cause va action item.
-

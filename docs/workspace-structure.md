@@ -47,7 +47,7 @@ Kiến trúc backend tuân theo ADR hiện tại: một codebase modular monolit
 |   |-- mock_data/
 |   `-- e2e/
 |-- scripts/
-`-- doc/
+`-- docs/
     `-- adr/
 ```
 
@@ -64,15 +64,32 @@ Các `.gitkeep` chỉ giúp Git lưu thư mục rỗng. `datasets/private/.gitig
 | `datasets/` | Manifest, annotation, split và schema của bộ đánh giá | PDF người dùng, token, PII hoặc dữ liệu riêng trong Git |
 | `tests/` | Fixture dùng chung và E2E xuyên thành phần | Unit test thuộc riêng một module backend/web |
 | `scripts/` | Công cụ repository, generator và executable specification | Runtime service hoặc logic chỉ được kiểm chứng qua script |
-| `doc/` | Source of truth cho yêu cầu, data, API, flow, ADR và delivery | Secret, binary build hoặc tài liệu không còn chủ sở hữu |
+| `docs/` | Source of truth cho yêu cầu, data, API, flow, ADR và delivery | Secret, binary build hoặc tài liệu không còn chủ sở hữu |
 
 ### 3.1 Web
 
+Frontend dùng React + Vite + PDF.js. Boundary hiện tại trên branch `migration` là:
+
+```text
+apps/web/src/
+|-- app/
+|   |-- App.jsx          # composition root
+|   |-- providers.jsx    # provider boundary, hiện là identity provider
+|   `-- app.css          # token/layout dùng toàn app
+|-- features/
+|   |-- workspace/
+|   |   `-- WorkspaceScreen.jsx  # state orchestration: session, upload, chat
+|   `-- trace/
+|       `-- trace.css             # style cho data-flow inspector
+`-- main.jsx
+```
+
+`WorkspaceScreen.jsx` vẫn là composition lớn ở migration step đầu tiên; các feature `documents`, `pdf-reader`, `chat` và `evidence` sẽ được tách thành component riêng ở bước kế tiếp khi có test component tương ứng. Không tạo thư mục rỗng chỉ để khớp sơ đồ.
+
 - `public/`: tài nguyên tĩnh được phục vụ nguyên trạng.
-- `src/`: source của ứng dụng web. Hiện có demo buildless để review data flow; không có framework dependency hay API runtime.
+- `src/`: source React/Vite, PDF.js viewer, API client và UI feature.
 - `tests/`: component/integration test thuộc web. E2E xuyên web-backend đặt ở `tests/e2e/`.
 - Web chỉ gửi intent và hiển thị contract từ backend; không tự quyết định authorization, dependency hoặc kết quả tính toán.
-
 ### 3.2 Backend
 
 - `src/`: một codebase dùng chung cho API và worker.
@@ -99,33 +116,31 @@ API và worker được tách ở entrypoint/process, không tách domain thành
 
 Không sao chép cùng một dataset sang nhiều vùng. Test chỉ tham chiếu ID/manifest hoặc fixture tối thiểu cần thiết.
 
-## 4. Cấu trúc dự kiến sau khi chốt scaffold
+## 4. Cấu trúc module và hướng tách tiếp
 
-Phần dưới là định hướng module chi tiết hơn, chưa được tạo trong workspace:
+Cây dưới đây phân biệt phần đã triển khai với phần sẽ tách khi có hành vi độc lập. Migration không di chuyển backend hàng loạt để tránh phá import/API; backend hiện giữ layered-first modular monolith.
 
 ```text
 apps/web/src/
-|-- app/                 # bootstrap, route, provider
-|-- features/            # document, chat, evidence, answer
-|-- components/          # UI dùng chung, không chứa nghiệp vụ
-`-- lib/                 # API client, formatter, utilities
+|-- app/                 # bootstrap, provider, global CSS
+|-- features/
+|   |-- workspace/       # composition/state orchestration hiện tại
+|   |-- documents/       # boundary dự kiến cho session/document list
+|   |-- pdf-reader/      # boundary dự kiến cho PDF.js và evidence overlay
+|   |-- chat/            # boundary dự kiến cho composer/answer renderer
+|   |-- evidence/        # boundary dự kiến cho numeric revision drawer
+|   `-- trace/           # data-flow audit UI
+`-- shared/              # chỉ tạo khi có ít nhất hai consumer
 
 services/backend/src/report_qa/
-|-- api/                 # HTTP entrypoint, middleware, request mapping
-|-- worker/              # job entrypoint và handlers
-|-- modules/
-|   |-- identity/
-|   |-- documents/
-|   |-- extraction/
-|   |-- conversations/
-|   |-- evidence/
-|   |-- answers/
-|   `-- jobs/
-`-- shared/              # primitive kỹ thuật thật sự dùng chung
+|-- api/                 # FastAPI entrypoint, HTTP mapping, local storage facade
+|-- application/         # extraction, planning, calculation, flow orchestration
+|-- domain/              # contracts, models, invariants, errors
+|-- infrastructure/      # persistence/provider adapters
+`-- worker/              # job entrypoint/handlers
 ```
 
-Mỗi backend module sau này nên có ranh giới `domain`, `application`, `infrastructure` rõ trong chính module nếu độ phức tạp yêu cầu. Không tạo tầng trống chỉ để khớp mẫu kiến trúc.
-
+Backend không tạo `modules/` rỗng. Khi một domain có lifecycle, repository và test riêng, tách module theo layered boundary (`domain`, `application`, `infrastructure`) thay vì copy domain model giữa API và worker.
 ## 5. Quy tắc đặt file
 
 1. Đặt file gần thành phần sở hữu nhất; chỉ đưa lên vùng dùng chung khi có ít nhất hai consumer thực tế.
@@ -136,17 +151,13 @@ Mỗi backend module sau này nên có ranh giới `domain`, `application`, `inf
 6. Mọi secret và dữ liệu người dùng chỉ tồn tại ngoài Git; file ví dụ sau này chỉ dùng giá trị giả.
 7. Tên thư mục và file dùng `lowercase-kebab-case` cho docs/config chung; package source tuân theo convention của ngôn ngữ đã chốt.
 
-## 6. Những thứ chủ ý chưa tạo
+## 6. Phần chưa tách hoặc chưa bật runtime
 
-- `package.json`, lockfile hoặc cấu hình bundler frontend (demo `apps/web/` chạy bằng static server và ESM thường).
-- `pyproject.toml`, package backend hoặc entrypoint API/worker.
-- Dockerfile, Compose manifest và cấu hình triển khai.
-- Migration runner và migration SQL thực thi.
-- Pipeline CI/CD, environment template và secret mapping.
-- FastAPI route, SQLAlchemy model/repository, object-storage adapter và provider adapter.
+- `WorkspaceScreen.jsx` chưa tách hoàn toàn thành các feature component; migration giữ nguyên luồng để giảm rủi ro UI.
+- PostgreSQL/Alembic, object storage và provider thật đã có contract/scaffold nhưng runtime chính vẫn dùng JSON local theo `storage-and-data-runtime.md`.
+- CI/CD, production auth, queue thật và observability backend đầy đủ chưa phải mục tiêu của migration branch.
 
-Các artifact trên chỉ nên được tạo sau khi các quyết định P0 liên quan trong `open-questions.md` được chốt hoặc một issue scaffold xác định rõ stack/version. Chi tiết phần code đã có xem `data-flow-code-skeleton.md`.
-
+Các phần trên chỉ được bật sau khi có contract, migration/test và exit gate tương ứng; không đưa adapter thử nghiệm vào đường chạy chính chỉ để lấp đầy cây thư mục. Chi tiết xem `docs/PLAN/` và `data-flow-code-skeleton.md`.
 ## 7. Thứ tự scaffold đề xuất
 
 1. Chốt runtime, package manager, version policy và local service dependencies.

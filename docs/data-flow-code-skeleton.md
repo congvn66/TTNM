@@ -73,7 +73,7 @@ Các entity account/project/source đầy đủ vẫn do schema SQL và migratio
 - `InMemoryDataRepository` là test adapter, không được dùng làm persistence production.
 - Khi thêm PostgreSQL adapter, giữ nguyên behavior contract và chuyển các thao tác state thành transaction/row lock/FK.
 - Khi thêm provider adapter, map output vào `ExtractionFlow.complete` sau khi validate JSON Schema provider.
-- Khi thêm API, map stable domain errors (`revision_conflict`, `not_found`, `invariant_violation`) sang error envelope trong `doc/api-contract.md`.
+- Khi thêm API, map stable domain errors (`revision_conflict`, `not_found`, `invariant_violation`) sang error envelope trong `docs/api-contract.md`.
 
 ## 5. Cách chạy
 

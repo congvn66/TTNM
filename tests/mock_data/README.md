@@ -17,4 +17,4 @@ python scripts/run_flow_tests.py
 
 `scripts/validate_mock_data.py` kiem FK logic, owner/chat/run isolation, current pointer, value/status invariant, split leakage, phan bo 180 cau, PDF envelope/page count va checksum.
 
-Du lieu nay chi la executable fixture cho domain/flow. Benchmark chat luong tieng Viet that van phai duoc gan nhan theo `doc/evaluation-dataset.md`.
+Du lieu nay chi la executable fixture cho domain/flow. Benchmark chat luong tieng Viet that van phai duoc gan nhan theo `docs/evaluation-dataset.md`.

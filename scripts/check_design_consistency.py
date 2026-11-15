@@ -8,7 +8,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DOC = ROOT / "doc"
+DOC = ROOT / "docs"
 EXPECTED_TABLES = {
     "users", "projects", "documents", "project_documents", "document_versions",
     "extraction_runs", "source_regions", "extracted_evidences", "chats",

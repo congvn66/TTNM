@@ -64,7 +64,7 @@ message, evidence revision hoặc answer revision.
 ## Trạng thái triển khai PostgreSQL
 
 Đã thêm runtime local PostgreSQL 16 tại `infra/compose/dev.yml`, baseline schema
-được mount từ `doc/initial-schema.sql`, typed settings và connectivity probe.
+được mount từ `docs/initial-schema.sql`, typed settings và connectivity probe.
 API vẫn đang dùng JSON adapter mặc định (`PERSISTENCE_BACKEND=json`); chưa được
 phép chuyển cờ sang `postgres` trước khi repository/UoW, Alembic migration,
 data import và integration/race tests hoàn tất. Điều này tránh tình trạng health

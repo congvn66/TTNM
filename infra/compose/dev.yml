@@ -11,7 +11,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - sourcelens-postgres-data:/var/lib/postgresql/data
-      - ../../doc/initial-schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql:ro
+      - ../../docs/initial-schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s

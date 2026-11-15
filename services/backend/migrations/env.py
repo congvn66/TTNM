@@ -10,7 +10,7 @@ from sqlalchemy import engine_from_config, pool
 
 config = context.config
 ROOT = Path(__file__).resolve().parents[3]
-BASELINE = ROOT / "doc" / "initial-schema.sql"
+BASELINE = ROOT / "docs" / "initial-schema.sql"
 
 
 def run_migrations_offline() -> None:

@@ -1,6 +1,6 @@
 """Create the reviewed 23-table PostgreSQL baseline.
 
-The design baseline is intentionally kept in ``doc/initial-schema.sql`` so
+The design baseline is intentionally kept in ``docs/initial-schema.sql`` so
 design review, Docker bootstrap and Alembic use the same SQL. Later revisions
 must be explicit migrations and must not edit this file.
 """
@@ -19,7 +19,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    schema_file = Path(__file__).resolve().parents[4] / "doc" / "initial-schema.sql"
+    schema_file = Path(__file__).resolve().parents[4] / "docs" / "initial-schema.sql"
     op.execute(schema_file.read_text(encoding="utf-8"))
 
 

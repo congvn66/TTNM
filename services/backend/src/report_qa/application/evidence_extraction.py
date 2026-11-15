@@ -153,11 +153,30 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
         width = float(page.mediabox.width) or 1.0
         height = float(page.mediabox.height) or 1.0
         spans: list[dict[str, Any]] = []
+        last_span: dict[str, Any] | None = None
 
         def visitor(text: str, _cm: Any, tm: Any, _font: Any, font_size: float) -> None:
+            nonlocal last_span
             if not text or not text.strip():
                 return
-            spans.append({"text": text, "x": float(tm[4]), "y": float(tm[5]), "font_size": float(font_size or 10.0)})
+            size = float(font_size or 10.0)
+            x, y = float(tm[4]), float(tm[5])
+            # Some valid PDFs reset pypdf's text matrix to (0, 0) for a
+            # continuation run after a separate BT/ET block. A leading space
+            # means that run belongs to the previous visual line; carry the
+            # previous baseline forward so table row/column inference remains
+            # stable instead of creating a phantom row at the page origin.
+            if (
+                last_span is not None
+                and text[:1].isspace()
+                and abs(x) < 1e-6
+                and abs(y) < 1e-6
+            ):
+                previous_text = last_span["text"].strip()
+                x = last_span["x"] + max(size, len(previous_text) * size * 0.48)
+                y = last_span["y"]
+            last_span = {"text": text, "x": x, "y": y, "font_size": size}
+            spans.append(last_span)
 
         page_text = page.extract_text(visitor_text=visitor) or ""
         pages.append({"page": page_number, "text": page_text})
