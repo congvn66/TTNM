@@ -97,7 +97,7 @@ def test_session_owns_documents_and_serves_the_uploaded_binary() -> None:
     assert created.status_code == 200
     session_id = created.json()["session"]["id"]
     try:
-        source = b"%PDF-1.7\n% SourceLens integration test"
+        source = pdf_with_text("SourceLens integration test")
         uploaded = client.post(
             f"/api/v1/sessions/{session_id}/documents",
             files={"file": ("quarter.pdf", source, "application/pdf")},
@@ -109,6 +109,7 @@ def test_session_owns_documents_and_serves_the_uploaded_binary() -> None:
         assert uploaded.json()["persistence"] == {
             "binary_retained": True,
             "max_bytes": 100 * 1024 * 1024,
+            "max_pages": 500,
         }
         session = client.get(f"/api/v1/sessions/{session_id}").json()["session"]
         assert session["documents"][0]["file_name"] == "quarter.pdf"
@@ -120,6 +121,35 @@ def test_session_owns_documents_and_serves_the_uploaded_binary() -> None:
         cleanup_session(session_id)
 
 
+
+def test_upload_rejects_malformed_pdf_and_page_limit() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Upload limits"}).json()["session"]
+    previous_limit = api_main.MAX_PDF_PAGES
+    try:
+        malformed = client.post(
+            f"/api/v1/sessions/{created['id']}/documents",
+            files={"file": ("broken.pdf", b"%PDF-1.7\nnot-a-pdf", "application/pdf")},
+        )
+        assert malformed.status_code == 422
+        assert malformed.json()["detail"]["code"] == "INVALID_PDF"
+        assert client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"] == []
+
+        api_main.MAX_PDF_PAGES = 1
+        writer = PdfWriter()
+        writer.add_blank_page(width=595, height=842)
+        writer.add_blank_page(width=595, height=842)
+        payload = BytesIO()
+        writer.write(payload)
+        too_many = client.post(
+            f"/api/v1/sessions/{created['id']}/documents",
+            files={"file": ("many-pages.pdf", payload.getvalue(), "application/pdf")},
+        )
+        assert too_many.status_code == 413
+        assert too_many.json()["detail"]["code"] == "PDF_TOO_MANY_PAGES"
+        assert client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"] == []
+    finally:
+        api_main.MAX_PDF_PAGES = previous_limit
+        cleanup_session(created["id"])
 def test_legacy_document_without_file_url_gets_a_reader_url() -> None:
     session_id = "legacy-url-test"
     document_id = "legacy-document"

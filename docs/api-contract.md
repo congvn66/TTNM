@@ -249,7 +249,7 @@ These endpoints are a local vertical slice, not the final authenticated producti
 | `GET /api/v1/sessions` | List server-owned local sessions and nested documents |
 | `POST /api/v1/sessions` | Create a session; accepts title only, never client `owner_id` |
 | `GET /api/v1/sessions/{session_id}` | Read session, documents and message history |
-| `POST /api/v1/sessions/{session_id}/documents` | Stream, validate, hash and persist one PDF, maximum 100 MiB |
+| `POST /api/v1/sessions/{session_id}/documents` | Stream, validate, hash and persist one PDF, maximum 100 MiB and 500 pages |
 | `GET /api/v1/sessions/{session_id}/documents/{document_id}/file` | Return the immutable original PDF inline |
 | `POST /api/v1/sessions/{session_id}/messages` | Retrieve up to three pages, reject low-overlap non-summary questions (score < 2), and persist question/answer/citation |
 | `GET /api/v1/sessions/{session_id}/messages/{message_id}/trace` | Read the persisted stage trace for one assistant answer |

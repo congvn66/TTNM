@@ -16,6 +16,7 @@ from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, Uplo
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
+from pypdf import PdfReader
 
 from report_qa.application.evidence_extraction import extract_pdf_artifact
 from report_qa.application.chart_reading import ChartReadRequest, PdfVectorChartReader
@@ -143,6 +144,7 @@ def favicon() -> Response:
 catalog = load_catalog()
 chart_reader = DeplotChartReader() if os.getenv("CHART_READER_BACKEND", "deplot") == "deplot" else PdfVectorChartReader()
 MAX_PDF_BYTES = 100 * 1024 * 1024
+MAX_PDF_PAGES = 500
 LOCAL_OWNER_ID = "local-test-owner"
 
 
@@ -314,6 +316,14 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
     except Exception:
         temporary_path.unlink(missing_ok=True)
         raise
+    try:
+        page_count = len(PdfReader(str(final_path), strict=False).pages)
+    except Exception as exc:
+        final_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=422, detail={"code": "INVALID_PDF", "message": "Không thể đọc cấu trúc PDF"}) from exc
+    if page_count > MAX_PDF_PAGES:
+        final_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=413, detail={"code": "PDF_TOO_MANY_PAGES", "message": f"PDF vượt quá giới hạn {MAX_PDF_PAGES} trang"})
     now = utc_now()
     record = {
         "id": document_id,
@@ -326,7 +336,7 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
         "storage_name": storage_name,
         "extraction_name": f"{document_id}.json",
     }
-    record.update({"extraction_status": "queued", "page_count": None, "numeric_evidence_count": 0, "extraction_error": None})
+    record.update({"extraction_status": "queued", "page_count": page_count, "numeric_evidence_count": 0, "extraction_error": None})
     session["documents"].append(record)
     session["updated_at"] = now
     save_catalog(catalog)
@@ -433,7 +443,7 @@ async def upload_session_document(session_id: str, request: Request, background_
     flow_log("UPLOAD_ACCEPTED", trace_id=trace_id, session_id=session_id, file_name_present=bool(file.filename))
     document = await persist_pdf(file, session, trace_id=trace_id)
     background_tasks.add_task(complete_document_extraction, session_id, document["id"], trace_id)
-    return {"session_id": session_id, "document": document, "persistence": {"binary_retained": True, "max_bytes": MAX_PDF_BYTES}}
+    return {"session_id": session_id, "document": document, "persistence": {"binary_retained": True, "max_bytes": MAX_PDF_BYTES, "max_pages": MAX_PDF_PAGES}}
 
 
 @app.get(
@@ -1076,4 +1086,4 @@ async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = 
         catalog["sessions"][default_id] = {"id": default_id, "owner_id": LOCAL_OWNER_ID, "title": "Uploads", "created_at": now, "updated_at": now, "documents": [], "messages": []}
     document = await persist_pdf(file, catalog["sessions"][default_id])
     background_tasks.add_task(complete_document_extraction, default_id, document["id"])
-    return {"upload": {**document, "persistence": {"adapter": "local_filesystem", "binary_retained": True, "max_bytes": MAX_PDF_BYTES}}, "next_action": "Open file_url with the PDF.js reader."}
+    return {"upload": {**document, "persistence": {"adapter": "local_filesystem", "binary_retained": True, "max_bytes": MAX_PDF_BYTES, "max_pages": MAX_PDF_PAGES}}, "next_action": "Open file_url with the PDF.js reader."}
