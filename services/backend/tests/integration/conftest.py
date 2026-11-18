@@ -10,3 +10,5 @@ def offline_extraction(monkeypatch):
 
     monkeypatch.setattr(main, "extract_pdf_artifact", extract_legacy_pdf_artifact)
     monkeypatch.setenv("REPORT_QA_PLANNER_MODE", "rules")
+
+    monkeypatch.setenv("REPORT_QA_ASSISTANT_MODE", "legacy")
