@@ -24,6 +24,17 @@ The assistant uses the configured planner client (Gemini/OpenRouter/SambaNova).
   `document.chart_extractions` batch, merged into **Dữ liệu**, and can be
   corrected with the existing append-only revision flow. DePlot output is
   cached by image hash plus model revision.
+- `python(code)`: every calculation on report numbers (sum, difference, ratio,
+  average, ranking…) runs as a model-written script. `value(key)` returns the
+  current `Decimal` of a **Dữ liệu** row and records which rows were used;
+  copying document numbers into the code is rejected, so inputs always come
+  from the Data table (including corrections). Scripts may use Decimal, math,
+  statistics, loops, comprehensions, lambda/def, list/dict methods and `print`.
+  The answer shows the code, the input rows (clickable → PDF location), printed
+  output and the result. Sandbox: AST allow-list (no private names, no
+  getattr/eval/open/type, no `match`), only decimal/math/statistics imports,
+  isolated subprocess with no env, CPU/memory/file/time limits. Failed scripts
+  are returned to the model to fix.
 - `answer`: must cite `evidence_keys` from `data` (server maps page + bbox) or
   existing `pages`, unless `not_found=true`. Invented keys/pages are rejected
   and the model must retry.
@@ -44,6 +55,8 @@ Put the provider key in the ignored `.env`. Try `synthetic_line.pdf`:
 - “Theo biểu đồ đường, doanh thu vùng B là bao nhiêu?” → reads the chart (26).
 - “Doanh thu Q1 là bao nhiêu?” → cites the table cell.
 - “Lợi nhuận vùng A là bao nhiêu?” → the document has revenue, not profit.
+- “Tính tổng doanh thu Q1 và Q3 trong bảng.” → script `value(Q1) + value(Q3)`.
+- “Quý nào có doanh thu trừ chi phí cao nhất? Xếp hạng.” → ranking script.
 
 The first chart read is slow on CPU; the UI waits up to three minutes and the
 assistant has a seven-step limit. Provider/tool errors are returned as errors,
