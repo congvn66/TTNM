@@ -35,9 +35,14 @@ The assistant uses the configured planner client (Gemini/OpenRouter/SambaNova).
   getattr/eval/open/type, no `match`), only decimal/math/statistics imports,
   isolated subprocess with no env, CPU/memory/file/time limits. Failed scripts
   are returned to the model to fix.
-- `answer`: must cite `evidence_keys` from `data` (server maps page + bbox) or
-  existing `pages`, unless `not_found=true`. Invented keys/pages are rejected
-  and the model must retry.
+- `answer`: must cite `evidence_keys` from `data` (server maps page + bbox)
+  and, for lookups/explanations, `sources` with verbatim quotes, unless
+  `not_found=true`. Each quote is checked against the page text (ignoring
+  whitespace/case/dash style; small copy errors snap to the real sentence) and
+  located on the PDF page, so the displayed quote is always the document's own
+  text. Rejected quotes go back to the model with the closest real sentence.
+  The answer lists numbered **Bằng chứng trong PDF** cards (quote or
+  label + value + method); clicking one jumps to and highlights the location.
 - `clarify`: only for genuinely ambiguous questions.
 
 ## Run locally
@@ -57,6 +62,7 @@ Put the provider key in the ignored `.env`. Try `synthetic_line.pdf`:
 - “Lợi nhuận vùng A là bao nhiêu?” → the document has revenue, not profit.
 - “Tính tổng doanh thu Q1 và Q3 trong bảng.” → script `value(Q1) + value(Q3)`.
 - “Quý nào có doanh thu trừ chi phí cao nhất? Xếp hạng.” → ranking script.
+- “Các con số trong báo cáo có phải dữ liệu thật không?” → verbatim quote, highlighted.
 
 The first chart read is slow on CPU; the UI waits up to three minutes and the
 assistant has a seven-step limit. Provider/tool errors are returned as errors,
