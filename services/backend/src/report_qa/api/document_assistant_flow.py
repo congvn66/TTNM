@@ -44,6 +44,35 @@ def _citation(evidence):
     }
 
 
+def _display(value):
+    return json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
+
+
+def _formula(record, by_key):
+    """One executed script: code, the Data rows it read and its output."""
+    result = record["result"]
+    inputs = [by_key[k] for k in result.get("used_evidence_keys", []) if k in by_key]
+    return {
+        "name": "Python",
+        "expression": record["code"],
+        "substitution": record["explanation"],
+        "result": _display(result["result"]),
+        "unit": None,
+        "stdout": result.get("stdout") or "",
+        "inputs": [
+            {
+                "evidence_key": e["evidence_key"],
+                "label": evidence_label(e),
+                "value": e.get("numeric_value"),
+                "page": e["page_number"],
+                "bbox": e["bbox"],
+            }
+            for e in inputs
+        ],
+        "calculation": {"status": "succeeded", "computed_result": _display(result["result"]), "unit": None},
+    }
+
+
 def answer_document(session, document, question, trace_id, trace, catalog, *, overlay, snapshot, complete=None):
     client = planner_client() if complete is None else None
     if complete is None and client is None:
@@ -112,9 +141,10 @@ def answer_document(session, document, question, trace_id, trace, catalog, *, ov
     structured = {
         "presentation": "document_assistant",
         "answer": result["answer"],
-        "summary": "",
+        "summary": "Phép tính được chạy bằng script Python trên giá trị hiện tại của bảng Dữ liệu."
+        if result["calculations"] else "",
         "sections": [],
-        "formulas": [],
+        "formulas": [_formula(record, by_key) for record in result["calculations"]],
         "tables": [],
         "claims": [],
         "warnings": ["Một số giá trị biểu đồ chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
@@ -143,6 +173,7 @@ def answer_document(session, document, question, trace_id, trace, catalog, *, ov
             }
             for e in used
         ],
+        "tool_calculations": result["calculations"],
         "tool_results": result["tool_results"],
     }
     snapshot(assistant)
