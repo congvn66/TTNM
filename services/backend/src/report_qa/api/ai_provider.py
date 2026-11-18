@@ -21,7 +21,7 @@ _LOCAL_ENV_KEYS = {
     "GEMINI_API_KEY", "GEMINI_MODEL", "GEMINI_API_BASE_URL",
     "OPENROUTER_API_KEY", "OPENROUTER_MODEL", "OPENROUTER_BASE_URL",
     "SAMBANOVA_API_KEY", "SAMBANOVA_MODEL", "SAMBANOVA_BASE_URL",
-    "REPORT_QA_PLANNER_MODE", "REPORT_QA_PLANNER_MODEL",
+    "REPORT_QA_PLANNER_MODE", "REPORT_QA_PLANNER_MODEL", "REPORT_QA_ASSISTANT_MODE",
 }
 
 
@@ -58,6 +58,11 @@ class ProviderAnswer:
     model: str
     response_sha256: str
     structured: dict[str, Any] | None = None
+
+
+def assistant_mode() -> str:
+    _load_local_env()
+    return os.getenv("REPORT_QA_ASSISTANT_MODE", "legacy").strip().lower()
 
 
 def provider_mode() -> str:
@@ -459,6 +464,10 @@ class PlannerChatClient:
 
     def complete(self, system: str, user: str) -> str:
         body = {"model": self.model, "temperature": 0, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+        if self.mode == "gemini":
+            # Planner and document assistant both expect one JSON object; keep
+            # reasoning minimal and output bounded for interactive latency.
+            body.update({"reasoning_effort": "minimal", "max_tokens": 4096, "response_format": {"type": "json_object"}})
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         if self.mode == "openrouter":
             headers.update({"HTTP-Referer": "http://127.0.0.1:4173", "X-Title": "SourceLens"})

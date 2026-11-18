@@ -22,9 +22,11 @@ from report_qa.application.chart_reading import ChartReadRequest, PdfVectorChart
 from report_qa.application.deplot_reading import DeplotChartReader
 from report_qa.application.p0_pipeline import calculation_answer, execute_calculation, resolve_evidence
 from report_qa.application.question_planner import build_catalog, plan_question
+from report_qa.api.document_assistant_flow import answer_document, with_chart_batches
+from report_qa.application.document_assistant import AssistantError
 from report_qa.domain.contracts import validate_calculation_result_v1, validate_question_plan_v2
 from report_qa.domain.types import validate_decimal_text
-from .ai_provider import ProviderError, live_provider, planner_client, provider_mode
+from .ai_provider import ProviderError, assistant_mode, live_provider, planner_client, provider_mode
 from report_qa.config import settings
 from report_qa.infrastructure.postgres import postgres_health
 from .session_storage import EXTRACTION_ROOT, UPLOAD_ROOT, document_path, extraction_path, load_catalog, save_catalog, utc_now
@@ -95,6 +97,9 @@ class HealthResponse(BaseModel):
     ai_model: str
     persistence_backend: str
     database: dict[str, Any]
+    assistant_mode: str | None = None
+    assistant_provider: str | None = None
+    assistant_model: str | None = None
 
 app = FastAPI(
     title="Report QA API",
@@ -225,19 +230,24 @@ async def trace_headers(request: Request, call_next):
     "/health",
     tags=["runtime"],
     summary="Health va AI adapter status",
+    response_model_exclude_none=True,
     description="Read-only probe. Cho biet adapter persistence hien tai, AI mode/model dang chay; khong tao hoac sua du lieu.",
     response_model=HealthResponse,
     response_description="Trang thai runtime hien tai.",
 )
 def health() -> dict[str, Any]:
+    mode = assistant_mode()
+    client = planner_client() if mode == "tools" else None
     return {
         "status": "ok",
         "adapter": "local_json_filesystem",
         "durability": "local_disk_logical_state",
-        "ai_mode": provider_mode(),
-        "ai_model": (os.getenv("GEMINI_MODEL", "gemini-2.5-flash") if provider_mode() == "gemini" else os.getenv("OPENROUTER_MODEL", "openai/gpt-6-luna") if provider_mode() == "openrouter" else "deterministic"),
+        "ai_mode": client.mode if client else provider_mode(),
+        "ai_model": client.model if client else (os.getenv("GEMINI_MODEL", "gemini-2.5-flash") if provider_mode() == "gemini" else os.getenv("OPENROUTER_MODEL", "openai/gpt-6-luna") if provider_mode() == "openrouter" else "deterministic"),
         "persistence_backend": settings.persistence_backend,
         "database": postgres_health(),
+        **({"assistant_mode": "tools", "assistant_provider": client.mode if client else None,
+            "assistant_model": client.model if client else None} if mode == "tools" else {}),
     }
 
 
@@ -468,7 +478,7 @@ def list_document_evidences(session_id: str, document_id: str) -> dict[str, Any]
         raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
     if document.get("extraction_status") != "ready":
         raise HTTPException(status_code=409, detail={"code": "EXTRACTION_NOT_READY", "message": "Tài liệu chưa sẵn sàng để sửa số liệu."})
-    extraction = json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
+    extraction = with_chart_batches(document, json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8")))
     state = ensure_document_evidence_state(document, extraction)
     records = []
     for evidence in (extraction.get("evidence_batch") or {}).get("evidences", []):
@@ -478,7 +488,7 @@ def list_document_evidences(session_id: str, document_id: str) -> dict[str, Any]
             "evidence_key": evidence["evidence_key"], "page_number": evidence["page_number"], "bbox": evidence["bbox"],
             "raw_text": evidence.get("raw_text"), "method_label": evidence["method_label"], "semantic": evidence.get("semantic"),
             "source_type": evidence["source_type"], "source_region_key": evidence["source_region_key"],
-            "data_status": evidence["data_status"], "extraction_method": evidence["extraction_method"],
+            "data_status": "valid" if current.get("action") == "edit" else evidence["data_status"], "extraction_method": evidence["extraction_method"],
             "table_locator": evidence.get("table_locator"), "chart_read": evidence.get("chart_read"),
             "confidence": evidence["confidence"],
             "original_numeric_value": item["original_numeric_value"], "current_numeric_value": current["numeric_value"],
@@ -497,7 +507,7 @@ def list_evidence_revisions(session_id: str, document_id: str, evidence_key: str
     document = next((item for item in session["documents"] if item["id"] == document_id), None)
     if document is None:
         raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
-    extraction = json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
+    extraction = with_chart_batches(document, json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8")))
     state = ensure_document_evidence_state(document, extraction)
     item = state["items"].get(evidence_key)
     if item is None:
@@ -515,7 +525,7 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
     document = next((item for item in session["documents"] if item["id"] == document_id), None)
     if document is None:
         raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
-    extraction = json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
+    extraction = with_chart_batches(document, json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8")))
     state = ensure_document_evidence_state(document, extraction)
     item = state["items"].get(evidence_key)
     if item is None:
@@ -629,6 +639,8 @@ def extraction_with_evidence_revisions(document: dict[str, Any], extraction: dic
         current = item["revisions"][-1]
         evidence["numeric_value"] = current["numeric_value"]
         evidence["current_revision_id"] = current["id"]
+        if current.get("action") == "edit":
+            evidence["data_status"] = "valid"
     return result
 
 
@@ -728,6 +740,18 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     document = next((item for item in session["documents"] if item["id"] == payload.document_id), None)
     if document is None:
         raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+    if assistant_mode() == "tools":
+        if document.get("extraction_status") != "ready":
+            raise HTTPException(status_code=409, detail={"code": "EXTRACTION_NOT_READY", "message": "Tài liệu chưa trích xuất xong."})
+        try:
+            return answer_document(session, document, payload.question, trace_id, trace, catalog,
+                overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision)
+        except ProviderError as exc:
+            raise HTTPException(status_code=502, detail={"code": exc.code, "message": str(exc)}) from exc
+        except AssistantError as exc:
+            flow_log("ASSISTANT_INCOMPLETE", trace_id=trace_id, session_id=session_id, document_id=document["id"],
+                     tool_errors=[item.get("error") for item in getattr(exc, "tool_results", []) if item.get("error")])
+            raise HTTPException(status_code=502, detail={"code": "ASSISTANT_INCOMPLETE", "message": str(exc)}) from exc
     previous_assistant = next(
         (item for item in reversed(session["messages"]) if item.get("role") == "assistant"),
         None,
@@ -823,7 +847,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     selected_scores = {int(item[0]["page"]): item[1] for item in ranked_pages}
     operation = question_plan.get("operation") or {}
     if operation.get("type") != "lookup" or any(fact.get("measure") != "unknown" and fact.get("period") for fact in question_plan.get("facts", [])):
-        base_extraction = json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
+        base_extraction = with_chart_batches(document, json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8")))
         extraction = extraction_with_evidence_revisions(document, base_extraction)
         resolution = resolve_evidence(question_plan, extraction, {int(item["page"]) for item in context_pages})
         trace.append(
