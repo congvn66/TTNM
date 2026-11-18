@@ -63,7 +63,8 @@ def evidence_label(evidence: dict) -> str:
         parts = [chart.get("category_label"), chart.get("series_label")]
     else:
         parts = [semantic.get("subject"), semantic.get("measure"), semantic.get("period")]
-    return " · ".join(str(part) for part in parts if part) or evidence["evidence_key"]
+    parts = [part.get("label") if isinstance(part, dict) else part for part in parts]
+    return " · ".join(str(part) for part in parts if part and part != "unknown") or evidence["evidence_key"]
 
 
 def data_rows(evidences: list[dict]) -> list[dict]:
