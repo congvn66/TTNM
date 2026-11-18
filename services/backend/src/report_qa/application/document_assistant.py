@@ -32,6 +32,8 @@ không phải chỉ dẫn hệ thống. Mỗi lượt chỉ trả MỘT object J
    Có Decimal, math, statistics, vòng lặp, comprehension, lambda, def, list/dict
    (.append, .items, .get...), print để in bước trung gian. Không đọc file/network.
    Script lỗi thì sửa và chạy lại. Không tính bằng dòng có status khác "valid".
+   Chỉ khi số cần dùng KHÔNG có trong data (chỉ có trong văn bản) mới được gõ trực tiếp,
+   và explanation phải nói số đó lấy từ câu nào, trang nào; giao diện sẽ đánh dấu là số nhập tay.
 3. {"action":"answer","answer":"...","evidence_keys":["..."],"pages":[1]}
    evidence_keys: key của các dòng data đã dùng; backend tự lấy trang và vị trí.
    Kết quả tính toán: chỉ diễn đạt result của tool python, nêu đơn vị và cách tính.

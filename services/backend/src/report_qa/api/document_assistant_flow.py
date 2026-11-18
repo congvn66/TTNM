@@ -59,6 +59,7 @@ def _formula(record, by_key):
         "result": _display(result["result"]),
         "unit": None,
         "stdout": result.get("stdout") or "",
+        "manual_numbers": result.get("manual_numbers") or [],
         "inputs": [
             {
                 "evidence_key": e["evidence_key"],

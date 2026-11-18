@@ -159,6 +159,7 @@ function ScriptCard({ formula, onCitation }) {
     <div className="script-head"><strong>Script Python</strong><em className="formula-verified">✓ đã chạy</em></div>
     {formula.substitution && <span>{formula.substitution}</span>}
     {formula.inputs?.length > 0 && <div className="script-inputs" aria-label="Dữ liệu đầu vào của script"><div className="script-input head"><span>Dữ liệu đầu vào · value(key)</span><span>Giá trị</span><span>Trang</span></div>{formula.inputs.map((input) => <button type="button" className="script-input" key={input.evidence_key} title={input.evidence_key} onClick={() => onCitation?.(input.page, "", input.bbox)}><span>{input.label}</span><b>{input.value}</b><span>p.{input.page}</span></button>)}</div>}
+    {formula.manual_numbers?.length > 0 && <small className="script-manual">Số nhập tay trong code, không lấy từ bảng Dữ liệu: {formula.manual_numbers.join(", ")}</small>}
     <details open><summary>Code</summary><pre>{formula.expression}</pre></details>
     {formula.stdout && <pre className="script-stdout">{formula.stdout}</pre>}
     <b>Kết quả: {formula.result}</b>
