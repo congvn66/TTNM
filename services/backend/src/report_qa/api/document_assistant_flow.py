@@ -13,6 +13,7 @@ from report_qa.api.session_storage import (
 from report_qa.application.chart_tool import read_chart_region
 from report_qa.application.document_assistant import evidence_label, run_assistant
 from report_qa.application.extraction_contract import validate_extraction_batch
+from report_qa.application.text_evidence import quote_bbox
 
 MAX_CONTEXT_CHARS = 300_000
 
@@ -32,6 +33,7 @@ def with_chart_batches(document, extraction):
 
 def _citation(evidence):
     return {
+        "kind": "data",
         "page": evidence["page_number"],
         "bbox": evidence["bbox"],
         "evidence_key": evidence["evidence_key"],
@@ -42,6 +44,14 @@ def _citation(evidence):
         "raw_text": evidence.get("raw_text"),
         "data_status": evidence.get("data_status"),
     }
+
+
+def _quote_citation(pdf_path, source):
+    try:
+        bbox = quote_bbox(pdf_path, source["page"], source["quote"])
+    except (OSError, RuntimeError, ValueError):
+        bbox = None  # the viewer still highlights by matching the quote text
+    return {"kind": "text", "page": source["page"], "bbox": bbox, "quote": source["quote"], "match": source["match"]}
 
 
 def _display(value):
@@ -137,8 +147,14 @@ def answer_document(session, document, question, trace_id, trace, catalog, *, ov
     result = run_assistant(question, context, complete=complete, read_chart=chart_tool)
     by_key = {e["evidence_key"]: e for e in context["evidences"]}
     used = [by_key[k] for k in result["evidence_keys"]]
-    citations = [_citation(e) for e in used]
-    citations += [{"page": page, "bbox": None} for page in result["pages"] if page not in {c["page"] for c in citations}]
+    pdf_path = document_path(document["storage_name"])
+    citations = [_quote_citation(pdf_path, source) for source in result["sources"]]
+    citations += [_citation(e) for e in used]
+    citations += [
+        {"kind": "page", "page": page, "bbox": None}
+        for page in result["pages"]
+        if page not in {c["page"] for c in citations}
+    ]
     structured = {
         "presentation": "document_assistant",
         "answer": result["answer"],
@@ -151,6 +167,8 @@ def answer_document(session, document, question, trace_id, trace, catalog, *, ov
         "warnings": ["Một số giá trị biểu đồ chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
         if result["unverified_keys"] else [],
         "cited_pages": sorted({c["page"] for c in citations}),
+        "evidence": citations,
+        "not_found": result["not_found"],
         "options": result["options"],
     }
     now = utc_now()
