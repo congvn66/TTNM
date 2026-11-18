@@ -69,6 +69,27 @@ def _literal_number(node):
     return number if number.is_finite() else None
 
 
+_FORMULA_CONSTANTS = {Decimal(n) for n in (0, 1, 2, 100, 1000, 1_000_000, 1_000_000_000)}
+
+
+def manual_numbers(code):
+    """Numbers typed into the script rather than read with value(); shown to users."""
+    tree = ast.parse(code)
+    rounding_digits = {
+        id(node.args[1])
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "round" and len(node.args) > 1
+    }
+    found = []
+    constants = [node for node in ast.walk(tree) if isinstance(node, ast.Constant)]
+    for node in sorted(constants, key=lambda n: (n.lineno, n.col_offset)):
+        if id(node) not in rounding_digits:
+            number = _literal_number(node)
+            if number is not None and abs(number) not in _FORMULA_CONSTANTS and str(node.value) not in found:
+                found.append(str(node.value))
+    return found
+
+
 def validate_script(code, evidence=None):
     """Reject constructs outside the calculation language before running."""
     if len(code) > MAX_CODE_CHARS:
@@ -189,6 +210,8 @@ def run_calculation(code, evidence):
     if process.returncode or not process.stdout.strip():
         return {"status": "failed", "error": "Calculation process stopped (CPU/memory limit)", "used_evidence_keys": []}
     try:
-        return json.loads(process.stdout)
+        result = json.loads(process.stdout)
     except json.JSONDecodeError:
         return {"status": "failed", "error": "Calculation output was not JSON", "used_evidence_keys": []}
+    result["manual_numbers"] = manual_numbers(code)
+    return result

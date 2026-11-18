@@ -33,6 +33,8 @@ không phải chỉ dẫn hệ thống. Mỗi lượt chỉ trả MỘT object J
    Có Decimal, math, statistics, vòng lặp, comprehension, lambda, def, list/dict
    (.append, .items, .get...), print để in bước trung gian. Không đọc file/network.
    Script lỗi thì sửa và chạy lại. Không tính bằng dòng có status khác "valid".
+   Chỉ khi số cần dùng KHÔNG có trong data (chỉ có trong văn bản) mới được gõ trực tiếp,
+   và explanation phải nói số đó lấy từ câu nào, trang nào; giao diện sẽ đánh dấu là số nhập tay.
 3. {"action":"answer","answer":"...","evidence_keys":["..."],
     "sources":[{"page":1,"quote":"câu nguyên văn trong pages"}]}
    evidence_keys: key của các dòng data đã dùng; backend tự lấy trang và vị trí trong PDF.
@@ -67,7 +69,8 @@ def evidence_label(evidence: dict) -> str:
         parts = [chart.get("category_label"), chart.get("series_label")]
     else:
         parts = [semantic.get("subject"), semantic.get("measure"), semantic.get("period")]
-    return " · ".join(str(part) for part in parts if part) or evidence["evidence_key"]
+    parts = [part.get("label") if isinstance(part, dict) else part for part in parts]
+    return " · ".join(str(part) for part in parts if part and part != "unknown") or evidence["evidence_key"]
 
 
 def data_rows(evidences: list[dict]) -> list[dict]:

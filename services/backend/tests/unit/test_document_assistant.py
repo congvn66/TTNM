@@ -55,6 +55,15 @@ def test_ai_receives_full_text_and_labelled_current_values():
     assert result["evidence_keys"] == ["b"]
 
 
+def test_text_numbers_get_readable_labels():
+    from report_qa.application.document_assistant import evidence_label
+
+    row = {"evidence_key": "k", "semantic": {"subject": None, "measure": "unknown",
+                                             "period": {"label": "2023", "granularity": "year"}}}
+    assert evidence_label(row) == "2023"
+    assert evidence_label({"evidence_key": "k", "semantic": {"measure": "unknown"}}) == "k"
+
+
 def test_text_answer_can_cite_pages_but_not_invented_ones():
     complete = sequence(
         {"action": "answer", "answer": "Chưa gồm thuế.", "pages": [9]},

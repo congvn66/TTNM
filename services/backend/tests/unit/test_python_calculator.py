@@ -84,6 +84,13 @@ def test_copied_document_numbers_and_unverified_values_are_rejected():
     assert "unverified" in run_calculation("result = value('b')", f)["error"]
 
 
+def test_numbers_typed_into_the_script_are_reported():
+    code = "rate = Decimal('74') / value('a')\nresult = round((rate + Decimal(7) / 10) / 2 * 100, 2)"
+    result = run_calculation(code, facts())
+    assert result["status"] == "succeeded"
+    assert result["manual_numbers"] == ["74", "7", "10"]
+
+
 def test_runaway_script_is_stopped():
     result = run_calculation("x = value('a')\nwhile True:\n    x = x + 1", facts())
     assert result["status"] == "failed"
