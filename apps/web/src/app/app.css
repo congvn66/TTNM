@@ -732,3 +732,106 @@ body { background: var(--canvas); }
 [data-theme="dark"] .library-shell { background: #101114; }
 
 @media (max-width: 760px) { .library-shell { padding: 24px 15px; } .library-header { align-items: flex-start; flex-direction: column; } .library-header-actions, .library-toolbar { width: 100%; } .library-header-actions button { flex: 1; } .library-toolbar { flex-direction: column; } .library-toolbar select { width: 100%; } }
+
+/* Workspace header polish.
+   Uploading is intentionally scoped to the active session in the left rail;
+   keeping a second upload action in the global header creates two competing
+   entry points and makes the workspace context harder to scan. The hidden
+   input remains mounted because the session-level action uses it. */
+.app-shell > .topbar {
+  min-height: 72px;
+  gap: 18px;
+  padding-inline: clamp(18px, 2.4vw, 40px);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(18px);
+}
+.app-shell > .topbar .brand {
+  flex: 0 1 210px;
+  min-width: 184px;
+}
+.app-shell > .topbar .topbar-context {
+  flex: 0 1 245px;
+  min-width: 150px;
+  margin-left: 0;
+  border-left: 1px solid var(--border);
+  padding-left: 18px;
+}
+.app-shell > .topbar .top-nav {
+  margin-left: 0;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-soft);
+}
+.app-shell > .topbar .top-nav-item {
+  min-height: 34px;
+  padding-inline: 12px;
+  border-radius: 8px;
+}
+.app-shell > .topbar .top-actions {
+  gap: 8px;
+  margin-left: auto;
+  padding-left: 10px;
+}
+.app-shell > .topbar .top-actions > .upload-button {
+  display: none;
+}
+.app-shell > .topbar .top-actions > .profile-menu {
+  margin-left: 2px;
+}
+.app-shell > .topbar .profile-menu .profile-chip {
+  min-height: 40px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.app-shell > .topbar .profile-menu .profile-chip:hover,
+.app-shell > .topbar .profile-menu .profile-chip[aria-expanded="true"] {
+  border-color: #93c5fd;
+  background: var(--surface-soft);
+}
+
+/* Keep the rendered PDF crisp at every zoom while preserving a predictable
+   paper margin. Horizontal overflow is intentional for zoom levels wider than
+   the reader; the user can pan with the existing drag surface. */
+.reader-shell { min-width: 0; min-height: 0; }
+.pdf-viewport {
+  display: block;
+  padding: 0;
+  scrollbar-gutter: stable both-edges;
+}
+.canvas-mat {
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  display: grid;
+  justify-content: center;
+  align-content: start;
+  padding: 30px 36px 56px;
+}
+.canvas-mat canvas {
+  width: auto;
+  max-width: none;
+  height: auto;
+  image-rendering: auto;
+}
+.pdf-text-layer { top: 30px !important; }
+
+@media (max-width: 1180px) {
+  .app-shell > .topbar { gap: 12px; padding-inline: 14px; }
+  .app-shell > .topbar .brand { flex-basis: 174px; min-width: 166px; }
+  .app-shell > .topbar .topbar-context { flex-basis: 180px; padding-left: 12px; }
+  .app-shell > .topbar .top-nav-item { padding-inline: 9px; }
+  .app-shell > .topbar .top-actions { padding-left: 4px; }
+}
+
+@media (max-width: 760px) {
+  .app-shell > .topbar { min-height: 62px; flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+  .app-shell > .topbar .brand { flex: 1 1 auto; min-width: 0; }
+  .app-shell > .topbar .topbar-context { display: none; }
+  .app-shell > .topbar .top-nav { order: 3; width: 100%; margin: 0; }
+  .app-shell > .topbar .top-nav-item { flex: 1; justify-content: center; }
+  .app-shell > .topbar .top-actions { margin-left: auto; padding-left: 0; }
+  .canvas-mat { padding: 20px 20px 40px; }
+  .pdf-text-layer { top: 20px !important; }
+}
