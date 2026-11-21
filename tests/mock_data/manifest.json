@@ -1,0 +1,39 @@
+{
+  "counts": {
+    "domain_rows": 82,
+    "domain_tables": 23,
+    "mutations": 12,
+    "pdfs": 20,
+    "questions": 180,
+    "reports": 20
+  },
+  "generated_at": "2026-01-15T08:00:00Z",
+  "generator": "scripts/generate_mock_data.py",
+  "schema_version": 1,
+  "sha256": {
+    "domain_seed.json": "3b8bd6371874ecf0797daada7fb0492834a587ff5339cac44dccbf1a65c8e9e6",
+    "evaluation_questions.jsonl": "ba51582a70a245b05b159b87dca158ae54d93e90bd4db460b21d884c962dbf55",
+    "mutation_scenarios.jsonl": "c9f505f3ea79a9764f69158c142a48f1c785ba15e7730b91c812eb8fcb896a78",
+    "pdfs/syn-report-001.pdf": "bbd4671e0a396c41ca8703fa9b90a9aabf727b166c31a04bc16ca9102d02b48b",
+    "pdfs/syn-report-002.pdf": "1749a342561c90b32840eab83aad76f9710bf78c527564cc2b9bdddef154f626",
+    "pdfs/syn-report-003.pdf": "9c86d7e6e753ac8d06bcabefb73ec604ac50b4ac5f2b250c824b063cb615fd5a",
+    "pdfs/syn-report-004.pdf": "3ac0682d340dde3d41811d8e9cd4b78f497da9b5c6a21d74bceac535fafbf29c",
+    "pdfs/syn-report-005.pdf": "5a0c0e3b8108664b3aee77d7b524792f22f3747f961cc6fb65d774632af4efe7",
+    "pdfs/syn-report-006.pdf": "cf6cf40c48a5451086a2f0fb012333f78c6972bd31c734866cc900f46f778a9c",
+    "pdfs/syn-report-007.pdf": "98aaf248026dd13d171a02ac19918ce2d14688b8dfd9b43fcf75d3b298e83ac4",
+    "pdfs/syn-report-008.pdf": "0606a29e0844fd49892045824efb52a61ba219f30fdaf1c791411cb6ef0825f2",
+    "pdfs/syn-report-009.pdf": "d9981417604c1392ec720b3d6cc8786d5cebd9ecfb3b00d7b5d568d2bb75e7a3",
+    "pdfs/syn-report-010.pdf": "4960214321b6fcb36459c2f460023f35272441a6cab09d700175772f953e7d16",
+    "pdfs/syn-report-011.pdf": "934527b49f32fc321637593cb8adc968f436b0531e3c5a41403c3637f747a77f",
+    "pdfs/syn-report-012.pdf": "54df5b20a5594f847764927fd9598f4076725b37bfb1864a4ba483b1902c17e7",
+    "pdfs/syn-report-013.pdf": "4a024e4903256ff05d186e2c9c27db6616962ec37e75d10ece9d8746b2e88a7d",
+    "pdfs/syn-report-014.pdf": "d405608bd48a73441dda788f3f6610fad9a51e79c63094927b2d51fdd973dbd2",
+    "pdfs/syn-report-015.pdf": "2b920a995c7ad3a859bfaa9e5118342718c23a17a42b19c3084c524b6568751a",
+    "pdfs/syn-report-016.pdf": "9dae6d2e936c83ce5ceec3110667604560ced17a1c089e217fac99e5dd2e3ee6",
+    "pdfs/syn-report-017.pdf": "89971880f6aa49592469c085fc544c82c367925c32ec36c18ace2b643dc09a7c",
+    "pdfs/syn-report-018.pdf": "4573eb8715d54c070958c9080cc0b443b7ae62b554c1403def952db00ac91216",
+    "pdfs/syn-report-019.pdf": "cb6638c21226dfdea8dc52e98f403cb1cf7e726a6b82b7948c3d926fa53af0dd",
+    "pdfs/syn-report-020.pdf": "eeee95f100d974b109dd3d9287291f7fcda8c91aa9044d2f61e91210c0363722",
+    "reports.jsonl": "9fdb0628f52c3babc9b4da4723be98c7199a93ee78709188b5bef216128dde7a"
+  }
+}

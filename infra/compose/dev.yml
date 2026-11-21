@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: sourcelens-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sourcelens}
+      POSTGRES_USER: ${POSTGRES_USER:-sourcelens}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sourcelens-dev-only}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - sourcelens-postgres-data:/var/lib/postgresql/data
+      - ../../docs/initial-schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  sourcelens-postgres-data:

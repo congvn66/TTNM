@@ -1,0 +1,43 @@
+{
+  "schema_version": 2,
+  "document_version_id": "docv-demo-001",
+  "extraction_run_id": "extract-demo-001",
+  "scope": "base_document",
+  "trigger": null,
+  "evidences": [
+    {
+      "evidence_key": "revenue-q1-2026",
+      "source_region_key": "page-2-table-1-cell-2-3",
+      "source_type": "table",
+      "page_number": 2,
+      "bbox": [0.61, 0.31, 0.73, 0.35],
+      "raw_text": "2.785",
+      "numeric_value": "2785",
+      "data_status": "valid",
+      "extraction_method": "table_cell",
+      "method_label": "đọc từ ô bảng",
+      "semantic": {
+        "measure": "doanh_thu",
+        "subject": "Tập đoàn",
+        "period": {
+          "label": "Q1/2026",
+          "start": "2026-01-01",
+          "end": "2026-03-31",
+          "granularity": "quarter"
+        },
+        "unit": "VND_BILLION",
+        "dimensions": {}
+      },
+      "table_locator": {
+        "table_region_key": "page-2-table-1",
+        "row_index": 2,
+        "column_index": 3,
+        "row_header": "Doanh thu",
+        "column_header": "Q1/2026"
+      },
+      "chart_read": null,
+      "confidence": 0.99
+    }
+  ],
+  "warnings": []
+}

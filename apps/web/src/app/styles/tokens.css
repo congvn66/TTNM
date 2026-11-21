@@ -1,0 +1,43 @@
+:root {
+  --color-primary: #0f172a;
+  --color-secondary: #334155;
+  --color-cta: #0369a1;
+  --color-background: #f8fafc;
+  --color-text: #020617;
+  --color-muted: #475569;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-success: #047857;
+  --color-warning: #b45309;
+  --color-danger: #b42318;
+  --radius-control: 10px;
+  --radius-panel: 14px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, .06);
+  --shadow-md: 0 8px 24px rgba(15, 23, 42, .08);
+  /*
+   * Typography is deliberately tokenised instead of assigning a different
+   * font per feature. Google Sans is used when it is installed (the rounded
+   * letterforms match the product's conversational UI); the remaining stack
+   * keeps the same proportions on machines without that proprietary font.
+   */
+  --font-display: "Plus Jakarta Sans Variable", "Google Sans", "Google Sans Text", "Product Sans", "Inter", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --font-body: "Plus Jakarta Sans Variable", "Google Sans Text", "Google Sans", "Inter", "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
+  --font-ui: "Plus Jakarta Sans Variable", "Google Sans Text", "Google Sans", "Inter", "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-sans: var(--font-body);
+}
+
+[data-theme="dark"] {
+  --color-background: #0f172a;
+  --color-text: #f8fafc;
+  --color-muted: #cbd5e1;
+  --color-surface: #172033;
+  --color-surface-subtle: #1e293b;
+  --color-border: #334155;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .24);
+  --shadow-md: 0 12px 30px rgba(0, 0, 0, .28);
+}
+
+html { color-scheme: light; }
+html[data-theme="dark"] { color-scheme: dark; }
