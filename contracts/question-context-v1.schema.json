@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/contracts/question-context-v1.schema.json",
+  "title": "Question context v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "measure", "subjects", "requested_periods", "time_required", "operation", "comparison_basis", "dimensions", "ambiguities"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "measure": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "label"],
+          "properties": {"code": {"type": ["string", "null"]}, "label": {"type": "string", "minLength": 1}}
+        }
+      ]
+    },
+    "subjects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "values"],
+      "properties": {
+        "mode": {"enum": ["explicit", "all_in_scope", "unspecified"]},
+        "values": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "requested_periods": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "status"],
+        "properties": {"label": {"type": ["string", "null"]}, "status": {"enum": ["known", "partial", "unspecified"]}}
+      }
+    },
+    "time_required": {"type": "boolean"},
+    "operation": {"enum": ["lookup", "sum", "difference", "absolute_change", "growth_rate", "percentage_point", "compare", "ranking", null]},
+    "comparison_basis": {"enum": ["absolute", "percent", "percentage_point", null]},
+    "dimensions": {"type": "object", "additionalProperties": {"type": ["string", "number", "boolean", "null"]}},
+    "ambiguities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message", "options"],
+        "properties": {
+          "code": {"type": "string", "minLength": 1},
+          "message": {"type": "string", "minLength": 1},
+          "options": {"type": "array", "items": {"type": "string"}, "minItems": 1, "uniqueItems": true}
+        }
+      }
+    }
+  }
+}

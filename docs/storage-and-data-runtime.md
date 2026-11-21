@@ -1,0 +1,118 @@
+# Lưu trữ runtime và khoảng trống dữ liệu
+
+## Kết luận ngắn
+> **Cloudflare R2 cutover (2026-11-19).** When `STORAGE_BACKEND=r2`, the
+> private R2 bucket is the durable object store for original PDFs and extraction
+> artifacts. `runtime/uploads` and `runtime/extracted` are only a disposable
+> cache used by PDF/OCR libraries. The server reloads a missing cache item from
+> R2 by its server-generated object key. MinIO is not part of this runtime.
+>
+> Setup and readiness verification: [cloudflare-r2-setup.md](cloudflare-r2-setup.md).
+
+Runtime có hai chế độ rõ ràng. JSON là adapter offline mặc định cho test; khi
+`PERSISTENCE_BACKEND=postgres`, session/document/extraction/evidence/message và
+answer metadata đi qua PostgreSQL transaction. PDF ở
+`runtime/uploads/{document_id}.pdf` và extraction artifact ở local filesystem
+trong P0; đây là giới hạn storage, không phải nguồn sự thật metadata.
+
+Không dùng Redis làm source of truth cho session. Redis chỉ nên giữ cache, lock
+ngắn hạn hoặc queue/progress tạm thời. PostgreSQL phải là source of truth cho
+metadata, ownership, messages, evidence revisions, answer revisions, jobs và
+audit; object storage giữ PDF/artifact lớn.
+
+## Runtime hiện tại
+
+| Dữ liệu | Nơi lưu hiện tại | Tính bền vững | Rủi ro |
+|---|---|---|---|
+| Session, documents, messages | PostgreSQL runtime hoặc `runtime/sessions.json` offline | PostgreSQL có FK/index/transaction; JSON chỉ cho một process | JSON không phù hợp nhiều process |
+| PDF gốc | `runtime/uploads/*.pdf` | bền trên local disk | chưa có object-store versioning/retention |
+| Text từng trang | `runtime/extracted/*.json` | bền trên local disk | chưa có extraction revision/query layout |
+| Retrieval trace | nhúng trong assistant message + log | bền cho session local | chưa có bảng audit/retention/PII policy |
+| AI response | structured answer trong message | bền local | chưa có answer revision/input snapshot domain cho chat demo |
+| P0 plan/calculation | `question_plan`, `calculation_result`, `answer_inputs` trong assistant message | bền local | cần tách thành job/answer revision/input rows khi cutover PostgreSQL |
+| Job extraction | FastAPI background task | chỉ sống trong process request | crash giữa job không có lease/retry/resume |
+| Cache/session UI | browser localStorage | chỉ phía trình duyệt | không phải authentication/session server |
+
+## Target production flow
+
+```text
+Browser
+  -> API transaction PostgreSQL: session/chat/message/job/trace metadata
+  -> object storage: immutable PDF, page image, crop, extraction artifact
+  -> worker claims jobs with lease_token
+  -> provider/calculator
+  -> PostgreSQL answer_revision + inputs + scopes + audit
+  -> browser polls/SSE progress, then reads final revision
+```
+
+### PostgreSQL là nguồn sự thật
+
+- `sessions/chats/messages` giữ lịch sử và thứ tự message.
+- `documents/document_versions` giữ version PDF bất biến và hash.
+- `extraction_runs/source_regions/extracted_evidences` giữ output extractor đã
+  hoàn tất; không update tại chỗ.
+- `chat_evidences/evidence_revisions` giữ working copy theo từng chat.
+- `answer_revisions/answer_inputs/answer_scopes` giữ kết quả, input snapshot và
+  toàn bộ scope có thể ảnh hưởng.
+- `jobs/job_events/request_keys/audit_events` giữ retry, idempotency và audit.
+
+### Redis chỉ là thành phần phụ
+
+Chỉ dùng Redis khi cần và không lưu dữ liệu duy nhất ở đó:
+
+- cache session summary hoặc retrieval cache có TTL;
+- distributed lock ngắn hạn cho cùng document/job;
+- pub/sub progress nếu polling PostgreSQL không đủ;
+- rate limit.
+
+Nếu Redis mất, hệ thống phải đọc lại từ PostgreSQL/object storage và không mất
+message, evidence revision hoặc answer revision.
+
+## Trạng thái triển khai PostgreSQL
+
+Đã thêm runtime PostgreSQL/Supabase, Alembic migration `0001_initial_schema` và
+`0002_chat_documents`, typed settings, connectivity probe và
+`PostgresRuntimeStore`. Bật `PERSISTENCE_BACKEND=postgres` để API dùng PostgreSQL
+làm source of truth cho metadata/revision graph; không dual-write sang JSON.
+PDF/extraction artifact vẫn ghi local với storage key bất biến để chờ object
+storage adapter.
+
+## Các chức năng dữ liệu còn thiếu so với scope
+
+| Chức năng | Trạng thái | Việc cần triển khai |
+|---|---|---|
+| Session/message persistence | Có | PostgreSQL runtime P0; JSON chỉ offline |
+| PDF immutable + hash | Có ở local | object storage key/version, checksum reconciliation |
+| Extraction text + numeric bbox | Có cho PDF text/layout table đơn giản | OCR, bảng phức tạp, extraction revision và retryable worker |
+| Retrieval + claim quote validation | Có | vector/hybrid index chỉ là index phụ, DB vẫn là truth |
+| Client text highlight | Có | persisted server `source_regions.bbox` cho layout/OCR còn thiếu |
+| Deterministic growth calculator | Có | mở rộng operation registry: sum, difference, pp, ranking, ties |
+| Evidence correction | Có trong domain/reference flow | nối vào uploaded-document chat và PostgreSQL revision transaction |
+| Answer revision/recalculation | Có trong domain fixture | nối worker thật, lease, stale fence, idempotency |
+| Job durability | Chưa hoàn tất | bảng jobs + `FOR UPDATE SKIP LOCKED`, heartbeat, retry, DLQ; hiện upload dùng FastAPI background task |
+| Ownership/authentication | Thiếu ở local demo | user/session auth, composite owner FK, 404 hidden access |
+| Idempotency cho upload/message | Thiếu ở local chat | `request_keys`, request hash, replay response |
+| Retention/deletion | Thiếu | purge job, object cleanup, legal hold/audit policy |
+| Observability | Một phần | structured audit table, metrics, provider latency/cost, redaction |
+| Multi-process consistency | Thiếu | PostgreSQL transaction; không dùng JSON catalog production |
+
+## Quy tắc chuyển từ local sang production
+
+1. Giữ API contract và `document_id/message_id` ổn định.
+2. Viết repository PostgreSQL phía sau cùng application ports; không đổi domain
+   rule để phù hợp với database.
+3. Migrate metadata trước, copy PDF/extraction artifact theo hash, rồi bật
+   read-after-write verification.
+4. Chạy dual-read chỉ trong migration window; không dual-write vô thời hạn.
+5. Chỉ bật worker production sau khi test migration trên database rỗng và có
+   fixture, cùng test crash/retry/stale lease.
+
+## Kiểm thử persistence bắt buộc
+
+- restart API sau upload/question: message và PDF vẫn đọc được;
+- hai request đồng thời cùng `Idempotency-Key`: chỉ một business effect;
+- hai editor dùng revision cũ: request sau nhận `409 revision_conflict`;
+- worker crash trước publish: retry không tạo answer revision trùng;
+- xóa document: metadata, object và extraction artifact được reconcile;
+- mất Redis: request đọc được từ PostgreSQL, không mất state;
+- hash PDF/extraction trước và sau migration không đổi.

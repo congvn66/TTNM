@@ -1,0 +1,42 @@
+{
+  "schema_version": 2,
+  "question_plan_id": "plan-demo-001",
+  "document_version_id": "docv-demo-001",
+  "original_question": "Doanh thu Q1/2026 tăng bao nhiêu phần trăm so với Q1/2025?",
+  "language": "vi",
+  "status": "ready",
+  "facts": [
+    {
+      "fact_key": "current",
+      "measure": "doanh_thu",
+      "subject": "Tập đoàn",
+      "period": "Q1/2026",
+      "unit": "VND_BILLION",
+      "dimensions": {},
+      "required": true,
+      "allowed_sources": ["table", "text", "chart"]
+    },
+    {
+      "fact_key": "baseline",
+      "measure": "doanh_thu",
+      "subject": "Tập đoàn",
+      "period": "Q1/2025",
+      "unit": "VND_BILLION",
+      "dimensions": {},
+      "required": true,
+      "allowed_sources": ["table", "text", "chart"]
+    }
+  ],
+  "operation": {
+    "type": "growth_rate",
+    "formula_id": "growth_rate_v1",
+    "operand_fact_keys": ["current", "baseline"],
+    "result_unit": "PERCENT"
+  },
+  "source_strategy": {
+    "priority": ["table", "text", "chart"],
+    "chart_policy": "only_if_required_fact_unresolved",
+    "chart_fact_keys": ["current", "baseline"]
+  },
+  "clarification": null
+}

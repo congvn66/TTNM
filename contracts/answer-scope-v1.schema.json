@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/contracts/answer-scope-v1.schema.json",
+  "title": "Answer dependency scope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "measure_key", "subject_mode", "subject_keys", "period_keys", "dimensions", "region_ids", "include_text_context"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "measure_key": {"type": "string", "minLength": 1},
+    "subject_mode": {"enum": ["all", "explicit"]},
+    "subject_keys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "period_keys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "dimensions": {"type": "object", "additionalProperties": {"type": ["string", "number", "boolean", "null"]}},
+    "region_ids": {"type": "array", "items": {"type": "string", "format": "uuid"}, "uniqueItems": true},
+    "include_text_context": {"type": "boolean"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"subject_mode": {"const": "explicit"}}},
+      "then": {"properties": {"subject_keys": {"minItems": 1}}}
+    }
+  ]
+}

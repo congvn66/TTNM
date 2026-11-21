@@ -1,0 +1,62 @@
+"""Typed runtime configuration for the persistence cutover.
+
+The JSON adapter remains the safe default for offline tests. Setting
+``PERSISTENCE_BACKEND=postgres`` is deliberately fail-fast: the API must not
+silently continue writing JSON when a PostgreSQL cutover was requested.
+"""
+
+from __future__ import annotations
+
+
+import os
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True, slots=True)
+class Settings:
+    persistence_backend: str
+    database_url: str
+    storage_backend: str
+    r2_endpoint: str
+    r2_bucket: str
+    r2_access_key_id: str
+    r2_secret_access_key: str
+    r2_region: str
+    auth_required: bool
+    auth_cookie_secure: bool
+    auth_session_days: int
+    async_answer_jobs: bool
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        backend = os.getenv("PERSISTENCE_BACKEND", "json").strip().lower()
+        if backend not in {"json", "postgres"}:
+            raise RuntimeError("PERSISTENCE_BACKEND must be 'json' or 'postgres'")
+        storage_backend = os.getenv("STORAGE_BACKEND", "local").strip().lower()
+        if storage_backend not in {"local", "r2"}:
+            raise RuntimeError("STORAGE_BACKEND must be 'local' or 'r2'")
+        return cls(
+            persistence_backend=backend,
+            database_url=os.getenv("DATABASE_URL", "postgresql+psycopg://sourcelens:sourcelens-dev-only@127.0.0.1:5432/sourcelens"),
+            storage_backend=storage_backend,
+            r2_endpoint=os.getenv("R2_ENDPOINT", "").strip(),
+            r2_bucket=os.getenv("R2_BUCKET", "").strip(),
+            r2_access_key_id=os.getenv("R2_ACCESS_KEY_ID", "").strip(),
+            r2_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY", "").strip(),
+            r2_region=os.getenv("R2_REGION", "auto").strip() or "auto",
+            auth_required=os.getenv("AUTH_REQUIRED", "false").strip().lower() in {"1", "true", "yes", "on"},
+            auth_cookie_secure=os.getenv("AUTH_COOKIE_SECURE", "false").strip().lower() in {"1", "true", "yes", "on"},
+            auth_session_days=max(1, min(90, int(os.getenv("AUTH_SESSION_DAYS", "30")))),
+            async_answer_jobs=os.getenv("ASYNC_ANSWER_JOBS", "false").strip().lower() in {"1", "true", "yes", "on"},
+        )
+
+
+settings = Settings.from_env()
+
+
+def postgres_configured() -> bool:
+    return settings.persistence_backend == "postgres"
+
+
+def r2_configured() -> bool:
+    return settings.storage_backend == "r2"
