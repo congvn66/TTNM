@@ -361,6 +361,7 @@ class DeplotChartReader:
                             "bbox": direct_box or box,
                             "raw_text": raw_value,
                             "numeric_value": value,
+                            "value_kind": "number",
                             "data_status": state,
                             "extraction_method": method,
                             "method_label": "đọc từ nhãn"

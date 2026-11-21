@@ -99,3 +99,18 @@ request bất ngờ. Khi `ASYNC_ANSWER_JOBS=true`, worker phải chạy riêng:
 Worker mới thêm job vào hàng đợi PostgreSQL; nếu worker không chạy, tài liệu có
 thể giữ `queued` và chat trả placeholder `processing` một cách đúng trạng thái,
 không giả vờ đã hoàn tất.
+
+## Kết quả live smoke hiện tại (2026-11-21)
+
+- Docling 2.142.1 đã được cài trong `.venv`. Với
+  `PDF_EXTRACTION_BACKEND=docling`, `syn-report-001.pdf` (3 trang) chạy thành
+  công, trả 18 evidence và 0 warning. Lần chạy đầu tải model và mất khoảng
+  7,8 phút trên CPU; các lần sau dùng cache model.
+- DePlot đã được cài cùng Transformers 5.20.2 và Torch 2.15.0+cpu. Model
+  `google/deplot` đã tải weights và suy luận biểu đồ mẫu thành bảng; output
+  vẫn phải qua kiểm chứng nhãn/trục và provenance trước khi thành số liệu.
+- OpenRouter live pass với model `openai/gpt-6-luna` (structured JSON, citation
+  page 1, khoảng 3,5 giây).
+- Sau restart bằng process có quyền mạng, `/health/ready` trả `200`,
+  PostgreSQL và Cloudflare R2 đều `ok`; worker vẫn là process riêng và phải
+  chạy bằng `scripts/start_worker.ps1`.

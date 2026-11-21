@@ -26,6 +26,7 @@ EXPECTED_CONTRACTS = {
     "question-context-v1.schema.json",
     "question-plan-v2.schema.json",
     "semantic-v1.schema.json",
+    "tool-invocation-v1.schema.json",
 }
 
 

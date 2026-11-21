@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Protocol
 from uuid import uuid4
 
+from report_qa.application.extraction_contract import validate_extraction_batch
 from report_qa.domain.contracts import validate_document_evidence_v2
 
 
@@ -53,7 +54,10 @@ def _bbox(x0: float, y0: float, x1: float, y1: float, width: float, height: floa
 
 def _semantic(requirement: dict[str, Any]) -> dict[str, Any]:
     period = requirement.get("period")
-    return {"measure": requirement.get("measure", "unknown"), "subject": requirement.get("subject"), "period": {"label": period} if isinstance(period, str) else period, "unit": requirement.get("unit"), "dimensions": requirement.get("dimensions", {})}
+    if isinstance(period, str):
+        granularity = "quarter" if re.search(r"Q[1-4]", period, flags=re.IGNORECASE) else "year" if re.fullmatch(r"\d{4}", period.strip()) else "unknown"
+        period = {"label": period, "start": None, "end": None, "granularity": granularity}
+    return {"measure": requirement.get("measure", "unknown"), "subject": requirement.get("subject"), "period": period, "unit": requirement.get("unit"), "dimensions": requirement.get("dimensions", {})}
 
 
 class PdfVectorChartReader:
@@ -74,14 +78,17 @@ class PdfVectorChartReader:
             return self._result(request, "not_available", "PDF_READER_UNAVAILABLE")
         reader = PdfReader(str(request.source_pdf_path))
         pages = set(request.page_numbers) or set(range(1, len(reader.pages) + 1))
+        trigger_chart_region_keys = list(request.chart_region_keys) or [
+            f"page-{page_number}-chart-vector" for page_number in sorted(pages)
+        ]
         requirements = list(request.fact_requirements) or [{"fact_key": key, "measure": "unknown", "period": None, "unit": None, "dimensions": {}} for key in request.fact_keys]
         warnings: list[dict[str, Any]] = []
         evidences: list[dict[str, Any]] = []
         for number, page in enumerate(reader.pages, start=1):
             if number in pages:
                 evidences.extend(self._read_page(page, number, request, requirements, warnings))
-        batch = {"schema_version": 2, "document_version_id": request.document_version_id, "extraction_run_id": str(uuid4()), "scope": "on_demand_chart", "trigger": {"question_plan_id": request.question_plan_id, "fact_keys": list(request.fact_keys)}, "evidences": evidences, "warnings": warnings}
-        validate_document_evidence_v2(batch)
+        batch = {"schema_version": 2, "document_version_id": request.document_version_id, "extraction_run_id": str(uuid4()), "scope": "on_demand_chart", "trigger": {"question_plan_id": request.question_plan_id, "fact_keys": list(request.fact_keys), "chart_region_keys": trigger_chart_region_keys}, "evidences": evidences, "warnings": warnings}
+        validate_extraction_batch(batch)
         return {"status": "completed" if evidences else "not_found", "code": None if evidences else "CHART_FACT_NOT_RESOLVED", "question_plan_id": request.question_plan_id, "fact_keys": list(request.fact_keys), "evidence_batch": batch}
 
     def _read_page(self, page: Any, page_number: int, request: ChartReadRequest, requirements: list[dict[str, Any]], warnings: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -107,13 +114,15 @@ class PdfVectorChartReader:
             x, y, rw, rh = bar
             if index in labels:
                 raw, tx, ty = labels[index]
-                result.append(self._evidence(page_number, index, request, requirement, raw, _bbox(tx, ty, tx + max(8, len(raw) * 6), ty + 12, width, height), "direct_label", {"kind": "printed_value_label", "bar_bbox": _bbox(x, y, x + rw, y + rh, width, height)}))
+                result.append(self._evidence(page_number, index, request, requirement, raw, _bbox(tx, ty, tx + max(8, len(raw) * 6), ty + 12, width, height), "direct_label", {"chart_region_key": request.chart_region_keys[0] if request.chart_region_keys else f"page-{page_number}-chart-vector", "series_label": None, "category_label": None, "axis_label": None, "axis_unit": requirement.get("unit"), "lower_tick": None, "upper_tick": None, "assumptions": ["printed_value_label", "independent_bar"]}))
             elif len(ticks) >= 2 and ticks[-1][1] != ticks[0][1]:
                 lower, upper = ticks[0], ticks[-1]
                 value = lower[0] + (y + rh - lower[1]) * (upper[0] - lower[0]) / (upper[1] - lower[1])
                 step, precision = abs(upper[0] - lower[0]), 0 if abs(upper[0] - lower[0]) >= 10 else 1
                 raw = f"{value:.{precision}f}"
-                meta = {"kind": "linear_axis_interpolation", "axis_label": None, "axis_unit": requirement.get("unit"), "lower_tick": {"value": str(lower[0]), "pdf_y": lower[1]}, "upper_tick": {"value": str(upper[0]), "pdf_y": upper[1]}, "assumptions": ["single_linear_y_axis", "independent_bar", "bar_top_interpolated"]}
+                lower_tick = str(int(lower[0])) if lower[0].is_integer() else str(lower[0])
+                upper_tick = str(int(upper[0])) if upper[0].is_integer() else str(upper[0])
+                meta = {"chart_region_key": request.chart_region_keys[0] if request.chart_region_keys else f"page-{page_number}-chart-vector", "series_label": None, "category_label": None, "axis_label": None, "axis_unit": requirement.get("unit"), "lower_tick": lower_tick, "upper_tick": upper_tick, "assumptions": ["single_linear_y_axis", "independent_bar", "bar_top_interpolated"]}
                 result.append(self._evidence(page_number, index, request, requirement, raw, _bbox(x, y, x + rw, y + rh, width, height), "axis_estimation", meta))
         return result
 
@@ -143,7 +152,7 @@ class PdfVectorChartReader:
     @staticmethod
     def _evidence(page_number: int, index: int, request: ChartReadRequest, requirement: dict[str, Any], raw: str, bbox: list[float], method: str, chart_read: dict[str, Any]) -> dict[str, Any]:
         digest = hashlib.sha256(f"{request.question_plan_id}:{page_number}:{index}:{raw}:{method}".encode()).hexdigest()[:16]
-        return {"evidence_key": f"chart-{digest}", "source_region_key": f"page-{page_number}-chart-vector", "source_type": "chart", "page_number": page_number, "bbox": bbox, "raw_text": raw, "numeric_value": _decimal_text(raw), "data_status": "valid", "extraction_method": method, "method_label": "đọc từ nhãn" if method == "direct_label" else "ước lượng theo trục", "semantic": _semantic(requirement), "table_locator": None, "chart_read": chart_read, "confidence": .98 if method == "direct_label" else .65}
+        return {"evidence_key": f"chart-{digest}", "source_region_key": f"page-{page_number}-chart-vector", "source_type": "chart", "page_number": page_number, "bbox": bbox, "raw_text": raw, "numeric_value": _decimal_text(raw), "value_kind": "number", "data_status": "valid", "extraction_method": method, "method_label": "đọc từ nhãn" if method == "direct_label" else "ước lượng theo trục", "semantic": _semantic(requirement), "table_locator": None, "chart_read": chart_read, "confidence": .98 if method == "direct_label" else .65}
 
     @staticmethod
     def _result(request: ChartReadRequest, status: str, code: str) -> dict[str, Any]:

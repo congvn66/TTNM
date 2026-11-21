@@ -220,7 +220,7 @@ class ExtractedEvidence:
             if self.value_kind is ValueKind.TEXT and (self.raw_text is None or self.raw_value is not None):
                 raise InvariantError("valid text evidence requires raw_text only")
         elif self.raw_value is not None or self.raw_text is not None:
-            raise InvariantError("missing/error evidence cannot contain a value")
+            raise InvariantError("non-valid evidence cannot contain an effective value")
 
 
 @dataclass(slots=True)
@@ -275,7 +275,7 @@ class EvidenceRevision:
             if self.value_kind is ValueKind.TEXT and (self.raw_text is None or self.raw_value is not None):
                 raise InvariantError("valid text revision requires raw_text only")
         elif self.raw_value is not None or self.raw_text is not None:
-            raise InvariantError("missing/error revision cannot contain a value")
+            raise InvariantError("non-valid revision cannot contain an effective value")
 
 
 @dataclass(slots=True)

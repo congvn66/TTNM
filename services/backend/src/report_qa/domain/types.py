@@ -17,6 +17,8 @@ class ValueKind(StrEnum):
 class DataStatus(StrEnum):
     VALID = "valid"
     MISSING = "missing"
+    UNREADABLE = "unreadable"
+    AMBIGUOUS = "ambiguous"
     ERROR = "error"
 
 

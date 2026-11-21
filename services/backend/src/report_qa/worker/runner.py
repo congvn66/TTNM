@@ -106,7 +106,10 @@ def run(*, poll_seconds: float = 1.0, worker_id: str | None = None, once: bool =
     if settings.persistence_backend != "postgres":
         raise RuntimeError("worker requires PERSISTENCE_BACKEND=postgres")
     queue = PostgresJobQueue(settings.database_url)
-    worker_id = worker_id or f"worker-{os.getpid()}"
+    # The launcher passes a stable identity through the environment so that
+    # ``job_events`` can distinguish a deployed worker from a one-off smoke
+    # process.  Fall back to the PID for local/manual runs.
+    worker_id = worker_id or os.getenv("SOURCELENS_WORKER_ID") or f"worker-{os.getpid()}"
     reconnect_delay = max(1.0, poll_seconds)
     while not STOP:
         try:
@@ -157,7 +160,10 @@ def run(*, poll_seconds: float = 1.0, worker_id: str | None = None, once: bool =
             stale = isinstance(exc, StaleJobError)
             retry_at = None if stale else datetime.now(timezone.utc) + timedelta(seconds=min(60, 2 ** max(0, attempts - 1))) if attempts < int(job.get("max_attempts") or 3) else None
             try:
-                queue.fail(job_id=job_id, lease_token=lease_token, error_code="STALE_INPUT_REVISION" if stale else "ANSWER_FAILED" if job.get("kind") == "answer_question" else "EXTRACTION_FAILED", retry_at=retry_at)
+                if stale:
+                    queue.supersede(job_id=job_id, lease_token=lease_token, reason="STALE_INPUT_REVISION")
+                else:
+                    queue.fail(job_id=job_id, lease_token=lease_token, error_code="ANSWER_FAILED" if job.get("kind") == "answer_question" else "EXTRACTION_FAILED", retry_at=retry_at)
             except (psycopg.OperationalError, psycopg.InterfaceError):
                 # The lease may be recovered by another worker after a DB
                 # outage. Never terminate the process while reporting failure.

@@ -179,6 +179,7 @@ def extract_docling_artifact(
                 "bbox": box,
                 "raw_text": original if original is not None else raw,
                 "numeric_value": value,
+                "value_kind": "number",
                 "data_status": state,
                 "extraction_method": method,
                 "method_label": "đọc từ ô bảng"

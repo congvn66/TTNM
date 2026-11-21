@@ -4,9 +4,9 @@
 
 Bo tai lieu nay la source of truth cho MVP hoi dap tren PDF co can cu, phep tinh deterministic, correction theo chat va recalculation co version fence.
 
-- Trạng thái tài liệu: `Final design v1` cho MVP local vertical slice; ADR kiến trúc đã Accepted, PostgreSQL là thiết kế đích và đang cutover từng bước, chưa bật runtime.
-- Data design: baseline chi tiết + PostgreSQL DDL có constraint/trigger; JSON adapter local vẫn là runtime source of truth hiện tại.
-- Week 1 local evidence-revision slice: UI/API lưu giá trị gốc, giá trị hiện hành, lịch sử append-only, optimistic concurrency và answer-input snapshot; automatic recalculation + PostgreSQL API cutover chưa bật.
+- Trạng thái tài liệu: `Final design v1`; vertical slice hiện chạy được ở cả JSON offline và PostgreSQL runtime.
+- Data design: PostgreSQL là source of truth cho session/document/extraction/evidence/message/answer metadata khi `PERSISTENCE_BACKEND=postgres`; PDF và extraction artifact vẫn ở local filesystem trong milestone này.
+- Week 1 evidence-revision slice: giá trị gốc, giá trị sửa, lịch sử append-only và answer-input snapshot đã được ghi vào revision graph PostgreSQL; JSON vẫn giữ làm adapter offline cho test.
 - Executable specification: generator/validator, 26 backend skeleton tests, 13 reference/design tests và 10 API integration tests.
 - Khong nam trong pham vi: multi-user collaboration, format ngoai PDF va chart ngoai tap MVP.
 
@@ -34,7 +34,10 @@ Bo tai lieu nay la source of truth cho MVP hoi dap tren PDF co can cu, phep tinh
 | [security-operations.md](security-operations.md) | Threat model, auth/upload, logging, metrics, backup, purge, incident |
 | [data-flow-observability.md](data-flow-observability.md) | Cach audit request that, trace stage, persistence va failure semantics |
 | [final-design.md](final-design.md) | Bản tổng hợp chuẩn: data flow, persistence, invariant và trạng thái triển khai |
-| [HANDOUT/README.md](HANDOUT/README.md) | Luồng triển khai duy nhất, phân công Tiền/Đức Anh và contract tích hợp |
+| [production-saas-audit.md](production-saas-audit.md) | Audit bàn giao SaaS: scene, API mapping, trạng thái UI, lỗ hổng còn lại và checklist nghiệm thu |
+| [persistence-security-audit.md](persistence-security-audit.md) | Audit persistence Supabase/R2, protocol archive/purge, auth/access control và cleanup runtime |
+| [multi-user-session-token-cache-config.md](multi-user-session-token-cache-config.md) | Handout multi-user: owner isolation, session/token, device revoke, cache, config, worker và transaction publish |
+| [HANDOUT/README.md](HANDOUT/README.md) | Luồng triển khai duy nhất, phân công Tiền/Đức Anh, contract tích hợp và handoff 21-11 |
 
 ### Data
 
@@ -42,6 +45,7 @@ Bo tai lieu nay la source of truth cho MVP hoi dap tren PDF co can cu, phep tinh
 |---|---|
 | [data-model.md](data-model.md) | ERD, data dictionary 23 bang, JSONB contract, transaction, query, retention, migration |
 | [storage-and-data-runtime.md](storage-and-data-runtime.md) | Luu runtime hien tai, quyet dinh PostgreSQL/Redis/object storage va khoang trong data |
+| [cloudflare-r2-setup.md](cloudflare-r2-setup.md) | Setup bucket, scoped token, runtime environment va readiness probe R2 |
 | [postgres-revision-graph.md](postgres-revision-graph.md) | Transaction graph, cutover contract va capability matrix cho PostgreSQL/OCR/chart |
 | [initial-schema.sql](initial-schema.sql) | PostgreSQL 16 baseline voi FK/check/index/trigger |
 | [evaluation-dataset.md](evaluation-dataset.md) | Dataset nghien cuu 180 cau, split, annotation va metrics |
@@ -52,6 +56,8 @@ Bo tai lieu nay la source of truth cho MVP hoi dap tren PDF co can cu, phep tinh
 | Tai lieu | Noi dung |
 |---|---|
 | [PLAN/README.md](PLAN/README.md) | Code review, implementation/data/test plan va execution backlog |
+| [PLAN/15-implementation-status.md](PLAN/15-implementation-status.md) | Trạng thái thực tế và bằng chứng triển khai plan 07–14 |
+| [PLAN/17-persistence-security-and-cleanup-plan.md](PLAN/17-persistence-security-and-cleanup-plan.md) | P0 plan kiểm chứng persistence, hardening bảo mật, purge và cleanup an toàn |
 | [test-roadmap.md](test-roadmap.md) | Test layers, flow/race/security cases, gates va CI |
 | [delivery-roadmap.md](delivery-roadmap.md) | Milestone va exit gate |
 | [open-questions.md](open-questions.md) | P0/P1/P2 decisions can spike/chot |
@@ -75,6 +81,14 @@ Bo tai lieu nay la source of truth cho MVP hoi dap tren PDF co can cu, phep tinh
 $env:PYTHONIOENCODING='utf-8'
 python scripts/run_flow_tests.py
 ```
+
+Kiểm tra adapter thật (không in secret) dùng:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/check_integrations.py
+```
+
+Chi tiết và cách bật probe OpenRouter/PDF thật: [HANDOUT/integration-readiness.md](HANDOUT/integration-readiness.md).
 
 Expected baseline:
 

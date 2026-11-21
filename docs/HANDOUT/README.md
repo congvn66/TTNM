@@ -1,5 +1,7 @@
 # Handout triển khai một luồng Document QA
 
+Bàn giao cho thành viên tiếp theo (21-11-2026): [handoff-2026-11-21.md](handoff-2026-11-21.md).
+
 Docling/DePlot implementation on branch `migration`: [setup, schema output, examples and limitations](tien-docling-deplot.md).
 
 Runtime/auth/AI/queue handout: [runtime-auth-and-jobs.md](runtime-auth-and-jobs.md).

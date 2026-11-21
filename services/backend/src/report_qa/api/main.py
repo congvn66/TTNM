@@ -1194,7 +1194,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         if resolution["status"] == "chart_required" and allowed_chart_facts and candidate_charts:
             chart_result = chart_reader.read(
                 ChartReadRequest(
-                    document_version_id=document["id"],
+                    document_version_id=str(document.get("version_id") or document["id"]),
                     question_plan_id=question_plan["question_plan_id"],
                     fact_keys=tuple(sorted(allowed_chart_facts)),
                     chart_region_keys=tuple(region["chart_region_key"] for region in candidate_charts),
@@ -1217,6 +1217,43 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
                 )
             )
             if chart_result.get("evidence_batch"):
+                chart_batch_payload = chart_result["evidence_batch"]
+                if postgres_runtime:
+                    # Lazy chart extraction is still durable.  Persist before
+                    # resolving the answer so every citation/input points to
+                    # a real chat-local evidence revision, never an ``evr:``
+                    # placeholder that cannot be inserted into PostgreSQL.
+                    try:
+                        chart_revision_ids = _runtime_for_owner(
+                            UUID(str(session.get("owner_id", LOCAL_OWNER_ID)))
+                        ).persist_on_demand_chart(
+                            chat_id=UUID(session_id),
+                            document_version_id=UUID(str(document.get("version_id") or document["id"])),
+                            evidence_batch=chart_batch_payload,
+                            question_plan_id=question_plan["question_plan_id"],
+                        )
+                    except (PermissionError, RuntimeError, ValueError) as exc:
+                        trace.append(trace_event("chart_persistence", "failed", code=str(exc)))
+                        raise HTTPException(
+                            status_code=503,
+                            detail={
+                                "code": "CHART_EVIDENCE_PERSISTENCE_FAILED",
+                                "message": "Không thể lưu evidence biểu đồ để tạo liên kết trích dẫn bền vững.",
+                                "trace_id": trace_id,
+                            },
+                        ) from exc
+                    for item in chart_batch_payload.get("evidences", []):
+                        revision_id = chart_revision_ids.get(str(item.get("evidence_key")))
+                        if revision_id:
+                            item["current_revision_id"] = str(revision_id)
+                    trace.append(
+                        trace_event(
+                            "chart_persistence",
+                            "committed",
+                            extraction_run_id=chart_batch_payload.get("extraction_run_id"),
+                            revision_count=len(chart_revision_ids),
+                        )
+                    )
                 # On-demand evidence augments this calculation only; the
                 # immutable base extraction artifact is never overwritten.
                 chart_artifact = dict(extraction)

@@ -4,7 +4,10 @@ import AuthGate from "../features/auth/AuthGate.jsx";
 import AppRouter from "./AppRouter.jsx";
 
 export default function App() {
-  const authRequired = String(import.meta.env.VITE_AUTH_REQUIRED ?? "false").toLowerCase() === "true";
+  // Development keeps the local demo frictionless; a production build is
+  // private by default unless the deployer explicitly opts out.
+  const defaultAuth = import.meta.env.MODE === "production" ? "true" : "false";
+  const authRequired = String(import.meta.env.VITE_AUTH_REQUIRED ?? defaultAuth).toLowerCase() === "true";
   return (
     <AppProviders>
       <ErrorBoundary><AuthGateEnabled required={authRequired} /></ErrorBoundary>

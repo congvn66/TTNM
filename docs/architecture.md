@@ -63,7 +63,7 @@ Moi module co service layer va repository interface. Tranh cho endpoint goi truc
 - API/worker: Python 3.12+, FastAPI, Pydantic, SQLAlchemy 2, Alembic.
 - DB: PostgreSQL 16+ voi `pgcrypto`; JSONB chi cho semantic/filter/payload thay doi theo loai.
 - Job: bang `jobs` + `FOR UPDATE SKIP LOCKED` va lease. Them Redis/broker chi khi do duoc bottleneck.
-- Storage: MinIO local, S3-compatible production.
+- Storage: Cloudflare R2 private bucket; local filesystem chi la cache OCR/PDF co the tai tao.
 - Observability: structured logs, correlation/request/job ID, OpenTelemetry neu du thoi gian.
 
 Chi tiet ly do va he qua o ADR-0001.

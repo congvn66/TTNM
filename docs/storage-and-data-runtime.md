@@ -1,12 +1,19 @@
 # Lưu trữ runtime và khoảng trống dữ liệu
 
 ## Kết luận ngắn
+> **Cloudflare R2 cutover (2026-11-19).** When `STORAGE_BACKEND=r2`, the
+> private R2 bucket is the durable object store for original PDFs and extraction
+> artifacts. `runtime/uploads` and `runtime/extracted` are only a disposable
+> cache used by PDF/OCR libraries. The server reloads a missing cache item from
+> R2 by its server-generated object key. MinIO is not part of this runtime.
+>
+> Setup and readiness verification: [cloudflare-r2-setup.md](cloudflare-r2-setup.md).
 
-Runtime local hiện không dùng Redis hay PostgreSQL. Session đang được lưu ở
-`runtime/sessions.json`, PDF ở `runtime/uploads/{document_id}.pdf`, và text trích
-xuất ở `runtime/extracted/{document_id}.json`. Cách này phù hợp để demo một máy,
-restart-safe ở mức file, nhưng không an toàn cho nhiều worker/process và chưa có
-transaction domain đầy đủ.
+Runtime có hai chế độ rõ ràng. JSON là adapter offline mặc định cho test; khi
+`PERSISTENCE_BACKEND=postgres`, session/document/extraction/evidence/message và
+answer metadata đi qua PostgreSQL transaction. PDF ở
+`runtime/uploads/{document_id}.pdf` và extraction artifact ở local filesystem
+trong P0; đây là giới hạn storage, không phải nguồn sự thật metadata.
 
 Không dùng Redis làm source of truth cho session. Redis chỉ nên giữ cache, lock
 ngắn hạn hoặc queue/progress tạm thời. PostgreSQL phải là source of truth cho
@@ -17,7 +24,7 @@ audit; object storage giữ PDF/artifact lớn.
 
 | Dữ liệu | Nơi lưu hiện tại | Tính bền vững | Rủi ro |
 |---|---|---|---|
-| Session, documents, messages | `runtime/sessions.json` | restart-safe trên một process/máy | lost update khi nhiều process, không có query/index/transaction |
+| Session, documents, messages | PostgreSQL runtime hoặc `runtime/sessions.json` offline | PostgreSQL có FK/index/transaction; JSON chỉ cho một process | JSON không phù hợp nhiều process |
 | PDF gốc | `runtime/uploads/*.pdf` | bền trên local disk | chưa có object-store versioning/retention |
 | Text từng trang | `runtime/extracted/*.json` | bền trên local disk | chưa có extraction revision/query layout |
 | Retrieval trace | nhúng trong assistant message + log | bền cho session local | chưa có bảng audit/retention/PII policy |
@@ -63,18 +70,18 @@ message, evidence revision hoặc answer revision.
 
 ## Trạng thái triển khai PostgreSQL
 
-Đã thêm runtime local PostgreSQL 16 tại `infra/compose/dev.yml`, baseline schema
-được mount từ `docs/initial-schema.sql`, typed settings và connectivity probe.
-API vẫn đang dùng JSON adapter mặc định (`PERSISTENCE_BACKEND=json`); chưa được
-phép chuyển cờ sang `postgres` trước khi repository/UoW, Alembic migration,
-data import và integration/race tests hoàn tất. Điều này tránh tình trạng health
-hiển thị PostgreSQL nhưng mutation vẫn ghi ngầm vào JSON.
+Đã thêm runtime PostgreSQL/Supabase, Alembic migration `0001_initial_schema` và
+`0002_chat_documents`, typed settings, connectivity probe và
+`PostgresRuntimeStore`. Bật `PERSISTENCE_BACKEND=postgres` để API dùng PostgreSQL
+làm source of truth cho metadata/revision graph; không dual-write sang JSON.
+PDF/extraction artifact vẫn ghi local với storage key bất biến để chờ object
+storage adapter.
 
 ## Các chức năng dữ liệu còn thiếu so với scope
 
 | Chức năng | Trạng thái | Việc cần triển khai |
 |---|---|---|
-| Session/message local persistence | Có | thay JSON bằng repository PostgreSQL khi chuyển production |
+| Session/message persistence | Có | PostgreSQL runtime P0; JSON chỉ offline |
 | PDF immutable + hash | Có ở local | object storage key/version, checksum reconciliation |
 | Extraction text + numeric bbox | Có cho PDF text/layout table đơn giản | OCR, bảng phức tạp, extraction revision và retryable worker |
 | Retrieval + claim quote validation | Có | vector/hybrid index chỉ là index phụ, DB vẫn là truth |
@@ -82,7 +89,7 @@ hiển thị PostgreSQL nhưng mutation vẫn ghi ngầm vào JSON.
 | Deterministic growth calculator | Có | mở rộng operation registry: sum, difference, pp, ranking, ties |
 | Evidence correction | Có trong domain/reference flow | nối vào uploaded-document chat và PostgreSQL revision transaction |
 | Answer revision/recalculation | Có trong domain fixture | nối worker thật, lease, stale fence, idempotency |
-| Job durability | Thiếu | bảng jobs + `FOR UPDATE SKIP LOCKED`, heartbeat, retry, DLQ |
+| Job durability | Chưa hoàn tất | bảng jobs + `FOR UPDATE SKIP LOCKED`, heartbeat, retry, DLQ; hiện upload dùng FastAPI background task |
 | Ownership/authentication | Thiếu ở local demo | user/session auth, composite owner FK, 404 hidden access |
 | Idempotency cho upload/message | Thiếu ở local chat | `request_keys`, request hash, replay response |
 | Retention/deletion | Thiếu | purge job, object cleanup, legal hold/audit policy |

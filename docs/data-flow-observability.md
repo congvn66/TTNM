@@ -16,6 +16,12 @@ Invoke-RestMethod "$base/health" | ConvertTo-Json -Depth 6
 - `durability`: local disk hay process memory;
 - `ai_mode` va `ai_model`: request co goi AI that hay deterministic.
 
+- `storage`: `local` for offline tests, or `r2` with `status: ok` and the private
+  configured bucket in the Cloudflare runtime;
+- R2 readiness is also available through `python scripts/check_r2.py` after the
+- `storage`: `local` for offline tests, or `r2` with `status: ok` and the private
+  configured bucket in the Cloudflare runtime;
+- R2 readiness is also available through `python scripts/check_r2.py` after the
 ## 2. Luong PDF -> chat
 
 | Buoc | Endpoint/diem xu ly | Du lieu vao | Du lieu duoc luu | Cach xac minh |

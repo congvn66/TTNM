@@ -84,15 +84,25 @@ class PostgresRevisionStore:
             raise PermissionError("DOCUMENT_NOT_FOUND")
         run_id = uuid4()
         run_no = int(self._execute("SELECT COALESCE(MAX(run_no),0)+1 AS value FROM extraction_runs WHERE document_version_id=%s", (document_version_id,))[0]["value"])
-        self._execute("""INSERT INTO extraction_runs (id,document_version_id,run_no,status,extractor_name,extractor_version,started_at,completed_at)
-                       VALUES (%s,%s,%s,'completed',%s,%s,now(),now())""", (run_id, document_version_id, run_no, extractor_name, extractor_version))
+        self._execute("""INSERT INTO extraction_runs
+                              (id,document_version_id,run_no,status,extractor_name,extractor_version,
+                               contract_name,contract_version,scope,started_at,completed_at)
+                       VALUES (%s,%s,%s,'completed',%s,%s,'document-evidence',2,'base_document',now(),now())""",
+                      (run_id, document_version_id, run_no, extractor_name, extractor_version))
         self._execute("UPDATE document_versions SET status='ready', page_count=%s WHERE id=%s", (page_count, document_version_id))
         for item in evidence_batch.get("evidences", []):
             region_id, evidence_id = uuid4(), uuid4()
             self._execute("""INSERT INTO source_regions (id,extraction_run_id,region_key,page_number,bbox,region_type,extracted_text,meta)
                            VALUES (%s,%s,%s,%s,%s::jsonb,%s,%s,%s::jsonb)""", (region_id, run_id, item["source_region_key"], item["page_number"], self._json(item["bbox"]), "table_cell" if item["source_type"] == "table" else "chart_element" if item["source_type"] == "chart" else "paragraph", item.get("raw_text"), self._json({"evidence_key": item["evidence_key"], "method_label": item["method_label"], "table_locator": item.get("table_locator"), "chart_read": item.get("chart_read")})))
-            self._execute("""INSERT INTO extracted_evidences (id,extraction_run_id,source_region_id,value_kind,raw_value,semantic,data_status,extraction_method,confidence)
-                           VALUES (%s,%s,%s,'number',%s::numeric,%s::jsonb,'valid',%s,%s)""", (evidence_id, run_id, region_id, item["numeric_value"], self._json(item["semantic"]), self._db_method(item["extraction_method"]), item.get("confidence")))
+            numeric = item.get("numeric_value")
+            method = str(item.get("extraction_method") or "text")
+            source_type = str(item.get("source_type") or "text")
+            value_kind = str(item.get("value_kind") or ("number" if numeric is not None or source_type in {"table", "chart"} else "text"))
+            data_status = str(item.get("data_status") or "valid")
+            raw_value = numeric if value_kind == "number" else None
+            raw_text = item.get("raw_text") if value_kind == "text" else None
+            self._execute("""INSERT INTO extracted_evidences (id,extraction_run_id,source_region_id,value_kind,raw_value,raw_text,semantic,data_status,extraction_method,confidence)
+                           VALUES (%s,%s,%s,%s,%s::numeric,%s,%s::jsonb,%s,%s,%s)""", (evidence_id, run_id, region_id, value_kind, raw_value, raw_text, self._json(item["semantic"]), data_status, self._db_method(item["extraction_method"]), item.get("confidence")))
         return run_id
 
     def attach_source(self, owner_id: UUID, chat_id: UUID, document_version_id: UUID, extraction_run_id: UUID) -> UUID:

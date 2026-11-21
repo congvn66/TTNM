@@ -769,6 +769,7 @@ body { background: var(--canvas); }
   border-radius: 8px;
 }
 .app-shell > .topbar .top-actions {
+  flex: 1 1 auto;
   gap: 8px;
   margin-left: auto;
   padding-left: 10px;
@@ -777,7 +778,8 @@ body { background: var(--canvas); }
   display: none;
 }
 .app-shell > .topbar .top-actions > .profile-menu {
-  margin-left: 2px;
+  /* Account is the final global action, anchored to the far right. */
+  margin-left: auto;
 }
 .app-shell > .topbar .profile-menu .profile-chip {
   min-height: 40px;

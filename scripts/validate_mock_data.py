@@ -197,7 +197,7 @@ def validate_files(manifest: dict[str, Any], reports: list[dict[str, Any]]) -> N
 
 def validate_contracts() -> int:
     paths = sorted(CONTRACTS.glob("*.schema.json"))
-    require(len(paths) == 7, "contracts: expected seven versioned schemas")
+    require(len(paths) == 8, "contracts: expected eight versioned schemas")
     ids = set()
     for path in paths:
         schema = json.loads(path.read_text(encoding="utf-8"))

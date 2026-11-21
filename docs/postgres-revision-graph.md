@@ -8,12 +8,11 @@ are addressed from `document_versions.storage_key` and are immutable. Redis is
 optional cache/notification infrastructure only and must never be needed to
 rebuild a chat, an evidence revision, or an answer.
 
-The current local UI still defaults to `PERSISTENCE_BACKEND=json` for backward
-compatible offline demo data. Set `PERSISTENCE_BACKEND=postgres` only after the
-API endpoint cutover is enabled: it must never silently write a JSON catalog
-when Postgres was requested. `PostgresRevisionStore` is the concrete graph
-writer used by that cutover; it writes the reviewed 23-table schema and is
-transactional.
+The local UI still defaults to `PERSISTENCE_BACKEND=json` for backward-compatible
+offline tests. Set `PERSISTENCE_BACKEND=postgres` to use the concrete
+`PostgresRuntimeStore`/`PostgresRevisionStore` cutover; it writes the reviewed
+schema transactionally and never silently falls back to a JSON catalog. PDF
+bytes and extraction JSON remain local until the object-storage milestone.
 
 ## Write transaction
 
@@ -43,14 +42,13 @@ The legacy session endpoints may keep their JSON response shape, but their
 handlers must call these graph operations in one database transaction:
 
 1. `create_chat(owner, title)` for a new session.
-2. `create_document_version(...)`, then `persist_completed_extraction(...)`
-   after the extractor has completed.
-3. `attach_source(...)`, followed by `initialize_chat_evidence(...)` to create
-   the chat-local working copy.
-4. `append_answer_revision(..., evidence_revision_ids=...)` for every
-   assistant result. The caller derives IDs from the initialization map using
-   `answer_inputs.evidence_key`; the stored answer must not contain synthetic
-   evidence IDs.
+2. Create the document/version and queued extraction row; after extraction,
+   write regions/evidences while the run is queued, then mark the run completed.
+3. Attach the completed source and call `initialize_chat_evidence(...)` to
+   create the chat-local working copy.
+4. Sync each assistant result into `messages`, `answer_revisions` and
+   `answer_inputs`; the HTTP projection remains backward-compatible while the
+   graph is the durable source.
 
 Use `request_keys` for upload/message idempotency. Use a worker job with an
 unexpired lease token for long extraction/OCR work; do not publish an answer if

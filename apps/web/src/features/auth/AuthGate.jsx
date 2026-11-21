@@ -42,7 +42,7 @@ export default function AuthGate({ children }) {
 
   if (state.status === "checking") return <div className="auth-loading"><div className="auth-spinner"></div><span>Đang kiểm tra phiên đăng nhập…</span></div>;
   if (state.status === "authenticated") return typeof children === "function" ? children({ user: state.user, signOut }) : children;
-  if (state.status === "unavailable") return <main className="auth-gate"><section className="auth-card"><AuthMark /><p className="auth-eyebrow">SourceLens</p><h1>Chưa thể mở phiên làm việc</h1><p className="auth-muted">Backend đang yêu cầu auth nhưng chưa kết nối được PostgreSQL. Kiểm tra migration và API rồi thử lại.</p><button className="auth-primary" onClick={() => window.location.reload()}>Thử lại</button></section></main>;
+  if (state.status === "unavailable") return <main className="auth-gate"><section className="auth-card"><AuthMark /><p className="auth-eyebrow">SourceLens</p><h1>Chưa thể mở phiên làm việc</h1><p className="auth-muted">Dịch vụ đăng nhập hiện chưa sẵn sàng. Hãy kiểm tra kết nối rồi thử lại.</p><button className="auth-primary" onClick={() => window.location.reload()}>Thử lại</button></section></main>;
 
   const switchMode = (nextMode) => {
     const nextPath = nextMode === "forgot" ? "/forgot-password" : nextMode === "reset" ? "/reset-password" : "/login";

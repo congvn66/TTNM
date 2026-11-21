@@ -38,7 +38,7 @@ class ReferenceFlowTests(unittest.TestCase):
         result = check_design()
         self.assertEqual(result["tables"], 23)
         self.assertGreaterEqual(result["triggers"], 10)
-        self.assertEqual(result["contracts"], 7)
+        self.assertEqual(result["contracts"], 8)
 
     def test_submit_question_is_idempotent(self) -> None:
         before = len(self.flow.rows("messages"))

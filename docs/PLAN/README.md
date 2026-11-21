@@ -21,7 +21,10 @@ Trạng thái baseline tại thời điểm review (lịch sử, không phải t
 - `PLAN-003`: job lease có expiry, attempts, heartbeat, reclaim và retry limit cơ bản.
 - `TEST-106`: repository contract tests cho idempotency hash, dedup job và rollback.
 
-Chưa hoàn tất: mapping 23 bảng sang ORM/DDL, PostgreSQL adapter, lease race thật trên DB, full JSON Schema validator và API runtime.
+Đã hoàn tất P0 cutover cho session/document/extraction/evidence/message metadata
+qua `PostgresRuntimeStore`, migration `0001` + `0002` và smoke test trên Supabase.
+Còn thiếu: object-storage adapter, durable worker lease/race thật, auth/ownership
+và full JSON Schema validator cho production.
 
 ## 2. Tài liệu trong PLAN
 
@@ -33,6 +36,27 @@ Chưa hoàn tất: mapping 23 bảng sang ORM/DDL, PostgreSQL adapter, lease rac
 | [04-test-plan.md](04-test-plan.md) | Test matrix, race/failure cases và quality gates |
 | [05-execution-backlog.md](05-execution-backlog.md) | Backlog task có ID, dependency, đầu ra và Definition of Done |
 | [06-p0-data-foundation-execution-plan.md](06-p0-data-foundation-execution-plan.md) | Kế hoạch P0 chi tiết để chuyển luồng session/document sang PostgreSQL, object storage, durable jobs và revision graph |
+| [07-production-saas-master-plan.md](07-production-saas-master-plan.md) | Master plan nâng cấp sản phẩm gần production; trạng thái Proposed, chờ duyệt |
+| [08-frontend-architecture-plan.md](08-frontend-architecture-plan.md) | Frontend routes, feature/component boundaries, design system, theme và migration khỏi WorkspaceScreen monolith |
+| [09-auth-settings-theme-plan.md](09-auth-settings-theme-plan.md) | Authentication, server session, ownership, settings và light/dark/system theme |
+| [10-library-file-folder-plan.md](10-library-file-folder-plan.md) | Project/folder tree, document actions, immutable PDF versions, archive/restore/purge và object storage |
+| [11-async-jobs-worker-plan.md](11-async-jobs-worker-plan.md) | Durable PostgreSQL queue, worker lease, retry, cancellation, AI/extraction jobs và xử lý tải |
+| [12-backend-modularization-plan.md](12-backend-modularization-plan.md) | Tách FastAPI main monolith thành app factory, routers, use cases, ports, adapters và worker |
+| [13-visual-assets-plan.md](13-visual-assets-plan.md) | Visual system, functional SVG icons, custom PNG/WebP illustrations và asset pipeline |
+| [14-test-rollout-plan.md](14-test-rollout-plan.md) | Test matrix, migration gates, recovery/load drills và rollout theo vertical slice |
+| [../production-saas-audit.md](../production-saas-audit.md) | Audit bàn giao UI/API, checklist flow và các gap cần đóng trước staging |
+| [17-persistence-security-and-cleanup-plan.md](17-persistence-security-and-cleanup-plan.md) | P0 kiểm chứng Supabase/R2, hardening quyền truy cập, purge và cleanup runtime |
+
+## 2.1 Proposal gần production đang chờ duyệt
+
+Các tài liệu `07`-`14` là đề xuất mới, chưa phải xác nhận đã triển khai. Phạm vi đã loại bỏ payment, subscription, billing provider và paywall. Giới hạn upload/storage/job nếu có chỉ là policy bảo vệ vận hành.
+
+Thứ tự duyệt khuyến nghị:
+
+1. `07` để chốt scope và các quyết định kiến trúc.
+2. `12`, `09`, `10`, `11` để chốt backend/data/worker contracts.
+3. `08`, `13` để chốt product UX và art direction.
+4. `14` để chốt quality gates và rollout.
 
 ## 3. Thứ tự đọc và thực hiện
 

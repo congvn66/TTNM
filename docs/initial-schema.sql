@@ -70,6 +70,12 @@ CREATE TABLE extraction_runs (
     status text NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
     extractor_name text NOT NULL,
     extractor_version text,
+    contract_name text NOT NULL DEFAULT 'document-evidence',
+    contract_version integer NOT NULL DEFAULT 1 CHECK (contract_version > 0),
+    scope text NOT NULL DEFAULT 'base_document' CHECK (scope IN ('base_document', 'on_demand_chart')),
+    trigger jsonb,
+    input_sha256 text,
+    tool_meta jsonb NOT NULL DEFAULT '{}'::jsonb,
     config jsonb NOT NULL DEFAULT '{}'::jsonb,
     error_code text,
     started_at timestamptz,
@@ -77,11 +83,16 @@ CREATE TABLE extraction_runs (
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (document_version_id, run_no),
     UNIQUE (id, document_version_id),
+    CHECK ((scope = 'base_document' AND trigger IS NULL) OR (scope = 'on_demand_chart' AND jsonb_typeof(trigger) = 'object')),
     CHECK (
         (status IN ('completed', 'failed') AND completed_at IS NOT NULL)
         OR status IN ('queued', 'running')
     )
 );
+
+CREATE UNIQUE INDEX extraction_runs_chart_dedup_uq
+    ON extraction_runs (document_version_id, scope, input_sha256)
+    WHERE scope = 'on_demand_chart' AND status = 'completed' AND input_sha256 IS NOT NULL;
 
 CREATE TABLE source_regions (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -106,7 +117,7 @@ CREATE TABLE extracted_evidences (
     raw_value numeric,
     raw_text text,
     semantic jsonb NOT NULL,
-    data_status text NOT NULL CHECK (data_status IN ('valid', 'missing', 'error')),
+    data_status text NOT NULL CHECK (data_status IN ('valid', 'missing', 'unreadable', 'ambiguous', 'error')),
     extraction_method text NOT NULL CHECK (extraction_method IN ('direct_label', 'axis_estimation', 'text', 'table', 'ocr', 'none')),
     confidence numeric CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1)),
     created_at timestamptz NOT NULL DEFAULT now(),
@@ -117,7 +128,7 @@ CREATE TABLE extracted_evidences (
     CHECK (
         (data_status = 'valid' AND value_kind = 'number' AND raw_value IS NOT NULL AND raw_text IS NULL)
         OR (data_status = 'valid' AND value_kind = 'text' AND raw_text IS NOT NULL AND raw_value IS NULL)
-        OR (data_status IN ('missing', 'error') AND raw_value IS NULL AND raw_text IS NULL)
+        OR (data_status IN ('missing', 'unreadable', 'ambiguous', 'error') AND raw_value IS NULL AND raw_text IS NULL)
     )
 );
 
@@ -178,7 +189,7 @@ CREATE TABLE evidence_revisions (
     numeric_value numeric,
     text_value text,
     semantic jsonb NOT NULL,
-    data_status text NOT NULL CHECK (data_status IN ('valid', 'missing', 'error')),
+    data_status text NOT NULL CHECK (data_status IN ('valid', 'missing', 'unreadable', 'ambiguous', 'error')),
     verification_status text NOT NULL CHECK (verification_status IN ('unverified', 'verified', 'edited')),
     action text NOT NULL CHECK (action IN ('initialize', 'verify', 'edit', 'mark_error', 'restore')),
     reason text,
@@ -190,7 +201,7 @@ CREATE TABLE evidence_revisions (
     CHECK (
         (data_status = 'valid' AND value_kind = 'number' AND numeric_value IS NOT NULL AND text_value IS NULL)
         OR (data_status = 'valid' AND value_kind = 'text' AND text_value IS NOT NULL AND numeric_value IS NULL)
-        OR (data_status IN ('missing', 'error') AND numeric_value IS NULL AND text_value IS NULL)
+        OR (data_status IN ('missing', 'unreadable', 'ambiguous', 'error') AND numeric_value IS NULL AND text_value IS NULL)
     ),
     CHECK (action NOT IN ('edit', 'mark_error', 'restore') OR length(btrim(COALESCE(reason, ''))) > 0)
 );
@@ -222,7 +233,7 @@ CREATE TABLE answer_revisions (
     chat_id uuid NOT NULL,
     message_id uuid NOT NULL,
     revision_no integer NOT NULL CHECK (revision_no > 0),
-    answer_status text NOT NULL CHECK (answer_status IN ('answered', 'needs_clarification', 'insufficient_data', 'source_conflict', 'processing_error')),
+    answer_status text NOT NULL CHECK (answer_status IN ('processing', 'answered', 'needs_clarification', 'insufficient_data', 'source_conflict', 'processing_error')),
     question_context jsonb NOT NULL,
     operation jsonb,
     result jsonb,

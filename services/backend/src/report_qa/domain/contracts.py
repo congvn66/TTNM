@@ -80,6 +80,8 @@ def validate_provider_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
             status = DataStatus(str(evidence["data_status"]))
         except ValueError as exc:
             raise InvariantError("provider evidence contains an invalid value_kind/data_status") from exc
+        if status not in {DataStatus.VALID, DataStatus.MISSING, DataStatus.ERROR}:
+            raise InvariantError("provider extraction v1 does not support unresolved evidence status")
         raw_value = evidence["raw_value"]
         raw_text = evidence["raw_text"]
         if raw_value is not None:
@@ -129,6 +131,17 @@ def validate_document_evidence_v2(payload: Mapping[str, Any]) -> dict[str, Any]:
         validate_bbox(evidence["bbox"])
         if evidence["numeric_value"] is not None:
             validate_decimal_text(evidence["numeric_value"])
+        try:
+            kind = ValueKind(str(evidence.get("value_kind") or ("number" if evidence.get("numeric_value") is not None or evidence.get("source_type") in {"table", "chart"} else "text")))
+            status = DataStatus(str(evidence["data_status"]))
+        except ValueError as exc:
+            raise InvariantError("document evidence contains an invalid value_kind/data_status") from exc
+        if status is DataStatus.VALID and kind is ValueKind.NUMBER and evidence["numeric_value"] is None:
+            raise InvariantError("valid numeric evidence must contain numeric_value")
+        if status is DataStatus.VALID and kind is ValueKind.TEXT and evidence["raw_text"] is None:
+            raise InvariantError("valid text evidence must contain raw_text")
+        if status is not DataStatus.VALID and evidence["numeric_value"] is not None:
+            raise InvariantError("non-valid evidence cannot contain numeric_value")
         method = evidence["extraction_method"]
         if method not in labels or evidence["method_label"] != labels[method]:
             raise InvariantError("document evidence method label does not match extraction_method")

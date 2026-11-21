@@ -191,6 +191,30 @@ class PostgresJobQueue:
             connection.execute("INSERT INTO job_events (job_id,event_no,event_type,payload) VALUES (%s,%s,%s,%s::jsonb)", (job_id, event_no, "retry_scheduled" if retry_at else "failed", Jsonb({"error_code": error_code})))
             return True
 
+    def supersede(self, *, job_id: UUID, lease_token: UUID, reason: str = "STALE_INPUT_REVISION") -> bool:
+        """Close a leased job whose input snapshot is no longer current.
+
+        ``failed`` means the work itself failed and may be retried.  A stale
+        answer must not be retried against the same snapshot, so it gets the
+        terminal ``superseded`` state and an explicit timeline event.
+        """
+        with self._connect() as connection:
+            result = connection.execute(
+                """UPDATE jobs
+                      SET status='superseded',error_code=%s,finished_at=now(),
+                          lease_token=NULL,lease_expires_at=NULL
+                    WHERE id=%s AND status='running' AND lease_token=%s""",
+                (reason[:120], job_id, lease_token),
+            )
+            if result.rowcount != 1:
+                return False
+            event_no = connection.execute("SELECT COALESCE(MAX(event_no),0)+1 AS next FROM job_events WHERE job_id=%s", (job_id,)).fetchone()["next"]
+            connection.execute(
+                "INSERT INTO job_events (job_id,event_no,event_type,payload) VALUES (%s,%s,'superseded',%s::jsonb)",
+                (job_id, event_no, Jsonb({"reason": reason})),
+            )
+            return True
+
     def cancel(self, *, owner_id: UUID, job_id: UUID) -> bool:
         with self._connect() as connection:
             result = connection.execute("UPDATE jobs SET status='cancelled',finished_at=now(),lease_token=NULL,lease_expires_at=NULL WHERE id=%s AND owner_id=%s AND status IN ('queued','running')", (job_id, owner_id))

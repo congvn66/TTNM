@@ -71,7 +71,14 @@ function formatBytes(value = 0) {
 }
 
 function processingLabel(status) {
-  return ({ queued: "Đang chuẩn bị", processing: "Đang lập chỉ mục", ready: "Đã lập chỉ mục", failed: "Cần thử lại" }[status] ?? "Chưa xử lý");
+  // Keep implementation details (indexing/extraction) out of customer copy.
+  // The job center still exposes the technical state for operators.
+  return ({
+    queued: "Đang chuẩn bị tài liệu",
+    processing: "Đang đọc tài liệu",
+    ready: "Sẵn sàng để hỏi",
+    failed: "Không thể đọc — thử lại",
+  }[status] ?? "Đang kiểm tra");
 }
 
 const ERROR_COPY = {
@@ -83,7 +90,7 @@ const ERROR_COPY = {
   INVALID_PDF: "Tệp không phải PDF hợp lệ hoặc không thể đọc được.",
   PDF_TOO_LARGE: "Tệp PDF vượt quá giới hạn 100 MiB.",
   PDF_TOO_MANY_PAGES: "Tài liệu vượt quá số trang cho phép.",
-  EXTRACTION_NOT_READY: "Tài liệu đang được lập chỉ mục. Bạn có thể hỏi khi trạng thái chuyển sang sẵn sàng.",
+  EXTRACTION_NOT_READY: "Tài liệu đang được chuẩn bị. Bạn có thể đặt câu hỏi khi tài liệu sẵn sàng.",
   AI_PROVIDER_TIMEOUT: "AI phản hồi quá lâu. Bạn có thể thử gửi lại câu hỏi.",
   AI_PROVIDER_UNAVAILABLE: "Không kết nối được tới dịch vụ AI. Kiểm tra mạng hoặc thử lại sau.",
   AI_MODEL_UNAVAILABLE: "Mô hình AI hiện không khả dụng. Kiểm tra lại cấu hình model.",
@@ -100,7 +107,7 @@ function userFacingError(value) {
   if (!raw) return "Không thể hoàn tất thao tác. Hãy thử lại.";
   const code = Object.keys(ERROR_COPY).find((key) => raw.includes(key));
   if (code) return ERROR_COPY[code];
-  if (raw.includes("Không kết nối được tới backend")) return "Không thể kết nối tới máy chủ. Hãy kiểm tra API đang chạy rồi thử lại.";
+  if (raw.includes("Không kết nối được tới backend")) return "Không thể kết nối tới máy chủ. Hãy thử lại sau ít phút.";
   if (raw.includes("Yêu cầu quá thời gian chờ")) return "Máy chủ phản hồi quá lâu. Hãy thử lại sau ít phút.";
   return raw.replace(/^\w+_[A-Z_]+:\s*/, "").trim();
 }
@@ -154,7 +161,7 @@ function presentationAnswer(message) {
     formulas: [],
     tables: [],
     claims: [],
-    warnings: ["Đang dùng retrieval cục bộ; bật OpenRouter/Gemini để nhận phân tích có cấu trúc và bảng."],
+    warnings: ["Đây là trích đoạn trực tiếp từ tài liệu; chưa có phân tích hoặc tính toán bổ sung."],
     cited_pages: page ? [page] : [],
   };
 }
@@ -205,9 +212,9 @@ function JobCenterDrawer({ jobs, busy, onClose, onAction }) {
   if (!jobs) return null;
   const active = jobs.filter((job) => ["queued", "running"].includes(job.status));
   return <section className="job-center-drawer" role="dialog" aria-modal="true" aria-labelledby="job-center-title">
-    <header className="job-center-header"><div><span className="audit-kicker">JOB CENTER</span><h3 id="job-center-title">Tác vụ xử lý</h3><small>Theo dõi extraction và câu trả lời đang chạy</small></div><button type="button" aria-label="Đóng Job Center" onClick={onClose}><Icon name="close" size={15} /></button></header>
+    <header className="job-center-header"><div><span className="audit-kicker">TRUNG TÂM TÁC VỤ</span><h3 id="job-center-title">Tác vụ đang chạy</h3><small>Theo dõi việc chuẩn bị tài liệu và câu trả lời</small></div><button type="button" aria-label="Đóng trung tâm tác vụ" onClick={onClose}><Icon name="close" size={15} /></button></header>
     <div className="job-center-summary"><span><i></i>{active.length} đang xử lý</span><small>Trạng thái được lưu bền theo tài khoản</small></div>
-    <div className="job-center-list">{jobs.length ? jobs.map((job) => <article className="job-center-row" key={job.id}><div className={`job-center-status ${job.status}`}><span></span></div><div className="job-center-main"><strong>{job.kind === "document_extraction" ? "Trích xuất PDF" : job.kind === "answer_generation" ? "Tạo câu trả lời" : job.kind || "Tác vụ nền"}</strong><small>{job.status} · {job.attempts ?? 0}/{job.max_attempts ?? 3} lần thử{job.error_code ? ` · ${job.error_code}` : ""}</small></div><div className="job-center-actions">{["queued", "running"].includes(job.status) && <button type="button" onClick={() => onAction(job, "cancel")} disabled={busy}>Huỷ</button>}{job.status === "failed" && <button type="button" onClick={() => onAction(job, "retry")} disabled={busy}>Thử lại</button>}</div></article>) : <div className="job-center-empty"><span>✓</span><p>Không có tác vụ gần đây.</p><small>Khi tải PDF hoặc hỏi AI, trạng thái sẽ xuất hiện ở đây.</small></div>}</div>
+    <div className="job-center-list">{jobs.length ? jobs.map((job) => <article className="job-center-row" key={job.id}><div className={`job-center-status ${job.status}`}><span></span></div><div className="job-center-main"><strong>{["document_extraction", "extract_document"].includes(job.kind) ? "Chuẩn bị tài liệu" : ["answer_generation", "generate_answer"].includes(job.kind) ? "Tạo câu trả lời" : "Tác vụ đang chạy"}</strong><small>{job.status === "queued" ? "Đang chờ xử lý" : job.status === "running" ? "Đang xử lý" : job.status === "failed" ? "Cần thử lại" : "Đã hoàn tất"}{job.error_code ? ` · ${job.error_code}` : ""}</small></div><div className="job-center-actions">{["queued", "running"].includes(job.status) && <button type="button" onClick={() => onAction(job, "cancel")} disabled={busy}>Huỷ</button>}{job.status === "failed" && <button type="button" onClick={() => onAction(job, "retry")} disabled={busy}>Thử lại</button>}</div></article>) : <div className="job-center-empty"><span>✓</span><p>Không có tác vụ gần đây.</p><small>Khi tải PDF hoặc hỏi AI, trạng thái sẽ xuất hiện ở đây.</small></div>}</div>
   </section>;
 }
 
@@ -372,7 +379,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
 
   return <section className="reader-shell">
     <header className="reader-toolbar">
-      <div className="reader-file"><strong>{document.file_name}</strong><span>{formatBytes(document.byte_size)} · {document.extraction_status === "ready" ? "Đã lập chỉ mục" : document.extraction_status === "queued" ? "Đang lập chỉ mục…" : "Lập chỉ mục thất bại"}</span></div>
+      <div className="reader-file"><strong>{document.file_name}</strong><span>{formatBytes(document.byte_size)} · {processingLabel(document.extraction_status)}</span></div>
       <div className="page-control"><button aria-label="Trang trước" title="Trang trước" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}><Icon name="arrowLeft" /></button><span>{page} / {pdf?.numPages ?? document.page_count ?? "—"}</span><button aria-label="Trang sau" title="Trang sau" disabled={!pdf || page >= pdf.numPages} onClick={() => setPage((value) => value + 1)}><Icon name="arrowRight" /></button></div>
       <div className="zoom-control"><button aria-label="Thu nhỏ" title="Thu nhỏ" onClick={() => setScale((value) => Math.max(.35, value - .15))}><Icon name="minus" /></button><span>{Math.round(scale * 100)}%</span><button aria-label="Phóng to" title="Phóng to" onClick={() => setScale((value) => Math.min(2.5, value + .15))}><Icon name="plus" /></button><button aria-label="Vừa chiều rộng" title="Vừa chiều rộng" onClick={fitWidth}><Icon name="fit" /></button><button aria-label="Xoay tài liệu" title="Xoay tài liệu" onClick={() => setRotation((value) => (value + 90) % 360)}><Icon name="rotate" /></button></div>
     </header>
@@ -608,7 +615,10 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   useEffect(() => { if (activeDocument && activeDocument.id !== activeDocumentId) setActiveDocumentId(activeDocument.id); }, [activeSession?.id, activeDocument?.id, activeDocumentId]);
   useEffect(() => { setTraceData(null); setTraceMessage(null); setEvidenceData(null); setCitationPage(null); setCitationQuote(""); setCitationBbox(null); }, [activeSession?.id, activeDocument?.id]);
   useEffect(() => {
-    if (!activeSession || activeDocument?.extraction_status !== "queued") return undefined;
+    // The worker can expose both queued and processing. Stop polling only once
+    // the document reaches a terminal state; otherwise the composer could stay
+    // disabled forever after the first queue transition.
+    if (!activeSession || !["queued", "processing"].includes(activeDocument?.extraction_status)) return undefined;
     let disposed = false;
     let timer;
     const poll = async () => {
@@ -624,11 +634,11 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const persistedMessages = (activeSession?.messages ?? []).filter((message) => !activeDocument || message.document_id === activeDocument.id);
   const messages = [...persistedMessages, ...pendingMessages.filter((message) => message.session_id === activeSession?.id && message.document_id === activeDocument?.id)];
   const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant" && !message.pending && !message.failed);
-  const modeLabel = latestAssistant?.mode?.startsWith("ai:") ? "AI có dẫn nguồn" : "Tra cứu nội bộ";
+  const modeLabel = latestAssistant?.mode?.startsWith("ai:") ? "AI có dẫn nguồn" : "Dựa trên tài liệu";
   const answerProcessing = (activeSession?.messages ?? []).some((message) => message.role === "assistant" && (message.status === "processing" || message.structured_answer?.presentation === "processing_v1"));
   useEffect(() => {
     refreshJobs();
-    const hasActiveWork = activeDocument?.extraction_status === "queued" || answerProcessing;
+    const hasActiveWork = ["queued", "processing"].includes(activeDocument?.extraction_status) || answerProcessing;
     const timer = window.setInterval(refreshJobs, hasActiveWork ? 5000 : 15000);
     return () => window.clearInterval(timer);
   }, [activeDocument?.extraction_status, answerProcessing, refreshJobs]);
@@ -751,14 +761,14 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   async function upload(file) {
     if (!file || !activeSession) return;
     if (file.size > 100 * 1024 * 1024) { showNotice("PDF vượt giới hạn 100 MiB.", "error"); return; }
-    setBusy(true); showNotice("Đang tải lên và lập chỉ mục tài liệu…");
+    setBusy(true); showNotice("Đang tải lên và chuẩn bị tài liệu…");
     try {
       const form = new FormData(); form.append("file", file);
       const result = await request(`/api/v1/sessions/${activeSession.id}/documents`, { method: "POST", body: form });
       setSessions((current) => { const next = current.map((session) => session.id !== activeSession.id ? session : { ...session, documents: [...session.documents.filter((document) => document.id !== result.document.id), result.document], updated_at: new Date().toISOString() }); writeSessionSnapshot(next); return next; });
       setActiveDocumentId(result.document.id);
       refresh(activeSession.id).catch(() => {});
-      showNotice(`Đã thêm ${result.document.file_name} (${formatBytes(result.document.byte_size)}). Nội dung đang được lập chỉ mục ở nền.`);
+      showNotice(`Đã thêm ${result.document.file_name} (${formatBytes(result.document.byte_size)}). Bạn sẽ nhận được thông báo khi tài liệu sẵn sàng.`);
     } catch (error) { showNotice(error.message, "error"); } finally { setBusy(false); if (uploadRef.current) uploadRef.current.value = ""; }
   }
 
@@ -831,25 +841,23 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const nextTheme = preference === "light" ? "dark" : preference === "dark" ? "system" : "light";
   const activeJobCount = activeJobs.filter((job) => ["queued", "running"].includes(job.status)).length;
   const readinessState = runtimeHealth?.readiness?.status ?? (runtimeHealth ? "checking" : "offline");
-  const readinessLabel = readinessState === "ready" ? "Hệ thống sẵn sàng" : readinessState === "degraded" ? "Cần kiểm tra tích hợp" : readinessState === "checking" ? "Đang kiểm tra hệ thống" : "Chưa kết nối API";
-  const readinessBlockers = runtimeHealth?.readiness?.blockers?.join(", ") || "";
+  const readinessLabel = readinessState === "ready" ? "Sẵn sàng" : readinessState === "degraded" ? "Một số dịch vụ cần kiểm tra" : readinessState === "checking" ? "Đang kiểm tra" : "Kết nối gián đoạn";
+  const readinessBlockers = runtimeHealth?.readiness?.blockers?.length ? "Một số dịch vụ chưa sẵn sàng" : "";
 
   if (!booting && connectionState === "offline" && !sessions.length) {
     return <div className="app-shell connection-shell">
       <a className="skip-link" href="#main-content">Bỏ qua điều hướng</a>
       <header className="topbar">
         <div className="brand"><span>S</span><div><strong>SourceLens</strong><small>Document intelligence</small></div></div>
-        <div className="top-actions"><span className="connection-pill offline"><i></i>API offline</span></div>
+        <div className="top-actions"><span className="connection-pill offline"><i></i>Mất kết nối</span></div>
       </header>
       <main className="connection-screen" id="main-content">
         <section className="connection-card" role="alert">
           <div className="connection-icon"><Icon name="trace" size={24} /></div>
           <span className="eyebrow">KẾT NỐI HỆ THỐNG</span>
           <h1>Backend chưa sẵn sàng</h1>
-          <p>{bootError || "Frontend chưa nhận được phản hồi từ API."}</p>
-          <div className="connection-endpoint"><span>API endpoint</span><code>{API}</code></div>
+          <p>{bootError ? userFacingError(bootError) : "Không thể tải workspace lúc này. Bạn có thể thử kết nối lại."}</p>
           <button onClick={retryBackend}><Icon name="refresh" size={15} /> Thử kết nối lại</button>
-          <small>Uvicorn cần chạy trên cổng 8000. Vite sẽ chuyển tiếp các request <code>/api</code> tới backend.</small>
         </section>
       </main>
     </div>;
@@ -865,9 +873,8 @@ function App({ user = null, onSignOut = null, onNavigate }) {
         <span className={`connection-pill ${readinessState === "ready" ? "online" : readinessState === "offline" ? "offline" : "checking"}`} title={readinessBlockers || readinessLabel}><i></i>{readinessLabel}</span>
         {activeJobs.length > 0 && <button className="job-pill" type="button" aria-label={`Mở trung tâm tác vụ, ${activeJobs.length} tác vụ`} onClick={() => setJobsOpen(true)}><i></i>{activeJobCount > 0 ? `${activeJobCount} đang xử lý` : "Trung tâm tác vụ"}</button>}
         <button className="icon-button" type="button" title={`Chuyển giao diện sang ${nextTheme}`} aria-label={`Chuyển giao diện sang ${nextTheme}`} onClick={() => setPreference(nextTheme)}><Icon name={resolvedTheme === "dark" ? "moon" : "sun"} size={15} /></button>
-        <button className="audit-button" disabled={!activeDocument || activeDocument.extraction_status !== "ready" || evidenceBusy} onClick={openEvidence}><Icon name="link" size={14} /> Nguồn & số liệu</button>
+        <button className="audit-button" disabled={!activeDocument || activeDocument.extraction_status !== "ready" || evidenceBusy} onClick={openEvidence}><Icon name="link" size={14} /> Bằng chứng</button>
         <ProfileMenu user={user} onSignOut={onSignOut} onNavigate={onNavigate} />
-        <button className="upload-button" disabled={!activeSession || busy} onClick={() => uploadRef.current?.click()}><Icon name="upload" size={14} /> Thêm tài liệu</button>
         <input ref={uploadRef} type="file" accept="application/pdf,.pdf" hidden onChange={(event) => upload(event.target.files?.[0])} />
       </div>
     </header>
@@ -881,7 +888,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
           {messages.map((message) => <article key={message.id} className={`message ${message.role}`}><span className="message-avatar">{message.role === "user" ? "B" : "S"}</span><div><small>{message.role === "user" ? "Bạn" : "Trợ lý SourceLens"}</small><StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} onCitation={(page, quote, bbox) => { setCitationPage(page); setCitationQuote(quote); setCitationBbox(normalizedBbox(bbox)); }} />{message.needs_update && <div className="answer-status-note stale-answer"><Icon name="refresh" size={13} /><span>Dữ liệu nguồn đã thay đổi; câu trả lời này cần được cập nhật.</span></div>}{message.citations?.map((citation, index) => <button className="citation" key={index} onClick={() => { setCitationPage(citation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(citation.bbox)); }}><Icon name="link" size={12} /> Trang {citation.page}{citation.bbox ? " · vùng trích dẫn" : ""}</button>)}{message.role === "assistant" && !message.pending && !message.failed && <button className="trace-button" disabled={traceBusy} onClick={() => openTrace(message.id)}><Icon name="trace" size={12} /> {traceBusy ? "Đang tải luồng…" : "Xem luồng dữ liệu"}</button>}</div></article>)}
           {traceData && <div className="trace-panel"><div className="trace-panel-heading"><div><strong>Luồng dữ liệu</strong><small>{traceData.trace?.length ?? 0} sự kiện · trace_id {traceData.trace_id ?? "—"}</small></div><button aria-label="Đóng luồng dữ liệu" onClick={() => setTraceData(null)}><Icon name="close" size={14} /></button></div>{(traceData.trace ?? []).map((event, index) => <div className="trace-event" key={`${event.stage}-${index}`}><span className={`trace-dot ${event.status}`}></span><div><b>{event.stage}</b><small>{event.status} · {event.at}</small>{event.provider && <em>{event.provider}</em>}{event.pages && <em>trang: {event.pages.join(", ")}</em>}{event.scores && <em>điểm: {event.scores.join(", ")}</em>}{event.context_manifest && <em>ngữ cảnh: {event.context_manifest.map((item) => `trang ${item.page} · ${item.chars} ký tự · ${item.text_sha256.slice(0, 10)}…`).join(" | ")}</em>}{event.citation_pages && <em>trích dẫn: {event.citation_pages.join(", ")}</em>}</div></div>)}</div>}
         </div>
-        <form className="chat-composer" onSubmit={ask}><textarea aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Thêm tài liệu để bắt đầu" : activeDocument.extraction_status === "ready" ? "Đặt câu hỏi về tài liệu…" : activeDocument.extraction_status === "failed" ? "Lập chỉ mục thất bại — mở Trung tâm tác vụ để thử lại" : "Đang lập chỉ mục nội dung…"} disabled={!activeDocument || activeDocument.extraction_status !== "ready" || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Đã lập chỉ mục" : activeDocument?.extraction_status === "failed" ? "Lập chỉ mục thất bại" : activeDocument?.extraction_status === "queued" ? "Đang lập chỉ mục…" : "Chưa lập chỉ mục"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status !== "ready" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form>
+        <form className="chat-composer" onSubmit={ask}><textarea aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Thêm tài liệu để bắt đầu" : activeDocument.extraction_status === "ready" ? "Đặt câu hỏi về tài liệu…" : activeDocument.extraction_status === "failed" ? "Chưa thể đọc tài liệu — mở Trung tâm tác vụ để thử lại" : "Đang chuẩn bị tài liệu…"} disabled={!activeDocument || activeDocument.extraction_status !== "ready" || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Sẵn sàng để hỏi" : activeDocument?.extraction_status === "failed" ? "Chưa thể đọc tài liệu" : activeDocument?.extraction_status === "queued" || activeDocument?.extraction_status === "processing" ? "Đang chuẩn bị tài liệu…" : "Chưa sẵn sàng"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status !== "ready" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form>
       </aside>
       <EvidenceDrawer data={evidenceData} busy={evidenceBusy} onClose={() => setEvidenceData(null)} onFocus={(evidence) => { setCitationPage(evidence.page_number); setCitationQuote(""); setCitationBbox(normalizedBbox(evidence.bbox)); }} onSave={saveEvidence} />
       <ResourceDialog dialog={resourceDialog} busy={busy} onClose={() => setResourceDialog(null)} onConfirm={confirmResourceAction} />

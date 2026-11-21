@@ -16,7 +16,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
-from uuid import UUID, uuid5
+from uuid import UUID, uuid4, uuid5
 
 from .revision_store import PostgresRevisionStore
 
@@ -63,6 +63,18 @@ class PostgresRuntimeStore(PostgresRevisionStore):
     @staticmethod
     def _run_id(version_id: UUID) -> UUID:
         return uuid5(version_id, "extraction-run-1")
+
+    @staticmethod
+    def _source_region_key(item: dict[str, Any]) -> str:
+        """Return the stable region identity shared by evidence from one span.
+
+        A single OCR/text span can yield more than one evidence (for example a
+        text claim and a numeric operand).  ``source_regions`` deliberately
+        has a unique ``(extraction_run_id, region_key)`` constraint, so the
+        evidence rows must point at the same region instead of inserting a
+        second region with the same key.
+        """
+        return str(item.get("source_region_key") or item["evidence_key"])
 
     def load_catalog(self) -> dict[str, Any]:
         rows = self._execute(
@@ -536,8 +548,9 @@ class PostgresRuntimeStore(PostgresRevisionStore):
             (version_id, document_id, str(document.get("file_name") or "document.pdf"), str(document.get("storage_name") or f"{document_id}.pdf"), str(document.get("sha256") or "unknown"), int(document.get("byte_size") or 1), persisted_page_count, version_status),
         )
         self._execute(
-            """INSERT INTO extraction_runs (id,document_version_id,run_no,status,extractor_name,started_at)
-               VALUES (%s,%s,1,%s,'legacy_pdf_artifact',now())
+            """INSERT INTO extraction_runs
+                      (id,document_version_id,run_no,status,extractor_name,contract_name,contract_version,scope,started_at)
+               VALUES (%s,%s,1,%s,'legacy_pdf_artifact','document-evidence',1,'base_document',now())
                ON CONFLICT (id) DO NOTHING""",
             (run_id, version_id, "queued"),
         )
@@ -569,21 +582,32 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         existing = self._execute("SELECT 1 FROM extracted_evidences WHERE extraction_run_id=%s LIMIT 1", (run_id,))
         if not existing:
             for item in (artifact.get("evidence_batch") or {}).get("evidences", []):
-                region_id, evidence_id = uuid5(run_id, f"region:{item['evidence_key']}"), uuid5(run_id, f"evidence:{item['evidence_key']}")
+                region_key = self._source_region_key(item)
+                region_id, evidence_id = uuid5(run_id, f"region:{region_key}"), uuid5(run_id, f"evidence:{item['evidence_key']}")
                 region_type = "table_cell" if item.get("source_type") == "table" else "chart_element" if item.get("source_type") == "chart" else "paragraph"
                 self._execute(
                     """INSERT INTO source_regions (id,extraction_run_id,region_key,page_number,bbox,region_type,extracted_text,meta)
                        VALUES (%s,%s,%s,%s,%s::jsonb,%s,%s,%s::jsonb)
-                       ON CONFLICT (id) DO NOTHING""",
-                    (region_id, run_id, item.get("source_region_key") or item["evidence_key"], int(item["page_number"]), self._json(item.get("bbox")), region_type, item.get("raw_text"), self._json({"evidence_key": item["evidence_key"], "method_label": item.get("method_label"), "table_locator": item.get("table_locator"), "chart_read": item.get("chart_read")})),
+                       ON CONFLICT (extraction_run_id,region_key) DO NOTHING""",
+                    (region_id, run_id, region_key, int(item["page_number"]), self._json(item.get("bbox")), region_type, item.get("raw_text"), self._json({"evidence_key": item["evidence_key"], "method_label": item.get("method_label"), "table_locator": item.get("table_locator"), "chart_read": item.get("chart_read")})),
                 )
                 numeric = item.get("numeric_value")
-                value_kind = "number" if numeric is not None else "text"
+                method = str(item.get("extraction_method") or "text")
+                source_type = str(item.get("source_type") or "text")
+                # ``numeric_value=null`` does not mean that an evidence item is
+                # textual: an unreadable/ambiguous table or chart number is
+                # still a numeric operand candidate, just not a usable one.
+                value_kind = str(item.get("value_kind") or (
+                    "number" if numeric is not None or source_type in {"table", "chart"} else "text"
+                ))
+                if value_kind not in {"number", "text"}:
+                    raise ValueError("INVALID_EVIDENCE_VALUE_KIND")
+                data_status = str(item.get("data_status") or "valid")
                 self._execute(
                     """INSERT INTO extracted_evidences (id,extraction_run_id,source_region_id,value_kind,raw_value,raw_text,semantic,data_status,extraction_method,confidence)
                        VALUES (%s,%s,%s,%s,%s::numeric,%s,%s::jsonb,%s,%s,%s)
                        ON CONFLICT (id) DO NOTHING""",
-                    (evidence_id, run_id, region_id, value_kind, numeric if value_kind == "number" else None, item.get("raw_text") if value_kind == "text" else None, self._json(item.get("semantic") or {}), item.get("data_status") or "valid", self._db_method(item.get("extraction_method", "text")), item.get("confidence")),
+                    (evidence_id, run_id, region_id, value_kind, numeric if value_kind == "number" else None, item.get("raw_text") if value_kind == "text" else None, self._json(item.get("semantic") or {}), data_status, self._db_method(item.get("extraction_method", "text")), item.get("confidence")),
                 )
         # Extraction payload rows are immutable after completion, so mark the
         # run completed only after all regions/evidences have been inserted.
@@ -600,6 +624,170 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         )
         if source_rows:
             self.initialize_chat_evidence(self.owner_id, chat_id, source_rows[0]["id"])
+
+    def persist_on_demand_chart(
+        self,
+        *,
+        chat_id: UUID,
+        document_version_id: UUID,
+        evidence_batch: dict[str, Any],
+        question_plan_id: str,
+    ) -> dict[str, UUID]:
+        """Persist chart evidence as an immutable, chat-visible extraction run.
+
+        Chart reading is deliberately lazy, but its result is not ephemeral: the
+        answer and its citations must reference real ``evidence_revisions``.  A
+        retry with the same extraction-run id is idempotent and returns the
+        existing revision ids.
+        """
+        if not evidence_batch or evidence_batch.get("schema_version") != 2:
+            raise ValueError("INVALID_CHART_EVIDENCE_BATCH")
+        if str(evidence_batch.get("document_version_id")) != str(document_version_id):
+            raise ValueError("CHART_DOCUMENT_VERSION_MISMATCH")
+        evidences = evidence_batch.get("evidences") or []
+        if not evidences:
+            return {}
+        try:
+            run_id = UUID(str(evidence_batch["extraction_run_id"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("INVALID_CHART_EXTRACTION_RUN_ID") from exc
+        scope = str(evidence_batch.get("scope") or "on_demand_chart")
+        trigger = dict(evidence_batch.get("trigger") or {})
+        trigger.setdefault("question_plan_id", question_plan_id)
+        trigger.setdefault("chart_region_keys", [])
+        if scope != "on_demand_chart" or not isinstance(trigger.get("chart_region_keys"), list):
+            raise ValueError("INVALID_CHART_TRIGGER")
+        dedup_payload = {
+            "document_version_id": str(document_version_id),
+            "question_plan_id": str(trigger.get("question_plan_id")),
+            "fact_keys": sorted(str(item) for item in trigger.get("fact_keys", [])),
+            "chart_region_keys": sorted(str(item) for item in trigger.get("chart_region_keys", [])),
+        }
+        input_sha256 = __import__("hashlib").sha256(self._json(dedup_payload).encode("utf-8")).hexdigest()
+
+        with self.transaction():
+            owner_rows = self._execute(
+                """SELECT dv.id
+                     FROM document_versions dv
+                     JOIN documents d ON d.id=dv.document_id
+                     JOIN chat_documents cd ON cd.document_version_id=dv.id
+                    WHERE dv.id=%s AND cd.chat_id=%s AND d.owner_id=%s AND d.deleted_at IS NULL
+                    FOR UPDATE""",
+                (document_version_id, chat_id, self.owner_id),
+            )
+            if not owner_rows:
+                raise PermissionError("DOCUMENT_NOT_FOUND")
+            existing_dedup = self._execute(
+                """SELECT id FROM extraction_runs
+                    WHERE document_version_id=%s AND scope='on_demand_chart'
+                      AND input_sha256=%s AND status='completed'
+                    ORDER BY created_at DESC LIMIT 1""",
+                (document_version_id, input_sha256),
+            )
+            if existing_dedup:
+                dedup_run_id = existing_dedup[0]["id"]
+                self._ensure_chat_source(chat_id, document_version_id, dedup_run_id)
+                source_rows = self._execute(
+                    "SELECT id FROM chat_sources WHERE chat_id=%s AND extraction_run_id=%s",
+                    (chat_id, dedup_run_id),
+                )
+                if not source_rows:
+                    raise RuntimeError("CHART_SOURCE_NOT_ATTACHED")
+                return self.initialize_chat_evidence(self.owner_id, chat_id, source_rows[0]["id"])
+            existing = self._execute(
+                "SELECT id FROM extraction_runs WHERE id=%s AND document_version_id=%s",
+                (run_id, document_version_id),
+            )
+            if not existing:
+                run_no = int(
+                    self._execute(
+                        "SELECT COALESCE(MAX(run_no),0)+1 AS value FROM extraction_runs WHERE document_version_id=%s",
+                        (document_version_id,),
+                    )[0]["value"]
+                )
+                self._execute(
+                    """INSERT INTO extraction_runs
+                           (id,document_version_id,run_no,status,extractor_name,extractor_version,
+                            contract_name,contract_version,scope,trigger,input_sha256,tool_meta,
+                            config,started_at,completed_at)
+                       VALUES (%s,%s,%s,'completed','chart_reader','v1',
+                               'document-evidence','2',%s,%s::jsonb,%s,%s::jsonb,
+                               %s::jsonb,now(),now())""",
+                    (
+                        run_id,
+                        document_version_id,
+                        run_no,
+                        scope,
+                        self._json(trigger),
+                        input_sha256,
+                        self._json({"reader": "vector_or_deplot", "question_plan_id": question_plan_id}),
+                        self._json({"scope": scope, "question_plan_id": question_plan_id}),
+                    ),
+                )
+                for item in evidences:
+                    evidence_key = str(item.get("evidence_key") or "")
+                    if not evidence_key:
+                        raise ValueError("CHART_EVIDENCE_KEY_REQUIRED")
+                    region_id = uuid5(run_id, f"region:{evidence_key}")
+                    evidence_id = uuid5(run_id, f"evidence:{evidence_key}")
+                    self._execute(
+                        """INSERT INTO source_regions
+                               (id,extraction_run_id,region_key,page_number,bbox,region_type,extracted_text,meta)
+                           VALUES (%s,%s,%s,%s,%s::jsonb,'chart_element',%s,%s::jsonb)
+                           ON CONFLICT (id) DO NOTHING""",
+                        (
+                            region_id,
+                            run_id,
+                            item.get("source_region_key") or evidence_key,
+                            int(item["page_number"]),
+                            self._json(item.get("bbox")),
+                            item.get("raw_text"),
+                            self._json(
+                                {
+                                    "evidence_key": evidence_key,
+                                    "method_label": item.get("method_label"),
+                                    "chart_read": item.get("chart_read"),
+                                    "question_plan_id": question_plan_id,
+                                }
+                            ),
+                        ),
+                    )
+                    numeric = item.get("numeric_value")
+                    value_kind = str(item.get("value_kind") or "number")
+                    if value_kind != "number":
+                        raise ValueError("CHART_EVIDENCE_MUST_BE_NUMERIC")
+                    data_status = str(item.get("data_status") or "valid")
+                    if data_status not in {"valid", "missing", "unreadable", "ambiguous", "error"}:
+                        raise ValueError("INVALID_CHART_DATA_STATUS")
+                    self._execute(
+                        """INSERT INTO extracted_evidences
+                               (id,extraction_run_id,source_region_id,value_kind,raw_value,raw_text,
+                                semantic,data_status,extraction_method,confidence)
+                           VALUES (%s,%s,%s,'number',%s::numeric,NULL,%s::jsonb,%s,%s,%s)
+                           ON CONFLICT (id) DO NOTHING""",
+                        (
+                            evidence_id,
+                            run_id,
+                            region_id,
+                            numeric if data_status == "valid" else None,
+                            self._json(item.get("semantic") or {}),
+                            data_status,
+                            self._db_method(str(item.get("extraction_method") or "axis_estimation")),
+                            item.get("confidence"),
+                        ),
+                    )
+                self._ensure_chat_source(chat_id, document_version_id, run_id)
+            else:
+                # A retry may arrive after a client timeout.  It must not create
+                # a second run or a second working copy in the chat.
+                self._ensure_chat_source(chat_id, document_version_id, run_id)
+            source_rows = self._execute(
+                "SELECT id FROM chat_sources WHERE chat_id=%s AND extraction_run_id=%s",
+                (chat_id, run_id),
+            )
+            if not source_rows:
+                raise RuntimeError("CHART_SOURCE_NOT_ATTACHED")
+            return self.initialize_chat_evidence(self.owner_id, chat_id, source_rows[0]["id"])
 
     def _sync_evidence_state(self, chat_id: UUID, document: dict[str, Any]) -> None:
         state = document.get("evidence_state") or {}

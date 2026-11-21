@@ -203,7 +203,7 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
                             evidence_key = f"ev-{digest}"
                             evidences.append({
                                 "evidence_key": evidence_key, "source_region_key": f"page-{page_number}-ocr-token-{token_index}", "source_type": "text",
-                                "page_number": page_number, "bbox": token["bbox"], "raw_text": raw, "numeric_value": _decimal_text(raw),
+                                "page_number": page_number, "bbox": token["bbox"], "raw_text": raw, "numeric_value": _decimal_text(raw), "value_kind": "number",
                                 "data_status": "valid", "extraction_method": "ocr", "method_label": "đọc bằng OCR",
                                 "semantic": {"measure": _measure(str(token["text"])), "subject": None, "period": _period_near(str(token["text"]), match.start()), "unit": _unit_near(str(token["text"]), raw), "dimensions": {}},
                                 "table_locator": None, "chart_read": None, "confidence": float(token["confidence"]),
@@ -284,6 +284,7 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
                         "bbox": bbox,
                         "raw_text": raw,
                         "numeric_value": numeric_value,
+                        "value_kind": "number",
                         "data_status": "valid",
                         "extraction_method": "table_cell" if is_table_cell else "text",
                         "method_label": "đọc từ ô bảng" if is_table_cell else "đọc từ văn bản",

@@ -11,9 +11,9 @@
 | Retrieval text | Đã chạy | Token-overlap local, chọn tối đa 3 trang |
 | AI structured output | Đã chạy theo adapter | Gemini/OpenRouter có schema và grounding validation |
 | Trace request | Đã chạy | `question_received -> retrieval -> AI -> answer_generation -> persistence` |
-| Session/document/message persistence | Đã chạy local | JSON + local filesystem, không phải production DB |
-| PostgreSQL schema | Đã thiết kế + baseline migration | Chưa phải runtime source of truth |
-| PostgreSQL repository/UoW | Chưa hoàn tất | Không được bật `PERSISTENCE_BACKEND=postgres` |
+| Session/document/message persistence | Đã chạy | JSON offline hoặc PostgreSQL runtime tùy adapter |
+| PostgreSQL schema | Đã migrate | `0001_initial_schema` + `0002_chat_documents` trên database thật |
+| PostgreSQL runtime adapter | Đã chạy P0 | Metadata/revision graph ở PostgreSQL; PDF/extraction artifact còn local filesystem |
 | Redis | Chưa dùng | Chỉ cân nhắc cache/lock/progress sau PostgreSQL |
 | Evidence bbox cho PDF upload mới | Đã chạy cho số trong PDF text/layout table | Bbox normalized; scan/OCR và bảng phức tạp vẫn cần provider |
 | Question Planner P0 | Đã chạy deterministic | Growth/lookup và clarification; coverage ngôn ngữ/nghiệp vụ còn hẹp |
@@ -28,9 +28,9 @@ Upload PDF
   -> temporary file
   -> SHA-256
   -> atomic rename: runtime/uploads/{document_id}.pdf
-  -> runtime/sessions.json (metadata)
+  -> PostgreSQL (`PERSISTENCE_BACKEND=postgres`) hoặc runtime/sessions.json (offline)
   -> background extraction
-  -> runtime/extracted/{document_id}.json
+  -> local `runtime/extracted/{version_id}.json` (storage adapter object-store là bước sau)
 
 Ask question
   -> question_received
@@ -100,11 +100,11 @@ nhất.
 
 Chi tiết lệnh terminal nằm trong [data-flow-observability.md](data-flow-observability.md).
 
-## 7. Tiêu chí chuyển production
+## 7. Giới hạn hiện tại và tiêu chí chuyển production
 
-Chưa được đánh dấu production-ready cho tới khi PostgreSQL repository/UoW,
-Alembic upgrade/downgrade, migration dữ liệu local, durable job lease,
-ownership/race tests và object-storage verification đều pass.
+P0 PostgreSQL metadata đã chạy; chưa gọi là production-ready cho tới khi có
+durable worker/job lease, auth/ownership thật, object-storage verification,
+retry/race tests và migration artifact không mất dữ liệu.
 
 ## 8. Luồng nghiệp vụ duy nhất để triển khai tiếp
 
@@ -115,4 +115,4 @@ Luồng đích được chốt là `base text/table extraction -> question plan 
 - Calculator bàn giao `calculation-result-v1`; missing, mẫu số 0, unit mismatch và ambiguity không có numeric result.
 - Hợp đồng và acceptance criteria chi tiết nằm tại [HANDOUT/README.md](HANDOUT/README.md).
 
-Runtime P0 hiện lưu `question_plan`, `calculation_result`, `answer_inputs`, citation bbox và trace ngay trong assistant message của `runtime/sessions.json`. Đây là adapter local phục vụ kiểm chứng luồng; PostgreSQL revision graph vẫn là bước cutover tiếp theo.
+Runtime P0 lưu `question_plan`, `calculation_result`, `answer_inputs`, citation bbox và trace trong assistant projection; ở PostgreSQL mode projection này được đồng bộ vào `messages`, `answer_revisions`, `answer_inputs` và evidence revision graph. Binary PDF/extraction JSON vẫn dùng local storage key và sẽ chuyển sang object storage ở milestone kế tiếp.

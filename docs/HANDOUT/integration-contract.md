@@ -36,6 +36,7 @@ Không dùng text câu hỏi hoặc raw PDF làm correlation key.
 | extractor → domain | `document-evidence-v2.schema.json` |
 | planner → orchestrator | `question-plan-v2.schema.json` |
 | calculator → answer composer | `calculation-result-v1.schema.json` |
+| tool/provider → orchestration trace | `tool-invocation-v1.schema.json` |
 | legacy/domain payload | các schema v1 còn lại trong `contracts/` |
 
 Payload mẫu đầy đủ nằm trong `contracts/examples/`. Producer phải tạo payload tương đương và consumer phải contract-test bằng fixture này trước khi nối provider thật.
@@ -62,6 +63,12 @@ Schema đã phát hành là immutable về meaning. Thay đổi incompatible t�
 
 - Base extraction chỉ publish sau khi toàn batch validate; `completed` là immutable.
 - On-demand chart batch là extraction run riêng, liên kết `question_plan_id`; không sửa base run.
+- On-demand chart phải ghi `scope=on_demand_chart`, `trigger.chart_region_keys` và
+  `input_sha256`. Unique index theo document version + input hash làm retry cùng
+  câu hỏi/vùng biểu đồ nhận lại run đã hoàn tất, không nhân bản evidence.
+- Mỗi chart evidence được tạo `source_region` → `extracted_evidence` →
+  `chat_evidence` → `evidence_revision` trong cùng transaction. Answer chỉ được
+  publish khi `evidence_revision_id` là UUID tồn tại, không dùng ID dạng `evr:`.
 - Khi người dùng sửa evidence trong chat, tạo `evidence_revision` mới; extracted evidence gốc không đổi.
 - Calculator nhận exact revision IDs. Answer publisher ghi `answer_inputs` trong cùng transaction với `answer_revision`.
 - Worker publish chỉ khi `lease_token`, owner và `input_data_revision` còn hợp lệ.

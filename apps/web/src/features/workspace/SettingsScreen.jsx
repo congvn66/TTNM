@@ -26,6 +26,17 @@ function Icon({ name, size = 17 }) {
 function initials(user) { return (user?.display_name || user?.email || "S").trim().slice(0, 1).toUpperCase(); }
 function FieldError({ children }) { return children ? <span className="settings-field-error" role="alert">{children}</span> : null; }
 
+function ConfirmDialog({ dialog, busy, onClose, onConfirm }) {
+  if (!dialog) return null;
+  return <div className="resource-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="settings-confirm-title">
+      <div className="resource-modal-icon danger"><span aria-hidden="true">!</span></div>
+      <div><p className="dialog-kicker">XÁC NHẬN</p><h2 id="settings-confirm-title">{dialog.title}</h2><p>{dialog.description}</p></div>
+      <div className="resource-modal-actions"><button type="button" className="dialog-secondary" onClick={onClose} disabled={busy}>Hủy</button><button type="button" className="dialog-danger" onClick={onConfirm} disabled={busy}>{busy ? "Đang xử lý…" : "Xác nhận"}</button></div>
+    </section>
+  </div>;
+}
+
 function SettingsHeader({ section, user, onNavigate, onSignOut }) {
   const current = NAV.find((item) => item.id === section) ?? NAV[0];
   return <header className="settings-topbar">
@@ -125,6 +136,8 @@ function SecuritySettings() {
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState("");
+  const [confirm, setConfirm] = useState(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   async function loadSessions() {
     setSessionsError("");
@@ -136,16 +149,14 @@ function SecuritySettings() {
   useEffect(() => { loadSessions(); }, []);
 
   async function revokeSession(session) {
-    if (!window.confirm(session.current ? "Thu hồi phiên hiện tại và đăng xuất?" : "Thu hồi thiết bị này?")) return;
-    try { const result = await request(`/api/v1/auth/sessions/${session.id}`, { method: "DELETE" }); if (result.current) window.location.reload(); else await loadSessions(); }
-    catch (reason) { setSessionsError(reason.message || "Không thể thu hồi thiết bị."); }
+    setConfirm({ title: session.current ? "Đăng xuất thiết bị này?" : "Thu hồi thiết bị này?", description: session.current ? "Bạn sẽ cần đăng nhập lại trên trình duyệt này." : "Thiết bị sẽ không còn truy cập được tài khoản.", action: async () => { try { const result = await request(`/api/v1/auth/sessions/${session.id}`, { method: "DELETE" }); if (result.current) window.location.reload(); else await loadSessions(); } catch (reason) { setSessionsError(reason.message || "Không thể thu hồi thiết bị."); } } });
   }
 
   async function revokeOthers() {
-    if (!window.confirm("Đăng xuất tất cả thiết bị khác?")) return;
-    try { await request("/api/v1/auth/sessions/revoke-others", { method: "POST" }); await loadSessions(); }
-    catch (reason) { setSessionsError(reason.message || "Không thể thu hồi các thiết bị khác."); }
+    setConfirm({ title: "Đăng xuất các thiết bị khác?", description: "Mọi phiên ngoài thiết bị hiện tại sẽ bị thu hồi.", action: async () => { try { await request("/api/v1/auth/sessions/revoke-others", { method: "POST" }); await loadSessions(); } catch (reason) { setSessionsError(reason.message || "Không thể thu hồi các thiết bị khác."); } } });
   }
+
+  async function confirmAction() { if (!confirm?.action) return; setConfirmBusy(true); try { await confirm.action(); setConfirm(null); } finally { setConfirmBusy(false); } }
 
   async function save(event) {
     event.preventDefault();
@@ -182,6 +193,7 @@ function SecuritySettings() {
       <div className="settings-actions"><button className="settings-primary" type="submit" disabled={status === "saving"}>{status === "saving" ? "Đang lưu…" : "Cập nhật mật khẩu"}</button></div>
     </form>
     <section className="settings-card security-card"><div className="settings-card-header"><div><h2>Thiết bị và phiên đăng nhập</h2><p>Mỗi trình duyệt có một phiên riêng. Thu hồi ngay thiết bị bạn không còn tin cậy.</p></div><button type="button" className="settings-secondary" onClick={revokeOthers}>Thu hồi thiết bị khác</button></div>{sessionsError && <div className="settings-error" role="alert">{sessionsError}</div>}{sessionsLoading ? <div className="settings-skeleton-group"><i></i></div> : <div className="device-list">{sessions.length ? sessions.map((session) => <article className="device-row" key={session.id}><span className={`device-dot ${session.current ? "current" : ""}`}></span><div><strong>{session.user_agent}</strong><small>{session.current ? "Thiết bị hiện tại" : "Phiên khác"} · Hoạt động {session.last_seen_at ? new Date(session.last_seen_at).toLocaleString("vi-VN") : "chưa ghi nhận"}</small></div><button type="button" className="device-revoke" onClick={() => revokeSession(session)}>{session.current ? "Đăng xuất" : "Thu hồi"}</button></article>) : <p className="settings-help">Chưa có phiên đăng nhập nào đang hoạt động.</p>}</div>}</section>
+    <ConfirmDialog dialog={confirm} busy={confirmBusy} onClose={() => setConfirm(null)} onConfirm={confirmAction} />
   </>;
 }
 
