@@ -53,7 +53,12 @@ def _inside(inner, outer):
 
 
 def extract_docling_artifact(
-    path: Path, document_version_id: str, *, locale: str | None = None, converter=None
+    path: Path,
+    document_version_id: str,
+    *,
+    locale: str | None = None,
+    converter=None,
+    ocr_engine=None,
 ) -> dict[str, Any]:
     import pymupdf
 
@@ -63,6 +68,7 @@ def extract_docling_artifact(
         _period_near,
         _unit_near,
     )
+    from report_qa.application.ocr_extraction import TesseractPdfOcr
 
     result = (converter or _converter()).convert(path)
     status = str(result.status).split(".")[-1].lower()
@@ -70,6 +76,7 @@ def extract_docling_artifact(
         raise RuntimeError(f"Docling conversion failed: {result.status}")
     data = result.document.export_to_dict()
     evidence, warnings, contexts, charts, pages = [], [], {}, [], []
+    ocr_pages = {}
     with pymupdf.open(path) as pdf:
 
         def warn(code, message, key=None):
@@ -105,15 +112,49 @@ def extract_docling_artifact(
         table_boxes = [
             region(p) for t in data.get("tables", []) for p in t.get("prov", [])
         ]
+        ocr = ocr_engine or TesseractPdfOcr()
         for number, page in enumerate(pdf, 1):
-            pages.append({"page": number, "text": page.get_text()})
-            if not page.get_text().strip():
+            page_text = page.get_text()
+            if not page_text.strip():
+                available, code = ocr.available()
+                if available:
+                    try:
+                        ocr_page = ocr.read_page(path, number)
+                        ocr_pages[number] = ocr_page
+                        page_text = " ".join(
+                            str(token.get("text", "")).strip()
+                            for token in ocr_page.tokens
+                            if str(token.get("text", "")).strip()
+                        )
+                    except Exception as exc:
+                        warn(
+                            type(exc).__name__ or "OCR_FAILED",
+                            f"KhÃ´ng Ä‘á»c Ä‘Æ°á»£c trang {number} báº±ng OCR.",
+                        )
+                else:
+                    warn(
+                        code or "OCR_UNAVAILABLE",
+                        f"Trang {number} khÃ´ng cÃ³ lá»›p chá»¯; chÆ°a trÃ­ch xuáº¥t sá»‘ tá»« trang nÃ y.",
+                    )
+            pages.append({"page": number, "text": page_text})
+            if not page_text.strip():
                 warn(
                     "OCR_REQUIRED",
                     f"Trang {number} không có lớp chữ; chưa trích xuất số từ trang này.",
                 )
 
-        def emit(raw, context, number, box, key, source, locator=None, original=None):
+        def emit(
+            raw,
+            context,
+            number,
+            box,
+            key,
+            source,
+            locator=None,
+            original=None,
+            extraction_method=None,
+            confidence=0.85,
+        ):
             try:
                 value = decimal_text(raw, locale)
                 state = "valid"
@@ -124,7 +165,12 @@ def extract_docling_artifact(
                     "Cần xác nhận quy ước dấu phân cách số.",
                     key,
                 )
-            method = "table_cell" if source == "table" else "text"
+            method = extraction_method or ("table_cell" if source == "table" else "text")
+            method_labels = {
+                "table_cell": "\u0111\u1ecdc t\u1eeb \u00f4 b\u1ea3ng",
+                "text": "\u0111\u1ecdc t\u1eeb v\u0103n b\u1ea3n",
+                "ocr": "\u0111\u1ecdc b\u1eb1ng OCR",
+            }
             item = {
                 "evidence_key": key,
                 "source_region_key": key + "-region",
@@ -147,7 +193,8 @@ def extract_docling_artifact(
                 },
                 "table_locator": locator,
                 "chart_read": None,
-                "confidence": 0.85,
+                "method_label": method_labels[method],
+                "confidence": confidence,
             }
             evidence.append(item)
             contexts[key] = context
@@ -238,6 +285,38 @@ def extract_docling_artifact(
                         "Ô chứa nhiều số; cần kiểm tra tiêu đề hoặc chú thích.",
                         key,
                     )
+
+        # Scanned pages use OCR only when no native text layer was available.
+        # Every numeric OCR token keeps its normalized bbox and confidence;
+        # without that proof it never becomes a calculator operand.
+        for number, ocr_page in ocr_pages.items():
+            page_context = next(
+                (item["text"] for item in pages if item["page"] == number), ""
+            )
+            for oi, token in enumerate(ocr_page.tokens):
+                text = str(token.get("text", "")).strip()
+                if not text:
+                    continue
+                matches = list(NUMBER.finditer(text))
+                if len(matches) != 1:
+                    if matches:
+                        warn(
+                            "OCR_MULTIPLE_NUMBERS",
+                            "OCR token chá»©a nhiá»u sá»‘; khÃ´ng Ä‘Æ°a vÃ o phÃ©p tÃ­nh.",
+                        )
+                    continue
+                match = matches[0]
+                emit(
+                    match.group(),
+                    page_context,
+                    number,
+                    list(token["bbox"]),
+                    f"ev-ocr-{number}-{oi}",
+                    "text",
+                    original=text,
+                    extraction_method="ocr",
+                    confidence=float(token.get("confidence", 0.0)),
+                )
 
         # Exact native word boxes avoid guessed character widths. Docling
         # decides the text regions; native words supply glyph geometry.

@@ -1,6 +1,10 @@
 # Handout triển khai một luồng Document QA
 
-Docling/DePlot implementation on branch `tien`: [setup, schema output, examples and limitations](tien-docling-deplot.md).
+Docling/DePlot implementation on branch `migration`: [setup, schema output, examples and limitations](tien-docling-deplot.md).
+
+Runtime/auth/AI/queue handout: [runtime-auth-and-jobs.md](runtime-auth-and-jobs.md).
+
+Readiness/integration checks: [integration-readiness.md](integration-readiness.md).
 
 ## 1. Mục tiêu chung
 
@@ -35,9 +39,10 @@ extracted evidence (bất biến, 100)
 
 `expected_revision_id` là optimistic-concurrency fence: hai thao tác sửa cùng
 lúc không thể cùng tạo revision kế tiếp. Request mang revision cũ nhận
-`409 EVIDENCE_REVISION_CONFLICT`. Runtime JSON local **chưa tự động tính lại**;
-nó giữ nguyên answer snapshot cũ để audit và đánh dấu câu trả lời cần tính lại.
-Worker PostgreSQL sẽ tạo `answer_revision` mới ở bước cutover sau.
+`409 EVIDENCE_REVISION_CONFLICT`. Ở PostgreSQL mode, revision mới và trạng thái
+`needs_update` được ghi bền vào graph; việc tự động recalculation vẫn thuộc
+milestone worker durable tiếp theo. JSON mode giữ nguyên hành vi offline tương
+ứng.
 
 Nguyên tắc chốt:
 

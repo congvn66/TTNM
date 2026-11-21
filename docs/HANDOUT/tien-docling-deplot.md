@@ -153,9 +153,10 @@ Real model output is recorded separately in the example directory.
 
 Known boundaries:
 
-- Tested on digital PDFs. Scanned pages produce `OCR_REQUIRED`; this adapter
-  does not claim complete scanned-table extraction. The existing Tesseract
-  adapter remains in the legacy path.
+- Digital PDFs use Docling's native geometry. Scanned pages use the Tesseract
+  adapter only when no text layer exists; each OCR numeric token carries bbox
+  and confidence. Complex scanned tables still produce an explicit warning
+  when cell geometry cannot be proved.
 - Docling picture detection gives chart candidates, not proof every picture is
   a chart. Source selection needs a unique relevant region.
 - Base extraction records chart regions but reads no chart values.
@@ -167,3 +168,45 @@ Known boundaries:
   persisting chart revisions/corrections needs the evidence-store integration.
 - No correction UI, new planner model or automatic per-point chart grounding was
   added. Those belong to the team's other components.
+
+## Runtime status on `migration`
+
+The handoff is wired into the single API flow:
+
+```text
+POST /sessions/{session_id}/documents
+  -> enqueue extract_document (durable queue)
+  -> worker: extract_pdf_artifact (Docling)
+  -> publish immutable document-evidence-v2 artifact
+  -> question planner/resolver
+  -> DePlot only for unresolved chart facts in the QuestionPlan
+  -> calculator/answer/citation persistence
+```
+
+The reference `.env.example` selects `PDF_EXTRACTION_BACKEND=docling` and
+`CHART_READER_BACKEND=deplot`; `legacy` is an explicit compatibility choice.
+Install the optional runtime with:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[docling-deplot,dev,postgres]"
+```
+
+`GET /health/ready` and `scripts/check_integrations.py` report missing
+Docling/DePlot dependencies without loading model weights. A missing DePlot
+model does not block text/table questions. A triggered chart request returns
+`CHART_PROVIDER_UNAVAILABLE` and publishes no guessed numeric value if DePlot
+cannot run.
+
+Scanned pages now use the OCR adapter only when no native text layer exists.
+OCR evidence is emitted with `extraction_method=ocr`, token bbox and confidence,
+and reconstructed OCR text is included in page retrieval. If Tesseract is
+unavailable, the page remains unreadable and the artifact carries an explicit
+`OCR_PYTHON_DEPENDENCY_MISSING` or `TESSERACT_ENGINE_UNAVAILABLE` warning.
+
+Contract tests cover backend selection, table/header geometry, merged-cell
+de-duplication, scanned-page OCR, question-scoped chart calls, provenance for
+direct labels and reviewed axes, and structured DePlot provider failure. These
+tests inject providers and do not claim that model weights are installed. A
+real run is confirmed only with `scripts/check_integrations.py --pdf <file>`
+after installing the optional extra and asking a question that requires a
+chart.

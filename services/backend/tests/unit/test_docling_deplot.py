@@ -231,6 +231,17 @@ def test_invalid_provider_table_is_not_published():
         parse_table("Region | A | B\nQ1 | 3")
 
 
+def test_deplot_provider_failure_is_structured_and_does_not_publish_values():
+    def unavailable(_image):
+        raise OSError("model cache unavailable")
+
+    output = DeplotChartReader(unavailable).read(request())
+    assert output["status"] == "not_available"
+    assert output["code"] == "CHART_PROVIDER_UNAVAILABLE"
+    assert output["evidence_batch"]["evidences"] == []
+    assert output["evidence_batch"]["warnings"][0]["code"] == "CHART_PROVIDER_UNAVAILABLE"
+
+
 def test_packaged_schema_matches_team_contract():
     from importlib.resources import files
 
@@ -333,6 +344,49 @@ def test_native_chart_label_has_source_word_bbox(tmp_path):
     assert item["method_label"] == "đọc từ nhãn"
     assert item["numeric_value"] == "50"
     assert item["bbox"][2] - item["bbox"][0] < 0.1
+
+
+def test_scanned_page_uses_ocr_tokens_and_keeps_retrieval_text(tmp_path):
+    import pymupdf
+    from report_qa.application.ocr_extraction import OcrPage
+
+    path = tmp_path / "scan.pdf"
+    with pymupdf.open() as pdf:
+        pdf.new_page(width=400, height=300)
+        pdf.save(path)
+
+    data = {"tables": [], "pictures": [], "texts": []}
+    converter = Mock()
+    converter.convert.return_value = SimpleNamespace(
+        status="ConversionStatus.SUCCESS",
+        document=SimpleNamespace(export_to_dict=lambda: data),
+    )
+
+    class FakeOcr:
+        def available(self):
+            return True, None
+
+        def read_page(self, _path, page_number):
+            assert page_number == 1
+            return OcrPage(
+                page_number=1,
+                width=800,
+                height=600,
+                tokens=(
+                    {"text": "Doanh", "bbox": [0.1, 0.1, 0.2, 0.15], "confidence": 0.91},
+                    {"text": "120", "bbox": [0.3, 0.1, 0.36, 0.15], "confidence": 0.88},
+                ),
+            )
+
+    result = extract_docling_artifact(
+        path, "scan-version", converter=converter, ocr_engine=FakeOcr()
+    )
+    assert result["pages"][0]["text"] == "Doanh 120"
+    item = result["evidence_batch"]["evidences"][0]
+    assert item["extraction_method"] == "ocr"
+    assert item["numeric_value"] == "120"
+    assert item["confidence"] == 0.88
+    assert item["bbox"] == [0.3, 0.1, 0.36, 0.15]
 
 
 def test_axis_metadata_without_confirmation_of_absent_labels_is_not_enough():

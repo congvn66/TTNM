@@ -31,7 +31,7 @@ class TesseractPdfOcr:
 
     def available(self) -> tuple[bool, str | None]:
         try:
-            import fitz  # noqa: F401
+            import pymupdf  # noqa: F401
             import pytesseract
             pytesseract.get_tesseract_version()
         except ModuleNotFoundError:
@@ -44,13 +44,13 @@ class TesseractPdfOcr:
         available, code = self.available()
         if not available:
             raise RuntimeError(code or "OCR_UNAVAILABLE")
-        import fitz
+        import pymupdf
         import pytesseract
         from PIL import Image
 
-        document = fitz.open(path)
+        document = pymupdf.open(path)
         page = document.load_page(page_number - 1)
-        pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+        pixmap = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), alpha=False)
         image = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
         data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT, config="--oem 1 --psm 6")
         tokens: list[dict[str, Any]] = []

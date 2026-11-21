@@ -177,6 +177,7 @@ class DeplotChartReader:
         )
 
         evidence, warnings, outputs = [], [], []
+        provider_failure = False
         requirements = {
             f["fact_key"]: f
             for f in request.fact_requirements
@@ -200,7 +201,26 @@ class DeplotChartReader:
                     matrix=pymupdf.Matrix(2, 2), clip=rect, alpha=False
                 )
                 image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-                raw = self.predictor(image)
+                try:
+                    raw = self.predictor(image)
+                except Exception as exc:
+                    provider_failure = True
+                    warnings.append(
+                        {
+                            "code": "CHART_PROVIDER_UNAVAILABLE",
+                            "message": "DePlot khÃ´ng sáºµn sÃ ng; khÃ´ng publish giÃ¡ trá»‹ chart chÆ°a kiá»ƒm chá»©ng.",
+                            "evidence_key": None,
+                        }
+                    )
+                    outputs.append(
+                        {
+                            "chart_region_key": region["chart_region_key"],
+                            "model": MODEL_ID,
+                            "revision": REVISION,
+                            "error_code": type(exc).__name__,
+                        }
+                    )
+                    continue
                 outputs.append(
                     {
                         "chart_region_key": region["chart_region_key"],
@@ -377,13 +397,10 @@ class DeplotChartReader:
             "warnings": warnings,
         }
         validate_extraction_batch(batch)
+        has_valid = any(e["data_status"] == "valid" for e in evidence)
         answer = result(
-            "completed"
-            if any(e["data_status"] == "valid" for e in evidence)
-            else "not_found",
-            None
-            if any(e["data_status"] == "valid" for e in evidence)
-            else "CHART_READ_AMBIGUOUS",
+            "completed" if has_valid else "not_available" if provider_failure else "not_found",
+            None if has_valid else "CHART_PROVIDER_UNAVAILABLE" if provider_failure else "CHART_READ_AMBIGUOUS",
             batch,
         )
         answer["provider_outputs"] = outputs

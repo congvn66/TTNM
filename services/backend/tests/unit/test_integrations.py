@@ -1,6 +1,28 @@
 from report_qa.infrastructure.integrations import readiness, runtime_capabilities
 
 
+def test_extraction_selector_uses_docling_when_configured(monkeypatch, tmp_path):
+    from report_qa.application import docling_extraction
+    from report_qa.application.evidence_extraction import extract_pdf_artifact
+
+    expected = {"extraction_provider": "docling", "pages": [], "evidence_batch": {"evidences": []}}
+    called = {}
+
+    def fake(path, document_version_id, *, locale=None):
+        called.update(path=path, document_version_id=document_version_id, locale=locale)
+        return expected
+
+    monkeypatch.setenv("PDF_EXTRACTION_BACKEND", "docling")
+    monkeypatch.setenv("PDF_NUMBER_LOCALE", "vi")
+    monkeypatch.setattr(docling_extraction, "extract_docling_artifact", fake, raising=False)
+    path = tmp_path / "document.pdf"
+    path.write_bytes(b"%PDF-test")
+
+    assert extract_pdf_artifact(path, "version-1") is expected
+    assert called["document_version_id"] == "version-1"
+    assert called["locale"] == "vi"
+
+
 def test_runtime_capabilities_reports_optional_backend_without_loading_models(monkeypatch):
     monkeypatch.setenv("PDF_EXTRACTION_BACKEND", "docling")
     monkeypatch.setenv("CHART_READER_BACKEND", "deplot")
