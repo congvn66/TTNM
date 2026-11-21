@@ -91,6 +91,18 @@ class AIProviderContractTests(unittest.TestCase):
         )
         self.assertEqual(result.structured["claims"][0]["evidence_quotes"], ["Tổng bookings tăng 48%!!!"])
 
+    def test_claim_quote_cannot_be_assembled_across_pages(self) -> None:
+        payload = {
+            "answer": "x", "summary": "y", "sections": [], "formulas": [], "tables": [],
+            "claims": [{"claim": "x", "evidence_pages": [1, 2], "evidence_quotes": ["cuối trang đầu đầu trang sau"]}],
+            "warnings": [], "cited_pages": [1, 2],
+        }
+        with self.assertRaisesRegex(ProviderError, "not present in cited context"):
+            validate_structured_answer(
+                payload, {1, 2}, provider="openrouter", model="fixture", raw_response="raw",
+                page_text_by_page={1: "cuối trang", 2: "đầu trang sau"},
+            )
+
     @patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key", "OPENROUTER_MODEL": "openai/gpt-6-luna", "REPORT_QA_AI_RETRIES": "1"}, clear=False)
     @patch("report_qa.api.ai_provider.urlopen")
     def test_openrouter_retries_once_after_unsupported_quote(self, mocked_urlopen) -> None:

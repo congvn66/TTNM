@@ -7,19 +7,48 @@ function emitRequestMetric(metric) {
 
 export const API = (window.SOURCELENS_API ?? import.meta.env.VITE_API_URL ?? window.location.origin).replace(/\/$/, "");
 
+const ERROR_MESSAGES = {
+  AI_PROVIDER_UNAVAILABLE: "Không kết nối được tới dịch vụ AI. Kiểm tra mạng hoặc thử lại sau.",
+  AI_PROVIDER_TIMEOUT: "Dịch vụ AI phản hồi quá lâu. Bạn có thể thử lại câu hỏi.",
+  AI_MODEL_UNAVAILABLE: "Mô hình AI hiện không khả dụng. Kiểm tra lại cấu hình model.",
+  AI_PROVIDER_HTTP_ERROR: "Dịch vụ AI từ chối yêu cầu. Kiểm tra API key và giới hạn sử dụng.",
+  AI_NOT_CONFIGURED: "Chưa cấu hình nhà cung cấp AI cho môi trường này.",
+  AI_INVALID_OUTPUT: "AI trả về dữ liệu không đúng định dạng. Hãy thử lại câu hỏi.",
+  AI_UNGROUNDED_CITATION: "AI trả về trích dẫn không nằm trong tài liệu. Hãy thử lại câu hỏi.",
+  AI_UNSUPPORTED_EVIDENCE: "AI chưa xác minh được evidence trong tài liệu. Hãy thử lại câu hỏi.",
+  QUEUE_UNAVAILABLE: "Hàng đợi xử lý chưa sẵn sàng. Hãy khởi động worker hoặc thử lại sau.",
+  DATABASE_UNAVAILABLE: "Dịch vụ dữ liệu tạm thời không sẵn sàng. Hãy thử lại sau.",
+};
+
+function extractError(body, status) {
+  const detail = body?.detail ?? body;
+  const code = detail && typeof detail === "object" ? detail.code : undefined;
+  const message = detail && typeof detail === "object" ? detail.message : detail;
+  const fallback = typeof message === "string" && message.trim() ? message : `HTTP ${status}`;
+  const error = new Error(code && ERROR_MESSAGES[code] ? ERROR_MESSAGES[code] : fallback);
+  error.status = status;
+  error.code = code;
+  error.traceId = detail && typeof detail === "object" ? (detail.trace_id ?? detail.traceId) : undefined;
+  error.rawMessage = fallback;
+  return error;
+}
+
 export async function request(path, options = {}) {
   const requestId = crypto.randomUUID();
   const startedAt = performance.now();
   const method = options.method ?? "GET";
   const controller = new AbortController();
+  const signal = options.signal
+    ? (typeof AbortSignal?.any === "function" ? AbortSignal.any([options.signal, controller.signal]) : options.signal)
+    : controller.signal;
   const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let response;
   try {
     response = await fetch(`${API}${path}`, {
       ...options,
-      signal: options.signal ?? controller.signal,
+      signal,
       credentials: "include",
-      headers: { "X-Trace-Id": crypto.randomUUID(), ...(options.headers ?? {}) },
+      headers: { "X-Trace-Id": requestId, ...(options.headers ?? {}) },
     });
   } catch (error) {
     emitRequestMetric({ request_id: requestId, method, path, status: 0, ok: false, duration_ms: Math.round(performance.now() - startedAt), error: error?.name === "AbortError" ? "TIMEOUT" : "NETWORK_ERROR", at: new Date().toISOString() });
@@ -34,11 +63,7 @@ export async function request(path, options = {}) {
     window.dispatchEvent(new CustomEvent("sourcelens:auth-required"));
   }
   if (!response.ok) {
-    const detail = body.detail;
-    const error = new Error(detail && typeof detail === "object" ? `${detail.code ? `${detail.code}: ` : ""}${detail.message ?? `HTTP ${response.status}`}` : (detail ?? `HTTP ${response.status}`));
-    error.status = response.status;
-    error.code = detail && typeof detail === "object" ? detail.code : undefined;
-    throw error;
+    throw extractError(body, response.status);
   }
   return body;
 }

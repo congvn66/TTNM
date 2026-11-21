@@ -85,7 +85,14 @@ const ERROR_COPY = {
   PDF_TOO_MANY_PAGES: "Tài liệu vượt quá số trang cho phép.",
   EXTRACTION_NOT_READY: "Tài liệu đang được lập chỉ mục. Bạn có thể hỏi khi trạng thái chuyển sang sẵn sàng.",
   AI_PROVIDER_TIMEOUT: "AI phản hồi quá lâu. Bạn có thể thử gửi lại câu hỏi.",
+  AI_PROVIDER_UNAVAILABLE: "Không kết nối được tới dịch vụ AI. Kiểm tra mạng hoặc thử lại sau.",
+  AI_MODEL_UNAVAILABLE: "Mô hình AI hiện không khả dụng. Kiểm tra lại cấu hình model.",
+  AI_PROVIDER_HTTP_ERROR: "Dịch vụ AI từ chối yêu cầu. Kiểm tra API key và giới hạn sử dụng.",
+  AI_NOT_CONFIGURED: "Chưa cấu hình nhà cung cấp AI cho môi trường này.",
   AI_INVALID_OUTPUT: "AI trả về dữ liệu không đúng định dạng. Hãy thử lại câu hỏi.",
+  AI_UNGROUNDED_CITATION: "AI trả về trích dẫn không nằm trong tài liệu. Hãy thử lại câu hỏi.",
+  AI_UNSUPPORTED_EVIDENCE: "AI chưa xác minh được evidence trong tài liệu. Hãy thử lại câu hỏi.",
+  QUEUE_UNAVAILABLE: "Hàng đợi xử lý chưa sẵn sàng. Hãy khởi động worker hoặc thử lại sau.",
 };
 
 function userFacingError(value) {
@@ -566,10 +573,14 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const refreshJobs = useCallback(async () => {
     try {
       const jobs = await request("/api/v1/jobs");
-      setActiveJobs(jobs.jobs ?? []);
+      // Keep recent failures visible for retry, but never count completed or
+      // cancelled work as an active job.  Previously the unfiltered list made
+      // the header show a stale “đang xử lý” pill after the worker finished.
+      setActiveJobs((jobs.jobs ?? []).filter((job) => ["queued", "running", "failed"].includes(job.status)));
     } catch {
-      // Job Center is an enhancement; a temporary status request failure must
-      // not blank the document workspace or block chat interaction.
+      // Do not keep stale server data after a queue outage.  The workspace and
+      // chat remain usable; the next poll will repopulate the Job Center.
+      setActiveJobs([]);
     }
   }, []);
 

@@ -252,7 +252,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .job-center-empty > span { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--green-soft); color: var(--color-success); font-weight: 850; }
 .job-center-empty p { margin: 12px 0 4px; color: var(--ink); font-size: 11px; font-weight: 750; }
 .job-center-empty small { color: var(--muted); font-size: 9px; }
-.trace-button, .trace-panel { display: none !important; }
+/* Trace controls are part of the supported workspace flow.  The old rule
+   hid them after the inspector was moved into the chat column, leaving users
+   with no way to inspect retrieval/provider/persistence events. */
+.trace-button { display: inline-flex; }
+.trace-panel { display: block; }
 
 .resource-modal-backdrop { position: fixed; z-index: 90; inset: 0; display: grid; place-items: center; padding: 22px; background: rgba(24, 24, 27, .38); backdrop-filter: blur(3px); }
 .resource-modal { width: min(430px, 100%); display: grid; gap: 13px; border: 1px solid var(--border); border-radius: 16px; padding: 22px; background: var(--surface); box-shadow: 0 24px 70px rgba(24,24,27,.24); }
@@ -580,6 +584,51 @@ body { background: var(--canvas); }
 .resource-menu-popover button { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; border-radius: 7px; padding: 9px 10px; background: transparent; color: var(--ink-soft); font-size: 12px; text-align: left; cursor: pointer; }
 .resource-menu-popover button:hover, .resource-menu-popover button:focus-visible { background: var(--surface-muted); color: var(--ink); outline: none; }
 .resource-menu-popover button.danger { color: var(--red); }
+
+/* Explicit overlay layers prevent menus, drawers and dialogs from painting
+   over one another unpredictably.  Every overlay remains inside a predictable
+   stacking context and is never clipped by the scrollable session list. */
+:root {
+  --z-header: 20;
+  --z-popover: 1000;
+  --z-drawer: 1100;
+  --z-modal: 1200;
+  --z-toast: 1300;
+}
+.topbar { overflow: visible; }
+.top-actions { flex: 1 1 auto; overflow: visible; }
+.top-actions > * { flex-shrink: 0; }
+.profile-menu { z-index: var(--z-popover); }
+.profile-popover { z-index: var(--z-popover); }
+.resource-menu-popover { z-index: var(--z-popover); }
+.job-center-drawer { z-index: var(--z-drawer); }
+.resource-modal-backdrop { z-index: var(--z-modal); }
+.toast { z-index: var(--z-toast); }
+.trace-panel { position: relative; z-index: 1; max-height: 420px; overflow: auto; }
+.chat-body > .trace-panel { display: block; }
+
+/* Keep the profile control in normal topbar flow.  A previous absolute rule
+   caused it to float over the status/action cluster on narrow desktops. */
+.app-shell > .profile-menu { position: relative; inset: auto; z-index: auto; }
+
+@media (max-width: 1380px) {
+  .topbar { gap: 14px; padding-inline: 16px; }
+  .brand { min-width: 205px; }
+  .topbar-context { max-width: 210px; }
+  .topbar-context strong { max-width: 210px; }
+  .audit-button { padding-inline: 8px; }
+  .audit-button .ui-icon { display: none; }
+}
+@media (max-width: 1120px) {
+  .topbar-context { display: none; }
+  .top-actions .connection-pill { max-width: 32px; overflow: hidden; padding-inline: 8px; }
+  .top-actions .connection-pill i { flex: 0 0 auto; }
+  .top-actions .connection-pill { font-size: 0; }
+  .top-actions .connection-pill i { margin: 0; }
+  .audit-button { display: none; }
+  .profile-copy { display: none; }
+  .profile-chip { padding: 3px; }
+}
 .document-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 4px 3px 38px; color: var(--muted); font-size: 10px; font-weight: 700; }
 .session-upload-button { display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: 6px; padding: 4px 6px; background: var(--gold-soft); color: var(--gold-dark); font-size: 10px; font-weight: 750; cursor: pointer; }
 .session-upload-button:hover { background: var(--gold); color: white; }

@@ -246,9 +246,12 @@ def validate_structured_answer(payload: dict[str, Any], allowed_pages: set[int],
         if not quotes:
             raise ProviderError("AI_INVALID_OUTPUT", f"claims[{index}].evidence_quotes must not be empty")
         if page_text_by_page is not None:
-            searchable = " ".join(_normalized_search_text(page_text_by_page.get(page, "")) for page in pages)
             for quote in quotes:
-                if _normalized_search_text(quote) not in searchable:
+                normalized_quote = _normalized_search_text(quote)
+                # A quote must be contiguous within one cited page. Joining
+                # pages here could incorrectly validate a quote assembled from
+                # the end of one page and the beginning of another.
+                if not any(normalized_quote in _normalized_search_text(page_text_by_page.get(page, "")) for page in pages):
                     raise ProviderError("AI_UNSUPPORTED_EVIDENCE", f"claims[{index}] quote is not present in cited context")
         claim = _string(item.get("claim"), f"claims[{index}].claim", max_len=1200)
         if not claim:
