@@ -122,6 +122,30 @@ function SecuritySettings() {
   const [form, setForm] = useState({ current_password: "", new_password: "", confirm_password: "" });
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
+  const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [sessionsError, setSessionsError] = useState("");
+
+  async function loadSessions() {
+    setSessionsError("");
+    try { const body = await request("/api/v1/auth/sessions"); setSessions(body.sessions ?? []); }
+    catch (reason) { setSessionsError(reason.message || "Không thể tải danh sách thiết bị."); }
+    finally { setSessionsLoading(false); }
+  }
+
+  useEffect(() => { loadSessions(); }, []);
+
+  async function revokeSession(session) {
+    if (!window.confirm(session.current ? "Thu hồi phiên hiện tại và đăng xuất?" : "Thu hồi thiết bị này?")) return;
+    try { const result = await request(`/api/v1/auth/sessions/${session.id}`, { method: "DELETE" }); if (result.current) window.location.reload(); else await loadSessions(); }
+    catch (reason) { setSessionsError(reason.message || "Không thể thu hồi thiết bị."); }
+  }
+
+  async function revokeOthers() {
+    if (!window.confirm("Đăng xuất tất cả thiết bị khác?")) return;
+    try { await request("/api/v1/auth/sessions/revoke-others", { method: "POST" }); await loadSessions(); }
+    catch (reason) { setSessionsError(reason.message || "Không thể thu hồi các thiết bị khác."); }
+  }
 
   async function save(event) {
     event.preventDefault();
@@ -157,7 +181,7 @@ function SecuritySettings() {
       {status === "success" && <div className="settings-success" role="status"><Icon name="check" size={15} /> Đã đổi mật khẩu.</div>}
       <div className="settings-actions"><button className="settings-primary" type="submit" disabled={status === "saving"}>{status === "saving" ? "Đang lưu…" : "Cập nhật mật khẩu"}</button></div>
     </form>
-    <section className="settings-card security-card"><div className="settings-card-header"><div><h2>Phiên đăng nhập</h2><p>Đổi mật khẩu sẽ tự động thu hồi các phiên khác để bảo vệ tài khoản.</p></div><span className="settings-tag">Đang bật</span></div><div className="settings-blocked"><span className="settings-info-icon"><Icon name="settings" size={17} /></span><div><strong>Quản lý thiết bị sẽ bổ sung sau</strong><p>Danh sách từng thiết bị và thao tác thu hồi riêng cần thêm schema metadata user-agent.</p></div></div></section>
+    <section className="settings-card security-card"><div className="settings-card-header"><div><h2>Thiết bị và phiên đăng nhập</h2><p>Mỗi trình duyệt có một phiên riêng. Thu hồi ngay thiết bị bạn không còn tin cậy.</p></div><button type="button" className="settings-secondary" onClick={revokeOthers}>Thu hồi thiết bị khác</button></div>{sessionsError && <div className="settings-error" role="alert">{sessionsError}</div>}{sessionsLoading ? <div className="settings-skeleton-group"><i></i></div> : <div className="device-list">{sessions.length ? sessions.map((session) => <article className="device-row" key={session.id}><span className={`device-dot ${session.current ? "current" : ""}`}></span><div><strong>{session.user_agent}</strong><small>{session.current ? "Thiết bị hiện tại" : "Phiên khác"} · Hoạt động {session.last_seen_at ? new Date(session.last_seen_at).toLocaleString("vi-VN") : "chưa ghi nhận"}</small></div><button type="button" className="device-revoke" onClick={() => revokeSession(session)}>{session.current ? "Đăng xuất" : "Thu hồi"}</button></article>) : <p className="settings-help">Chưa có phiên đăng nhập nào đang hoạt động.</p>}</div>}</section>
   </>;
 }
 

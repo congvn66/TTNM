@@ -66,7 +66,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
 
     def load_catalog(self) -> dict[str, Any]:
         rows = self._execute(
-            """SELECT id,title,created_at,updated_at,data_revision
+            """SELECT id,project_id,title,created_at,updated_at,data_revision
                  FROM chats
                 WHERE owner_id=%s AND deleted_at IS NULL
                 ORDER BY updated_at DESC""",
@@ -76,6 +76,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         for row in rows:
             sessions[str(row["id"])] = {
                 "id": str(row["id"]),
+                "project_id": str(row["project_id"]) if row.get("project_id") else None,
                 "owner_id": str(self.owner_id),
                 "title": row["title"],
                 "created_at": self._iso(row["created_at"]),
@@ -135,7 +136,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         chat_uuid = self._uuid(chat_id)
         if row is None:
             rows = self._execute(
-                """SELECT id,title,created_at,updated_at,data_revision
+                """SELECT id,project_id,title,created_at,updated_at,data_revision
                      FROM chats WHERE id=%s AND owner_id=%s AND deleted_at IS NULL""",
                 (chat_uuid, self.owner_id),
             )
@@ -144,6 +145,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
             row = rows[0]
         session: dict[str, Any] = {
             "id": str(row["id"]),
+            "project_id": str(row["project_id"]) if row.get("project_id") else None,
             "owner_id": str(self.owner_id),
             "title": row["title"],
             "created_at": self._iso(row["created_at"]),
@@ -443,13 +445,33 @@ class PostgresRuntimeStore(PostgresRevisionStore):
 
     def _sync_session(self, session: dict[str, Any], *, extraction_loader: Callable[[dict[str, Any]], dict[str, Any] | None] | None) -> None:
         chat_id = self._uuid(session["id"])
+        project_id = self._uuid(session["project_id"]) if session.get("project_id") else None
+        if project_id is None:
+            canonical_name = "Workspace " + chr(0x00E1) + " nh" + chr(0x00E2) + "n"
+            canonical = self._execute(
+                "SELECT id FROM projects WHERE owner_id=%s AND name=%s AND deleted_at IS NULL ORDER BY created_at LIMIT 1",
+                (self.owner_id, canonical_name),
+            )
+            project_id = canonical[0]["id"] if canonical else self._execute(
+                """INSERT INTO projects (owner_id,name) VALUES (%s,%s)
+                   ON CONFLICT (owner_id,name) WHERE deleted_at IS NULL
+                   DO UPDATE SET updated_at=projects.updated_at
+                   RETURNING id""",
+                (self.owner_id, canonical_name),
+            )[0]["id"]
+            session["project_id"] = str(project_id)
+        if project_id is None:
+            default = self._execute("SELECT id FROM projects WHERE owner_id=%s AND name='Workspace cá nhân' AND deleted_at IS NULL ORDER BY created_at LIMIT 1", (self.owner_id,))
+            project_id = default[0]["id"] if default else self._execute("INSERT INTO projects (owner_id,name) VALUES (%s,%s) RETURNING id", (self.owner_id, "Workspace cá nhân"))[0]["id"]
+            session["project_id"] = str(project_id)
         self._execute(
-            """INSERT INTO chats (id,owner_id,title,data_revision,created_at,updated_at)
-               VALUES (%s,%s,%s,%s,%s,%s)
+            """INSERT INTO chats (id,owner_id,project_id,title,data_revision,created_at,updated_at)
+               VALUES (%s,%s,%s,%s,%s,%s,%s)
                ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title,
+                 project_id=EXCLUDED.project_id,
                  data_revision=GREATEST(chats.data_revision, EXCLUDED.data_revision),
                  updated_at=EXCLUDED.updated_at, deleted_at=NULL""",
-            (chat_id, self.owner_id, str(session.get("title") or "Phiên phân tích mới"), int(session.get("data_revision") or 0), session.get("created_at") or datetime.now(timezone.utc), session.get("updated_at") or datetime.now(timezone.utc)),
+            (chat_id, self.owner_id, project_id, str(session.get("title") or "Phiên phân tích mới"), int(session.get("data_revision") or 0), session.get("created_at") or datetime.now(timezone.utc), session.get("updated_at") or datetime.now(timezone.utc)),
         )
         for document in session.get("documents", []):
             version_id, run_id = self._sync_document(chat_id, document)
@@ -459,6 +481,12 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                 if not run_rows or run_rows[0]["status"] != "completed":
                     self._complete_extraction(chat_id, version_id, run_id, document, artifact)
             self._sync_evidence_state(chat_id, document)
+            display_name = str(document.get("file_name") or document.get("title") or "Tài liệu chưa đặt tên")
+            self._execute("""INSERT INTO project_documents (owner_id,project_id,document_id,display_name)
+                VALUES (%s,%s,%s,%s)
+                ON CONFLICT (project_id,document_id) DO UPDATE
+                    SET display_name=COALESCE(project_documents.display_name, EXCLUDED.display_name)""",
+                (self.owner_id, project_id, UUID(str(document["id"])), display_name))
         self._sync_messages(chat_id, session.get("messages", []))
         for key, item in (session.get("request_keys") or {}).items():
             route = str(item.get("route") or "POST /api/v1/sessions/messages")

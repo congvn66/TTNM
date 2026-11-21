@@ -150,12 +150,21 @@ def _clear_session_cookie(response: Response) -> None:
     response.delete_cookie(SESSION_COOKIE, path="/")
 
 
-def _create_session(connection: Any, user_id: UUID, *, revoke_token: str | None = None) -> tuple[str, datetime]:
+def _request_ip_hash(request: Request) -> str | None:
+    address = request.client.host if request.client else None
+    if not address:
+        return None
+    salt = os.getenv("AUTH_IP_HASH_SALT", "sourcelens-dev-only").encode("utf-8")
+    return hashlib.sha256(salt + address.encode("utf-8")).hexdigest()
+
+
+def _create_session(connection: Any, user_id: UUID, *, revoke_token: str | None = None, request: Request | None = None) -> tuple[str, datetime]:
     if revoke_token:
         connection.execute("UPDATE auth_sessions SET revoked_at=now() WHERE token_hash=%s AND revoked_at IS NULL", (_token_hash(revoke_token),))
     token = secrets.token_urlsafe(48)
     expires_at = datetime.now(timezone.utc) + timedelta(days=settings.auth_session_days)
-    connection.execute("INSERT INTO auth_sessions (user_id,token_hash,expires_at,last_seen_at) VALUES (%s,%s,%s,now())", (user_id, _token_hash(token), expires_at))
+    user_agent = (request.headers.get("user-agent") if request else None) or None
+    connection.execute("INSERT INTO auth_sessions (user_id,token_hash,expires_at,last_seen_at,user_agent,ip_hash) VALUES (%s,%s,%s,now(),%s,%s)", (user_id, _token_hash(token), expires_at, user_agent[:512] if user_agent else None, _request_ip_hash(request) if request else None))
     return token, expires_at
 
 
@@ -227,7 +236,7 @@ def register(payload: RegisterRequest, request: Request, response: Response) -> 
                     raise HTTPException(status_code=409, detail={"code": "EMAIL_ALREADY_REGISTERED", "message": "Không thể tạo tài khoản với thông tin này."})
                 user_id = uuid4()
                 row = connection.execute("INSERT INTO users (id,email,normalized_email,password_hash,display_name) VALUES (%s,%s,%s,%s,%s) RETURNING id,email,display_name", (user_id, email, email, password_hash, payload.display_name.strip())).fetchone()
-                token, _ = _create_session(connection, user_id)
+                token, _ = _create_session(connection, user_id, request=request)
         _set_session_cookie(response, token)
         return {"user": _public_user(dict(row)), "authenticated": True}
     except HTTPException:
@@ -247,7 +256,7 @@ def login(payload: LoginRequest, request: Request, response: Response) -> dict[s
             if not row or not _verify_password(payload.password, row["password_hash"]):
                 raise HTTPException(status_code=401, detail={"code": "INVALID_CREDENTIALS", "message": "Email hoặc mật khẩu không đúng."})
             with connection.transaction():
-                token, _ = _create_session(connection, row["id"], revoke_token=request.cookies.get(SESSION_COOKIE))
+                token, _ = _create_session(connection, row["id"], revoke_token=request.cookies.get(SESSION_COOKIE), request=request)
         _set_session_cookie(response, token)
         return {"user": _public_user(dict(row)), "authenticated": True}
     except HTTPException:
@@ -312,7 +321,7 @@ def reset_password(payload: ResetPasswordRequest, request: Request, response: Re
                 connection.execute("UPDATE users SET password_hash=%s,updated_at=now() WHERE id=%s", (password_hash, row["id"]))
                 connection.execute("UPDATE account_tokens SET used_at=now() WHERE token_hash=%s", (_token_hash(payload.token),))
                 connection.execute("UPDATE auth_sessions SET revoked_at=now() WHERE user_id=%s AND revoked_at IS NULL", (row["id"],))
-                session_token, _ = _create_session(connection, row["id"])
+            session_token, _ = _create_session(connection, row["id"], request=request)
         _set_session_cookie(response, session_token)
         return {"user": _public_user(dict(row)), "authenticated": True}
     except HTTPException:

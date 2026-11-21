@@ -30,6 +30,7 @@ from .ai_provider import ProviderError, live_provider, planner_client, provider_
 from .jobs import router as jobs_router
 from .library import router as library_router
 from .auth import DEMO_OWNER_ID, owner_id_for_request, router as auth_router, settings_router as auth_settings_router
+from .devices import router as auth_sessions_router
 from report_qa.config import settings
 from report_qa.infrastructure.postgres import postgres_health
 from report_qa.infrastructure.integrations import readiness as integration_readiness
@@ -143,6 +144,7 @@ app.include_router(jobs_router)
 app.include_router(library_router)
 app.include_router(auth_router)
 app.include_router(auth_settings_router)
+app.include_router(auth_sessions_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:4173", "http://localhost:4173"],

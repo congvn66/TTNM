@@ -224,6 +224,48 @@ Khong cascade lich su nghiep vu khi xoa user. Account deletion la workflow rieng
 - `title` la ten hien thi, khong phai ten object storage.
 - `owner_id` bat bien trong MVP; khong co chuyen ownership.
 
+#### Quan he `project` - `session` - `document`
+
+Đây là quan hệ chính mà frontend phải dùng, không dùng danh sách session local
+để dựng thư viện:
+
+| Quan hệ | Cardinality | Bảng/khóa | Ý nghĩa |
+|---|---:|---|---|
+| user → project | 1:N | `projects.owner_id` | Mỗi tài khoản có nhiều nhóm thư viện; hệ thống tạo một project mặc định khi cần |
+| project → chat/session | 1:N | `chats.project_id` | Phiên làm việc nằm trong đúng một project; đổi project chỉ đổi khóa ngoại |
+| project ↔ document | N:M | `project_documents(project_id, document_id)` | Một PDF có thể được dùng ở nhiều project; metadata folder/name là theo project |
+| session → document | N:M qua nguồn | `chat_documents(chat_id, document_version_id)` | Session chỉ tham chiếu version đã chọn để trả lời; không sở hữu bản PDF |
+| project document → folder | N:1 | `project_documents.folder_id` | Folder là phạm vi của project, không phải thư mục vật lý trong object storage |
+
+Quy tắc transaction:
+
+1. Tạo session: resolve owner project mặc định nếu client không truyền project;
+   insert `chats.project_id` và đồng bộ các document đang gắn với session.
+2. Chuyển session: kiểm tra project cùng owner, cập nhật `chats.project_id`,
+   upsert liên kết document; không nhân bản `documents` hay file trên R2.
+3. Xoá project: chỉ cho phép khi không còn session và không còn
+   `project_documents`; trả lỗi `PROJECT_NOT_EMPTY` thay vì cascade âm thầm.
+4. Đổi folder/tên document: cập nhật đúng row `project_documents`, dùng
+   `expected_version`; xung đột trả `409` và UI tải lại snapshot.
+
+#### Thiết bị và phiên đăng nhập
+
+`auth_sessions` là một phiên đăng nhập trên một trình duyệt/thiết bị, không
+phải phiên hỏi đáp. Các trường tối thiểu:
+
+| Trường | Lưu trữ | Response |
+|---|---|---|
+| `id`, `user_id` | UUID/FK | `id` |
+| `token_hash` | hash một chiều | Không bao giờ trả |
+| `user_agent` | chuỗi giới hạn 512 | Có, đã rút gọn nếu cần |
+| `ip_hash` | hash có salt server | Không trả |
+| `created_at`, `last_seen_at`, `expires_at` | timestamptz UTC | Có |
+| `revoked_at` | timestamptz/null | Chỉ suy ra `revoked`; endpoint list mặc định chỉ trả phiên active |
+
+Thu hồi là soft state transition (`revoked_at=now()`), không xoá row để giữ
+audit. Mọi truy vấn thiết bị đều lọc `user_id` từ session hiện tại; không nhận
+`owner_id` từ client.
+
 #### `project_documents`
 
 - Bang noi many-to-many, PK `(project_id, document_id)`.

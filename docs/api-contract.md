@@ -2,10 +2,14 @@
 
 ## Luồng API chính
 
-Trong lúc chưa có auth/PostgreSQL runtime, FastAPI cung cấp một contract session/document duy nhất:
+FastAPI cung cấp một contract session/document duy nhất. Runtime có hai adapter rõ ràng: JSON offline (mặc định cho test) và PostgreSQL khi bật `PERSISTENCE_BACKEND=postgres`:
 
-- `GET /health` — trả persistence/AI/database status.
+- `GET /health` — liveness + capability/readiness summary; không gọi model AI.
+- `GET /health/ready` — readiness thật của các adapter đang chọn; trả `503` và
+  `blockers` nếu PostgreSQL/R2/extractor bắt buộc chưa sẵn sàng.
 - `POST /api/v1/sessions` — tạo phiên tài liệu.
+- `/health.storage` reports the selected object-store adapter; R2 reports only
+  backend, bucket, configuration and readiness, never credentials or object keys.
 - `POST /api/v1/sessions/{session_id}/documents` — upload và bắt đầu trích xuất PDF.
 - `POST /api/v1/sessions/{session_id}/messages` — hỏi tài liệu theo flow planner → evidence → calculator → answer.
 - `GET /api/v1/sessions/{session_id}/messages/{message_id}/trace` — audit flow đã lưu.
@@ -311,3 +315,62 @@ The stable presentation shape is:
 `answer`/`summary` are display text; `expression`/`substitution`/`result` are presentation fields and must not replace the deterministic calculator. The UI renders each field separately and keeps page citations clickable.
 
 For an OpenRouter test, set `REPORT_QA_AI_MODE=openrouter`, `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` (default `openai/gpt-6-luna`). The adapter uses `/api/v1/chat/completions` with `response_format.type=json_schema` and validates the same structured answer contract before persistence.
+
+## Durable job endpoints (PostgreSQL mode)
+
+The extraction queue is owner-scoped and exposes only safe status fields. The API never returns PDF bytes, prompt context or provider responses from these endpoints.
+
+| Method | Endpoint | Semantics |
+|---|---|---|
+| GET | `/api/v1/jobs?status=queued` | List the current owner’s queued jobs |
+| GET | `/api/v1/jobs/{job_id}` | Read status, attempts, lease-safe progress and result reference |
+| POST | `/api/v1/jobs/{job_id}/cancel` | Cancel a queued/running job with compare-and-set |
+
+`POST /api/v1/sessions/{session_id}/documents` returns a `job` object when `PERSISTENCE_BACKEND=postgres`; the PDF remains `queued` until `scripts/start_worker.ps1` claims and publishes the extraction. JSON mode keeps the compatibility background task for offline tests.
+
+## 15. Project, library and device-session contracts
+
+`projects` là lớp nhóm của thư viện. Một `chat` (UI gọi là phiên làm việc)
+thuộc tối đa một project; một document có thể xuất hiện trong nhiều project qua
+`project_documents`. Vì vậy đổi tên project không làm đổi dữ liệu tài liệu và
+xoá liên kết khỏi project không xoá file gốc.
+
+| Method/path | Auth | Purpose | Persistence/guard |
+|---|---|---|---|
+| `GET /api/v1/projects` | owner | Liệt kê project của người dùng, kèm `session_count`, `document_count` | Không trả project của owner khác |
+| `POST /api/v1/projects` | owner | Tạo project từ `name` | Tên đã trim; unique theo owner trên bản ghi chưa xoá |
+| `PATCH /api/v1/projects/{project_id}` | owner | Đổi tên project | Không cho đổi project của owner khác |
+| `DELETE /api/v1/projects/{project_id}` | owner | Xoá project rỗng | `409 PROJECT_NOT_EMPTY` nếu còn session hoặc document |
+| `GET /api/v1/projects/{project_id}/library` | owner | Trả project, folder, session và document để render LibraryScreen | Cùng một snapshot DB; không đọc local JSON |
+| `PATCH /api/v1/sessions/{session_id}/project` | owner | Chuyển session sang project | Upsert các document của session vào `project_documents` trong cùng transaction |
+| `PATCH /api/v1/projects/{project_id}/documents/{document_id}` | owner | Đổi folder hoặc tên hiển thị của document trong project | Có `expected_version` để chống ghi đè cập nhật cạnh tranh |
+| `GET /api/v1/auth/sessions` | owner | Liệt kê phiên đăng nhập đang hoạt động | Chỉ trả metadata thiết bị, không trả token/raw IP |
+| `DELETE /api/v1/auth/sessions/{session_id}` | owner | Thu hồi một phiên đăng nhập | CSRF check; thu hồi current session thì xoá cookie |
+| `POST /api/v1/auth/sessions/revoke-others` | owner | Thu hồi tất cả phiên khác phiên hiện tại | Idempotent; trả `revoked_count` |
+
+Payload tối thiểu:
+
+```json
+{"name":"Nghiên cứu Q1"}
+```
+
+```json
+{
+  "project_id":"uuid",
+  "folder_id":"uuid|null",
+  "display_name":"Bao cao Q1.pdf",
+  "expected_version":3
+}
+```
+
+`GET /projects/{id}/library` trả các danh sách đã owner-filter:
+`project`, `folders`, `sessions`, `documents`. Mỗi document có
+`document_id`, `folder_id`, `display_name`, `version`, `file_name`,
+`byte_size`, `page_count`, `extraction_status`, `session_id` và
+`session_title`. UI không được tự suy diễn quan hệ từ tên file; mọi thay đổi
+phải gọi endpoint tương ứng và reload snapshot sau khi thành công.
+
+Device list chỉ dùng `user_agent`, `created_at`, `last_seen_at`, `expires_at`,
+`current`, `revoked`; `token_hash`, IP hash và cookie không bao giờ xuất hiện
+trong response. Khi chưa đăng nhập, UI phải hiển thị trạng thái yêu cầu đăng
+nhập thay vì danh sách giả.

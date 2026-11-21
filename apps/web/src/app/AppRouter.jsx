@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import WorkspaceScreen from "../features/workspace/WorkspaceScreen.jsx";
-import LibraryScreen from "../features/workspace/LibraryScreen.jsx";
+import LibraryScreen from "../features/workspace/LibraryScreenV2.jsx";
 import SettingsScreen from "../features/workspace/SettingsScreen.jsx";
 
 function currentPath() {
