@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from alembic import context
@@ -13,9 +14,14 @@ ROOT = Path(__file__).resolve().parents[3]
 BASELINE = ROOT / "docs" / "initial-schema.sql"
 
 
+def database_url() -> str:
+    """Prefer the injected runtime URL over the local-dev ini default."""
+    return os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
+
+
 def run_migrations_offline() -> None:
     context.configure(
-        url=config.get_main_option("sqlalchemy.url"),
+        url=database_url(),
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -24,8 +30,10 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    configuration = config.get_section(config.config_ini_section, {})
+    configuration["sqlalchemy.url"] = database_url()
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

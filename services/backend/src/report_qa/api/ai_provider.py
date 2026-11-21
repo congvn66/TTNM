@@ -269,6 +269,13 @@ def _display_text(structured: dict[str, Any]) -> str:
         lines.extend(["", section["heading"], *[f"- {point}" for point in section["points"]]])
     for formula in structured["formulas"]:
         lines.extend(["", f"{formula['name']}: {formula['expression']}", f"Thay số: {formula['substitution']}", f"Kết quả: {formula['result']} {formula['unit']}".strip()])
+    for table in structured.get("tables", []):
+        lines.extend(["", table["title"], " | ".join(table["columns"]), " | ".join("---" for _ in table["columns"])])
+        lines.extend(" | ".join(row) for row in table["rows"])
+    for claim in structured.get("claims", []):
+        lines.extend(["", f"- {claim['claim']}", f"  Nguồn: {', '.join(f'trang {page}' for page in claim['evidence_pages'])}"])
+    if structured.get("warnings"):
+        lines.extend(["", "Lưu ý", *[f"- {warning}" for warning in structured["warnings"]]])
     return "\n".join(lines).strip()
 
 
@@ -281,7 +288,7 @@ class GeminiProvider:
         self.api_key = os.getenv("GEMINI_API_KEY", "")
         self.model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         self.timeout_seconds = float(os.getenv("REPORT_QA_AI_TIMEOUT_SECONDS", "20"))
-        self.max_retries = min(2, max(0, int(os.getenv("REPORT_QA_AI_RETRIES", "0"))))
+        self.max_retries = min(2, max(0, int(os.getenv("REPORT_QA_AI_RETRIES", "1"))))
         if not self.api_key:
             raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured")
 
@@ -351,7 +358,7 @@ class OpenRouterProvider:
         self.api_key = os.getenv("OPENROUTER_API_KEY", "")
         self.model = os.getenv("OPENROUTER_MODEL", "openai/gpt-6-luna")
         self.timeout_seconds = float(os.getenv("REPORT_QA_AI_TIMEOUT_SECONDS", "20"))
-        self.max_retries = min(2, max(0, int(os.getenv("REPORT_QA_AI_RETRIES", "0"))))
+        self.max_retries = min(2, max(0, int(os.getenv("REPORT_QA_AI_RETRIES", "1"))))
         if not self.api_key:
             raise ProviderError("AI_NOT_CONFIGURED", "OPENROUTER_API_KEY is not configured")
 

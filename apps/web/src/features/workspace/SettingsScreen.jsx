@@ -119,10 +119,45 @@ function PreferencesSettings() {
 }
 
 function SecuritySettings() {
+  const [form, setForm] = useState({ current_password: "", new_password: "", confirm_password: "" });
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState("");
+
+  async function save(event) {
+    event.preventDefault();
+    setError("");
+    if (form.new_password.length < 8) { setError("Mật khẩu mới cần ít nhất 8 ký tự."); return; }
+    if (form.new_password !== form.confirm_password) { setError("Hai mật khẩu mới chưa khớp."); return; }
+    setStatus("saving");
+    try {
+      await request("/api/v1/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current_password: form.current_password, new_password: form.new_password }),
+      });
+      setForm({ current_password: "", new_password: "", confirm_password: "" });
+      setStatus("success");
+      window.setTimeout(() => setStatus("idle"), 2800);
+    } catch (reason) {
+      setError(reason.message || "Không thể đổi mật khẩu lúc này.");
+      setStatus("error");
+    }
+  }
+
   return <>
     <div className="settings-heading"><div><span className="settings-eyebrow">SECURITY</span><h1>Bảo mật</h1><p>Kiểm soát cách tài khoản được bảo vệ khi làm việc với dữ liệu.</p></div></div>
-    <section className="settings-card security-card"><div className="settings-card-header"><div><h2>Đổi mật khẩu</h2><p>Endpoint đổi mật khẩu tại phiên hiện tại chưa được backend phát hành.</p></div><span className="settings-tag">Backend cần bổ sung</span></div><div className="settings-blocked"><span className="settings-info-icon"><Icon name="lock" size={17} /></span><div><strong>Chức năng đang được khoá an toàn</strong><p>Không hiển thị form giả để tránh người dùng tưởng mật khẩu đã được cập nhật. Khi API sẵn sàng, form sẽ có kiểm tra strength, xác nhận và xoá secret sau khi gửi.</p></div></div></section>
-    <section className="settings-card security-card"><div className="settings-card-header"><div><h2>Phiên đăng nhập</h2><p>Danh sách và thu hồi phiên cần API sessions/revoke riêng.</p></div><span className="settings-tag">Capability gated</span></div><div className="settings-blocked"><span className="settings-info-icon"><Icon name="settings" size={17} /></span><div><strong>Chưa bật danh sách thiết bị</strong><p>Frontend chỉ render danh sách này khi backend cung cấp dữ liệu thiết bị và thao tác revoke. Không dùng dữ liệu mẫu.</p></div></div></section>
+    <form className="settings-card settings-form security-card" onSubmit={save}>
+      <div className="settings-card-header"><div><h2>Đổi mật khẩu</h2><p>Phiên hiện tại vẫn được giữ, các phiên đăng nhập khác sẽ bị thu hồi.</p></div><span className="settings-info-icon"><Icon name="lock" size={17} /></span></div>
+      <div className="settings-fields">
+        <label>Mật khẩu hiện tại<input type="password" autoComplete="current-password" value={form.current_password} onChange={(event) => setForm({ ...form, current_password: event.target.value })} required /></label>
+        <label>Mật khẩu mới<input type="password" autoComplete="new-password" minLength={8} value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} required /><small className="settings-help">Tối thiểu 8 ký tự.</small></label>
+        <label>Xác nhận mật khẩu mới<input type="password" autoComplete="new-password" minLength={8} value={form.confirm_password} onChange={(event) => setForm({ ...form, confirm_password: event.target.value })} required /></label>
+      </div>
+      {error && <div className="settings-error" role="alert">{error}</div>}
+      {status === "success" && <div className="settings-success" role="status"><Icon name="check" size={15} /> Đã đổi mật khẩu.</div>}
+      <div className="settings-actions"><button className="settings-primary" type="submit" disabled={status === "saving"}>{status === "saving" ? "Đang lưu…" : "Cập nhật mật khẩu"}</button></div>
+    </form>
+    <section className="settings-card security-card"><div className="settings-card-header"><div><h2>Phiên đăng nhập</h2><p>Đổi mật khẩu sẽ tự động thu hồi các phiên khác để bảo vệ tài khoản.</p></div><span className="settings-tag">Đang bật</span></div><div className="settings-blocked"><span className="settings-info-icon"><Icon name="settings" size={17} /></span><div><strong>Quản lý thiết bị sẽ bổ sung sau</strong><p>Danh sách từng thiết bị và thao tác thu hồi riêng cần thêm schema metadata user-agent.</p></div></div></section>
   </>;
 }
 

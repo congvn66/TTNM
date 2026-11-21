@@ -8,13 +8,14 @@ import os
 import re
 import time
 import unicodedata
+from copy import deepcopy
 from hashlib import sha256
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 from pypdf import PdfReader
 
@@ -26,16 +27,26 @@ from report_qa.application.question_planner import build_catalog, plan_question
 from report_qa.domain.contracts import validate_calculation_result_v1, validate_question_plan_v2
 from report_qa.domain.types import validate_decimal_text
 from .ai_provider import ProviderError, live_provider, planner_client, provider_mode
+from .jobs import router as jobs_router
+from .library import router as library_router
+from .auth import DEMO_OWNER_ID, owner_id_for_request, router as auth_router, settings_router as auth_settings_router
 from report_qa.config import settings
 from report_qa.infrastructure.postgres import postgres_health
-from .session_storage import EXTRACTION_ROOT, UPLOAD_ROOT, document_path, extraction_path, load_catalog, save_catalog, utc_now
-
-
-if settings.persistence_backend == "postgres":
-    raise RuntimeError(
-        "PERSISTENCE_BACKEND=postgres requested, but the session/message repository cutover is not installed yet; "
-        "keep PERSISTENCE_BACKEND=json until the PostgreSQL adapter milestone is complete"
-    )
+from report_qa.infrastructure.integrations import readiness as integration_readiness
+from report_qa.infrastructure.integrations import runtime_capabilities
+from report_qa.infrastructure.postgres.runtime_store import PostgresRuntimeStore
+from report_qa.infrastructure.postgres.job_queue import PostgresJobQueue
+from .session_storage import EXTRACTION_ROOT, UPLOAD_ROOT, document_path, extraction_path, load_catalog, save_catalog as disk_save_catalog, utc_now
+from .object_storage_runtime import (
+    ObjectStorageError,
+    cache_extraction,
+    cache_pdf,
+    pdf_storage_key,
+    persist_extraction_cache,
+    persist_pdf_cache,
+    storage_health,
+    uses_remote_object_storage,
+)
 
 
 logger = logging.getLogger("report_qa.flow")
@@ -70,6 +81,22 @@ OPENAPI_TAGS = [
         "name": "documents",
         "description": "Compatibility upload vao session local legacy; dung sessions API cho luong moi.",
     },
+    {
+        "name": "auth",
+        "description": "Email/password account lifecycle. Session token chi nam trong HttpOnly cookie; khong tra bearer token.",
+    },
+    {
+        "name": "settings",
+        "description": "Profile va user preferences, owner-scoped theo auth session.",
+    },
+    {
+        "name": "jobs",
+        "description": "Durable PostgreSQL job state, append-only events, retry va cancel.",
+    },
+    {
+        "name": "library",
+        "description": "Folder/library primitives; tat ca thao tac phai filter theo owner.",
+    },
 ]
 
 OPENAPI_COMMON_ERRORS = {
@@ -86,6 +113,7 @@ class RuntimeResponse(BaseModel):
     swagger_url: str
     openapi_url: str
     health_url: str
+    readiness_url: str
 
 
 class HealthResponse(BaseModel):
@@ -97,6 +125,9 @@ class HealthResponse(BaseModel):
     persistence_backend: str
     database: dict[str, Any]
 
+    storage: dict[str, Any]
+    capabilities: dict[str, Any]
+    readiness: dict[str, Any]
 app = FastAPI(
     title="Report QA API",
     version="0.1.0",
@@ -108,12 +139,21 @@ app = FastAPI(
     ),
     openapi_tags=OPENAPI_TAGS,
 )
+app.include_router(jobs_router)
+app.include_router(library_router)
+app.include_router(auth_router)
+app.include_router(auth_settings_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:4173", "http://localhost:4173"],
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
+
+@app.exception_handler(ObjectStorageError)
+def object_storage_error_handler(_: Request, __: ObjectStorageError) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": {"code": "OBJECT_STORAGE_UNAVAILABLE", "message": "Cloudflare R2 t?m th?i kh?ng s?n s?ng; h?y th? l?i sau."}})
 
 
 @app.get(
@@ -133,6 +173,7 @@ def root() -> dict[str, Any]:
         "swagger_url": "/docs",
         "openapi_url": "/openapi.json",
         "health_url": "/health",
+        "readiness_url": "/health/ready",
     }
 
 
@@ -141,15 +182,66 @@ def favicon() -> Response:
     return Response(status_code=204)
 
 
-catalog = load_catalog()
-chart_reader = DeplotChartReader() if os.getenv("CHART_READER_BACKEND", "deplot") == "deplot" else PdfVectorChartReader()
 MAX_PDF_BYTES = 100 * 1024 * 1024
 MAX_PDF_PAGES = 500
-LOCAL_OWNER_ID = "local-test-owner"
+# A stable owner keeps the current single-user demo compatible with the
+# normalized users/chats foreign keys until auth is enabled.
+LOCAL_OWNER_ID = str(DEMO_OWNER_ID)
+chart_reader = DeplotChartReader() if os.getenv("CHART_READER_BACKEND", "deplot") == "deplot" else PdfVectorChartReader()
+
+
+def _load_extraction_for_persistence(document: dict[str, Any]) -> dict[str, Any] | None:
+    try:
+        return json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
+    except (KeyError, OSError, json.JSONDecodeError):
+        return None
+
+
+postgres_runtime = (
+    PostgresRuntimeStore(settings.database_url, LOCAL_OWNER_ID, extraction_root=EXTRACTION_ROOT)
+    if settings.persistence_backend == "postgres"
+    else None
+)
+durable_job_queue = PostgresJobQueue(settings.database_url) if postgres_runtime else None
+# PostgreSQL is the source of truth in cutover mode. Do not hydrate every
+# session/revision graph while importing the ASGI module: Supabase network
+# latency would make uvicorn appear frozen as the workspace grows. Individual
+# requests load only the session they address; the in-process catalog remains
+# a short-lived background-task cache.
+catalog = {"sessions": {}} if postgres_runtime else load_catalog()
+
+
+def _runtime_for_owner(owner_id: str | UUID) -> PostgresRuntimeStore:
+    return PostgresRuntimeStore(settings.database_url, str(owner_id), extraction_root=EXTRACTION_ROOT)
+
+
+def save_catalog(value: dict[str, Any], owner_id: str | UUID | None = None) -> None:
+    if postgres_runtime:
+        selected_owner = owner_id
+        if selected_owner is None:
+            sessions = list(value.get("sessions", {}).values())
+            if sessions:
+                selected = max(sessions, key=lambda item: item.get("updated_at", ""))
+                selected_owner = selected.get("owner_id", LOCAL_OWNER_ID)
+        _runtime_for_owner(selected_owner or LOCAL_OWNER_ID).sync_catalog(value, extraction_loader=_load_extraction_for_persistence)
+    else:
+        disk_save_catalog(value)
 
 
 class SessionCreateRequest(BaseModel):
     title: str = Field(default="Phiên phân tích mới", min_length=1, max_length=120)
+
+
+class SessionUpdateRequest(BaseModel):
+    """User-editable metadata only; server-owned fields stay immutable."""
+
+    title: str = Field(min_length=1, max_length=120)
+
+
+class DocumentUpdateRequest(BaseModel):
+    """Rename the display name of a stored PDF without replacing its bytes."""
+
+    file_name: str = Field(min_length=1, max_length=255)
 
 
 class SessionQuestionRequest(BaseModel):
@@ -186,6 +278,8 @@ class MessageResponse(BaseModel):
     assistant_message: dict[str, Any]
     limitations: list[str]
     trace_id: str
+    status: str = "completed"
+    job: dict[str, Any] | None = None
 
 
 class MessageTraceResponse(BaseModel):
@@ -232,15 +326,46 @@ async def trace_headers(request: Request, call_next):
     response_description="Trang thai runtime hien tai.",
 )
 def health() -> dict[str, Any]:
+    database = postgres_health()
+    storage = storage_health()
+    capabilities = runtime_capabilities(database=database, storage=storage)
+    readiness_status, blockers = integration_readiness(capabilities)
     return {
         "status": "ok",
-        "adapter": "local_json_filesystem",
-        "durability": "local_disk_logical_state",
+        "adapter": "postgres_catalog_cloudflare_r2" if postgres_runtime and uses_remote_object_storage() else "postgres_catalog_local_filesystem" if postgres_runtime else "local_json_filesystem",
+        "durability": "postgres_metadata_cloudflare_r2" if postgres_runtime and uses_remote_object_storage() else "postgres_metadata_local_pdf_bytes" if postgres_runtime else "local_disk_logical_state",
         "ai_mode": provider_mode(),
         "ai_model": (os.getenv("GEMINI_MODEL", "gemini-2.5-flash") if provider_mode() == "gemini" else os.getenv("OPENROUTER_MODEL", "openai/gpt-6-luna") if provider_mode() == "openrouter" else "deterministic"),
         "persistence_backend": settings.persistence_backend,
-        "database": postgres_health(),
+        "database": database,
+        "storage": storage,
+        "capabilities": capabilities,
+        "readiness": {"status": readiness_status, "blockers": blockers},
     }
+
+
+@app.get(
+    "/health/ready",
+    tags=["runtime"],
+    summary="Readiness cua cac adapter da chon",
+    description=(
+        "Khac voi /health (liveness), endpoint nay cho biet PDF extractor, "
+        "chart reader, database va object storage da san sang chua. "
+        "Khong tai trong model DePlot va khong goi AI provider."
+    ),
+)
+def readiness_probe() -> JSONResponse:
+    database = postgres_health()
+    storage = storage_health()
+    capabilities = runtime_capabilities(database=database, storage=storage)
+    state, blockers = integration_readiness(capabilities)
+    body = {
+        "status": state,
+        "ready": state == "ready",
+        "blockers": blockers,
+        "capabilities": capabilities,
+    }
+    return JSONResponse(status_code=200 if state == "ready" else 503, content=body)
 
 
 def public_session(session: dict[str, Any]) -> dict[str, Any]:
@@ -260,9 +385,17 @@ def public_session(session: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def get_session(session_id: str) -> dict[str, Any]:
+def get_session(session_id: str, owner_id: str | UUID | None = None) -> dict[str, Any]:
+    if postgres_runtime:
+        try:
+            loaded = _runtime_for_owner(owner_id or LOCAL_OWNER_ID).load_session(UUID(session_id))
+        except (ValueError, TypeError):
+            loaded = None
+        if loaded is not None:
+            catalog["sessions"][session_id] = loaded
+            return loaded
     session = catalog["sessions"].get(session_id)
-    if session is None or session.get("owner_id") != LOCAL_OWNER_ID:
+    if session is None or session.get("owner_id") != str(owner_id or LOCAL_OWNER_ID):
         raise HTTPException(status_code=404, detail={"code": "SESSION_NOT_FOUND", "message": "session not found"})
     session.setdefault("documents", [])
     session.setdefault("messages", [])
@@ -277,6 +410,7 @@ def extract_pdf_pages(path: Any, extraction_name: str, document_version_id: str)
         temporary = target.with_suffix(".tmp")
         temporary.write_text(json.dumps(artifact, ensure_ascii=False), encoding="utf-8")
         os.replace(temporary, target)
+        persist_extraction_cache(extraction_name, target)
         return {
             "status": "ready",
             "page_count": len(artifact["pages"]),
@@ -292,10 +426,11 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
     if not name.lower().endswith(".pdf"):
         raise HTTPException(status_code=422, detail={"code": "PDF_REQUIRED", "message": "chỉ chấp nhận tệp .pdf"})
     document_id = str(uuid4())
-    storage_name = f"{document_id}.pdf"
+    storage_name = pdf_storage_key(document_id) if uses_remote_object_storage() else f"{document_id}.pdf"
     UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
     final_path = document_path(storage_name)
     temporary_path = final_path.with_suffix(".uploading")
+    final_path.parent.mkdir(parents=True, exist_ok=True)
     digest = sha256()
     byte_size = 0
     first_chunk = True
@@ -325,6 +460,12 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
         final_path.unlink(missing_ok=True)
         raise HTTPException(status_code=413, detail={"code": "PDF_TOO_MANY_PAGES", "message": f"PDF vượt quá giới hạn {MAX_PDF_PAGES} trang"})
     now = utc_now()
+    try:
+        persist_pdf_cache(storage_name, final_path)
+    except ObjectStorageError as exc:
+        final_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=503, detail={"code": "OBJECT_STORAGE_UNAVAILABLE", "message": "Kh?ng th? l?u PDF v?o Cloudflare R2; h?y th? l?i sau."}) from exc
+
     record = {
         "id": document_id,
         "file_name": name,
@@ -339,7 +480,7 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
     record.update({"extraction_status": "queued", "page_count": page_count, "numeric_evidence_count": 0, "extraction_error": None})
     session["documents"].append(record)
     session["updated_at"] = now
-    save_catalog(catalog)
+    save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
     flow_log(
         "DOCUMENT_STORED",
         trace_id=trace_id,
@@ -352,7 +493,15 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
     return {key: value for key, value in record.items() if key not in {"storage_name", "extraction_name"}}
 
 
-def complete_document_extraction(session_id: str, document_id: str, trace_id: str | None = None) -> None:
+def complete_document_extraction(session_id: str, document_id: str, trace_id: str | None = None, owner_id: str | UUID | None = None) -> None:
+    # A durable worker runs in a different process from uvicorn. Hydrate the
+    # requested chat from PostgreSQL before touching the extraction artifact;
+    # relying only on the API process cache would silently acknowledge a job
+    # without updating the database.
+    if postgres_runtime and session_id not in catalog["sessions"]:
+        loaded = _runtime_for_owner(owner_id or LOCAL_OWNER_ID).load_session(UUID(session_id))
+        if loaded is not None:
+            catalog["sessions"][session_id] = loaded
     session = catalog["sessions"].get(session_id)
     if session is None:
         return
@@ -361,13 +510,13 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
         flow_log("EXTRACTION_SKIPPED", trace_id=trace_id, session_id=session_id, document_id=document_id, reason="document_not_found")
         return
     flow_log("EXTRACTION_STARTED", trace_id=trace_id, session_id=session_id, document_id=document_id)
-    extraction = extract_pdf_pages(document_path(document["storage_name"]), document["extraction_name"], document_id)
+    extraction = extract_pdf_pages(cache_pdf(document["storage_name"]), document["extraction_name"], document_id)
     document.update({"extraction_status": extraction["status"], "page_count": extraction["page_count"], "numeric_evidence_count": extraction["numeric_evidence_count"], "extraction_error": extraction["error"]})
     if extraction["status"] == "ready":
-        artifact = json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
+        artifact = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
         ensure_document_evidence_state(document, artifact)
     session["updated_at"] = utc_now()
-    save_catalog(catalog)
+    save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
     flow_log(
         "EXTRACTION_FINISHED",
         trace_id=trace_id,
@@ -388,10 +537,12 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
     response_model=SessionListResponse,
     response_description="Danh sach session theo updated_at giam dan.",
 )
-def list_sessions() -> dict[str, Any]:
-    sessions = [public_session(item) for item in catalog["sessions"].values() if item.get("owner_id") == LOCAL_OWNER_ID]
+def list_sessions(request: Request) -> dict[str, Any]:
+    owner_id = owner_id_for_request(request)
+    source = _runtime_for_owner(owner_id).load_catalog() if postgres_runtime else catalog
+    sessions = [public_session(item) for item in source["sessions"].values() if item.get("owner_id") == str(owner_id)]
     sessions.sort(key=lambda item: item["updated_at"], reverse=True)
-    return {"sessions": sessions, "persistence": {"metadata": "runtime/sessions.json", "pdf_bytes": "runtime/uploads"}}
+    return {"sessions": sessions, "persistence": {"metadata": "postgresql" if postgres_runtime else "runtime/sessions.json", "pdf_bytes": "cloudflare_r2" if uses_remote_object_storage() else "runtime/uploads"}}
 
 
 @app.post(
@@ -402,12 +553,13 @@ def list_sessions() -> dict[str, Any]:
     response_model=SessionResponse,
     response_description="Session moi da duoc persist.",
 )
-def create_session(payload: SessionCreateRequest) -> dict[str, Any]:
+def create_session(payload: SessionCreateRequest, request: Request) -> dict[str, Any]:
+    owner_id = owner_id_for_request(request)
     session_id = str(uuid4())
     now = utc_now()
-    session = {"id": session_id, "owner_id": LOCAL_OWNER_ID, "title": payload.title.strip(), "created_at": now, "updated_at": now, "documents": [], "messages": []}
+    session = {"id": session_id, "owner_id": str(owner_id), "title": payload.title.strip(), "created_at": now, "updated_at": now, "documents": [], "messages": []}
     catalog["sessions"][session_id] = session
-    save_catalog(catalog)
+    save_catalog(catalog, owner_id)
     return {"session": public_session(session)}
 
 
@@ -420,8 +572,54 @@ def create_session(payload: SessionCreateRequest) -> dict[str, Any]:
     response_description="Snapshot session hien tai.",
     responses=OPENAPI_COMMON_ERRORS,
 )
-def read_session(session_id: str) -> dict[str, Any]:
-    return {"session": public_session(get_session(session_id))}
+def read_session(session_id: str, request: Request) -> dict[str, Any]:
+    return {"session": public_session(get_session(session_id, owner_id_for_request(request)))}
+
+
+@app.patch(
+    "/api/v1/sessions/{session_id}",
+    tags=["sessions"],
+    summary="Rename an analysis session",
+    response_model=SessionResponse,
+    responses=OPENAPI_COMMON_ERRORS,
+)
+def update_session(session_id: str, payload: SessionUpdateRequest, request: Request) -> dict[str, Any]:
+    owner_id = owner_id_for_request(request)
+    session = get_session(session_id, owner_id)
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail={"code": "SESSION_TITLE_REQUIRED", "message": "Session title is required"})
+    if postgres_runtime:
+        if not _runtime_for_owner(owner_id).rename_chat(session_id, title):
+            raise HTTPException(status_code=404, detail={"code": "SESSION_NOT_FOUND", "message": "session not found"})
+    else:
+        session["title"] = title
+        session["updated_at"] = utc_now()
+        save_catalog(catalog, owner_id)
+    session["title"] = title
+    session["updated_at"] = utc_now()
+    flow_log("SESSION_RENAMED", trace_id=trace_id_for(request), session_id=session_id)
+    return {"session": public_session(session)}
+
+
+@app.delete(
+    "/api/v1/sessions/{session_id}",
+    tags=["sessions"],
+    summary="Archive an analysis session",
+    responses=OPENAPI_COMMON_ERRORS,
+)
+def delete_session(session_id: str, request: Request) -> dict[str, Any]:
+    owner_id = owner_id_for_request(request)
+    get_session(session_id, owner_id)
+    if postgres_runtime:
+        if not _runtime_for_owner(owner_id).archive_chat(session_id):
+            raise HTTPException(status_code=404, detail={"code": "SESSION_NOT_FOUND", "message": "session not found"})
+    else:
+        catalog["sessions"].pop(session_id, None)
+        save_catalog(catalog, owner_id)
+    catalog["sessions"].pop(session_id, None)
+    flow_log("SESSION_ARCHIVED", trace_id=trace_id_for(request), session_id=session_id)
+    return {"deleted": True, "session_id": session_id, "storage": "soft_deleted"}
 
 
 @app.post(
@@ -438,12 +636,77 @@ def read_session(session_id: str) -> dict[str, Any]:
     responses={**OPENAPI_COMMON_ERRORS, 413: {"description": "PDF vuot qua 100 MiB."}},
 )
 async def upload_session_document(session_id: str, request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> dict[str, Any]:
-    session = get_session(session_id)
+    owner_id = owner_id_for_request(request)
+    session = get_session(session_id, owner_id)
     trace_id = trace_id_for(request)
     flow_log("UPLOAD_ACCEPTED", trace_id=trace_id, session_id=session_id, file_name_present=bool(file.filename))
     document = await persist_pdf(file, session, trace_id=trace_id)
-    background_tasks.add_task(complete_document_extraction, session_id, document["id"], trace_id)
-    return {"session_id": session_id, "document": document, "persistence": {"binary_retained": True, "max_bytes": MAX_PDF_BYTES, "max_pages": MAX_PDF_PAGES}}
+    job = None
+    if durable_job_queue:
+        job = durable_job_queue.enqueue(
+            owner_id=UUID(str(session.get("owner_id", owner_id))),
+            chat_id=UUID(session_id),
+            kind="extract_document",
+            dedup_key=f"extract:{document['id']}",
+            payload={"session_id": session_id, "document_id": document["id"], "trace_id": trace_id, "owner_id": str(session.get("owner_id", owner_id))},
+        )
+    else:
+        background_tasks.add_task(complete_document_extraction, session_id, document["id"], trace_id)
+    persistence = {"binary_retained": True, "max_bytes": MAX_PDF_BYTES, "max_pages": MAX_PDF_PAGES}
+    if durable_job_queue:
+        persistence["execution"] = "postgres_queue"
+    return {"session_id": session_id, "document": document, "job": job, "persistence": persistence}
+
+
+@app.patch(
+    "/api/v1/sessions/{session_id}/documents/{document_id}",
+    tags=["sessions"],
+    summary="Rename a PDF in its analysis session",
+    responses=OPENAPI_COMMON_ERRORS,
+)
+def update_session_document(session_id: str, document_id: str, payload: DocumentUpdateRequest, request: Request) -> dict[str, Any]:
+    owner_id = owner_id_for_request(request)
+    session = get_session(session_id, owner_id)
+    document = next((item for item in session["documents"] if item["id"] == document_id), None)
+    if document is None:
+        raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+    file_name = payload.file_name.strip()
+    if not file_name or any(part in file_name for part in ("/", "\\")):
+        raise HTTPException(status_code=422, detail={"code": "DOCUMENT_NAME_INVALID", "message": "document name is invalid"})
+    if not file_name.lower().endswith(".pdf"):
+        file_name = f"{file_name}.pdf"
+    if postgres_runtime:
+        if not _runtime_for_owner(owner_id).rename_document(session_id, document_id, file_name):
+            raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+    document["file_name"] = file_name
+    session["updated_at"] = utc_now()
+    if not postgres_runtime:
+        save_catalog(catalog, owner_id)
+    flow_log("DOCUMENT_RENAMED", trace_id=trace_id_for(request), session_id=session_id, document_id=document_id)
+    return {"session_id": session_id, "document": {key: value for key, value in document.items() if key not in {"storage_name", "extraction_name"}}}
+
+
+@app.delete(
+    "/api/v1/sessions/{session_id}/documents/{document_id}",
+    tags=["sessions"],
+    summary="Archive a PDF from its analysis session",
+    responses=OPENAPI_COMMON_ERRORS,
+)
+def delete_session_document(session_id: str, document_id: str, request: Request) -> dict[str, Any]:
+    owner_id = owner_id_for_request(request)
+    session = get_session(session_id, owner_id)
+    document = next((item for item in session["documents"] if item["id"] == document_id), None)
+    if document is None:
+        raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+    if postgres_runtime:
+        if not _runtime_for_owner(owner_id).archive_document(session_id, document_id):
+            raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+    session["documents"] = [item for item in session["documents"] if item["id"] != document_id]
+    session["updated_at"] = utc_now()
+    if not postgres_runtime:
+        save_catalog(catalog, owner_id)
+    flow_log("DOCUMENT_ARCHIVED", trace_id=trace_id_for(request), session_id=session_id, document_id=document_id)
+    return {"deleted": True, "document_id": document_id, "storage": "soft_deleted"}
 
 
 @app.get(
@@ -454,12 +717,12 @@ async def upload_session_document(session_id: str, request: Request, background_
     response_description="Binary application/pdf.",
     responses=OPENAPI_COMMON_ERRORS,
 )
-def read_session_document_file(session_id: str, document_id: str) -> FileResponse:
-    session = get_session(session_id)
+def read_session_document_file(session_id: str, document_id: str, request: Request) -> FileResponse:
+    session = get_session(session_id, owner_id_for_request(request))
     document = next((item for item in session["documents"] if item["id"] == document_id), None)
     if document is None:
         raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
-    path = document_path(document["storage_name"])
+    path = cache_pdf(document["storage_name"])
     if not path.exists():
         raise HTTPException(status_code=404, detail={"code": "DOCUMENT_FILE_MISSING", "message": "stored PDF is missing"})
     return FileResponse(path, media_type="application/pdf", filename=document["file_name"], content_disposition_type="inline")
@@ -471,14 +734,14 @@ def read_session_document_file(session_id: str, document_id: str) -> FileRespons
     summary="Inspect original/current numeric evidence and revision history",
     responses=OPENAPI_COMMON_ERRORS,
 )
-def list_document_evidences(session_id: str, document_id: str) -> dict[str, Any]:
-    session = get_session(session_id)
+def list_document_evidences(session_id: str, document_id: str, request: Request) -> dict[str, Any]:
+    session = get_session(session_id, owner_id_for_request(request))
     document = next((item for item in session["documents"] if item["id"] == document_id), None)
     if document is None:
         raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
     if document.get("extraction_status") != "ready":
         raise HTTPException(status_code=409, detail={"code": "EXTRACTION_NOT_READY", "message": "Tài liệu chưa sẵn sàng để sửa số liệu."})
-    extraction = json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
+    extraction = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
     state = ensure_document_evidence_state(document, extraction)
     records = []
     for evidence in (extraction.get("evidence_batch") or {}).get("evidences", []):
@@ -494,7 +757,8 @@ def list_document_evidences(session_id: str, document_id: str) -> dict[str, Any]
             "original_numeric_value": item["original_numeric_value"], "current_numeric_value": current["numeric_value"],
             "current_revision_id": current["id"], "revision_count": len(item["revisions"]),
         })
-    save_catalog(catalog)
+    if not postgres_runtime:
+        save_catalog(catalog)
     return {"document_id": document_id, "data_revision": state["data_revision"], "evidences": records}
 
 
@@ -502,17 +766,18 @@ def list_document_evidences(session_id: str, document_id: str) -> dict[str, Any]
     "/api/v1/sessions/{session_id}/documents/{document_id}/evidences/{evidence_key}/revisions",
     tags=["sessions"], summary="Read append-only revision history for one number", responses=OPENAPI_COMMON_ERRORS,
 )
-def list_evidence_revisions(session_id: str, document_id: str, evidence_key: str) -> dict[str, Any]:
-    session = get_session(session_id)
+def list_evidence_revisions(session_id: str, document_id: str, evidence_key: str, request: Request) -> dict[str, Any]:
+    session = get_session(session_id, owner_id_for_request(request))
     document = next((item for item in session["documents"] if item["id"] == document_id), None)
     if document is None:
         raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
-    extraction = json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
+    extraction = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
     state = ensure_document_evidence_state(document, extraction)
     item = state["items"].get(evidence_key)
     if item is None:
         raise HTTPException(status_code=404, detail={"code": "EVIDENCE_NOT_FOUND", "message": "Không tìm thấy số liệu trong tài liệu."})
-    save_catalog(catalog)
+    if not postgres_runtime:
+        save_catalog(catalog)
     return {"document_id": document_id, "evidence_key": evidence_key, "original_numeric_value": item["original_numeric_value"], "current_revision_id": item["current_revision_id"], "revisions": item["revisions"]}
 
 
@@ -521,11 +786,11 @@ def list_evidence_revisions(session_id: str, document_id: str, evidence_key: str
     tags=["sessions"], summary="Append a corrected value and preserve old value/history", responses={**OPENAPI_COMMON_ERRORS, 409: {"description": "Revision đã bị thay đổi bởi thao tác khác."}},
 )
 def create_evidence_revision(session_id: str, document_id: str, evidence_key: str, payload: EvidenceRevisionCreateRequest, request: Request) -> dict[str, Any]:
-    session = get_session(session_id)
+    session = get_session(session_id, owner_id_for_request(request))
     document = next((item for item in session["documents"] if item["id"] == document_id), None)
     if document is None:
         raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
-    extraction = json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
+    extraction = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
     state = ensure_document_evidence_state(document, extraction)
     item = state["items"].get(evidence_key)
     if item is None:
@@ -549,7 +814,21 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
     state["data_revision"] += 1
     affected = mark_answers_needing_update(session, document_id, evidence_key, current["id"])
     session["updated_at"] = utc_now()
-    save_catalog(catalog)
+    if postgres_runtime:
+        try:
+            postgres_runtime.append_evidence_revision(
+                chat_id=UUID(session_id),
+                document_id=UUID(document_id),
+                evidence_key=evidence_key,
+                revision=revision,
+                expected_revision_id=UUID(current["id"]),
+            )
+        except ValueError as exc:
+            if str(exc) == "EVIDENCE_REVISION_CONFLICT":
+                raise HTTPException(status_code=409, detail={"code": "EVIDENCE_REVISION_CONFLICT", "message": "Số liệu đã được sửa bởi thao tác khác; hãy tải lại lịch sử trước khi sửa tiếp."}) from exc
+            raise HTTPException(status_code=404, detail={"code": "EVIDENCE_NOT_FOUND", "message": "Không tìm thấy số liệu trong database."}) from exc
+    else:
+        save_catalog(catalog)
     trace_id = trace_id_for(request)
     flow_log("EVIDENCE_REVISION_APPENDED", trace_id=trace_id, session_id=session_id, document_id=document_id, evidence_key=evidence_key, old_value=current["numeric_value"], new_value=numeric_value, affected_answer_count=len(affected))
     return {"document_id": document_id, "evidence_key": evidence_key, "data_revision": state["data_revision"], "revision": revision, "affected_message_ids": affected, "recalculation_required": bool(affected), "trace_id": trace_id}
@@ -564,11 +843,11 @@ def normalize_search_text(value: str) -> str:
 def relevant_pages(document: dict[str, Any], question: str, limit: int = 3) -> list[tuple[dict[str, Any], int]]:
     if document.get("extraction_status") != "ready":
         raise HTTPException(status_code=409, detail={"code": "EXTRACTION_NOT_READY", "message": "tài liệu chưa trích xuất text thành công"})
-    artifact_path = extraction_path(document["extraction_name"])
+    artifact_path = cache_extraction(document["extraction_name"])
     payload = json.loads(artifact_path.read_text(encoding="utf-8"))
     if "evidence_batch" not in payload:
         upgraded = extract_pdf_pages(
-            document_path(document["storage_name"]),
+            cache_pdf(document["storage_name"]),
             document["extraction_name"],
             document["id"],
         )
@@ -672,7 +951,7 @@ def mark_answers_needing_update(session: dict[str, Any], document_id: str, evide
 
 def _base_extraction_or_none(document: dict[str, Any]) -> dict[str, Any] | None:
     try:
-        return json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
+        return json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
     except (KeyError, OSError, json.JSONDecodeError):
         return None
 
@@ -712,7 +991,7 @@ def _persist_unsupported(session, session_id, document, question, question_plan,
     assistant_message["trace"] = trace
     session["messages"].extend([user_message, assistant_message])
     session["updated_at"] = now
-    save_catalog(catalog)
+    save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
     flow_log("UNSUPPORTED_PERSISTED", trace_id=trace_id, session_id=session_id, document_id=document["id"], assistant_message_id=assistant_message["id"])
     return {"user_message": user_message, "assistant_message": assistant_message, "limitations": ["Câu hỏi ngoài phạm vi; không truy hồi hoặc tính toán"], "trace_id": trace_id}
 
@@ -731,8 +1010,15 @@ def _persist_unsupported(session, session_id, document, question, question_plan,
     response_description="User message, assistant message, citations, structured_answer (neu co) va trace_id.",
     responses={**OPENAPI_COMMON_ERRORS, 502: {"description": "AI provider timeout/network/invalid structured output."}},
 )
-def ask_session_document(session_id: str, payload: SessionQuestionRequest, request: Request) -> dict[str, Any]:
-    session = get_session(session_id)
+def ask_session_document(session_id: str, payload: SessionQuestionRequest, request: Request, response: Response) -> dict[str, Any]:
+    session = get_session(session_id, owner_id_for_request(request))
+    # A durable worker reuses this pipeline as a computation.  Isolate its
+    # working snapshot so temporary messages and intermediate saves cannot
+    # become a second persisted conversation before the worker publishes the
+    # result into the existing placeholder.
+    worker_mode = request.headers.get("X-Worker-Job") == "1"
+    if worker_mode:
+        session = deepcopy(session)
     trace_id = trace_id_for(request)
     trace = [trace_event("question_received", "ok", trace_id=trace_id, question_chars=len(payload.question))]
     idempotency_key = request.headers.get("Idempotency-Key")
@@ -751,11 +1037,40 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
             if len(request_keys) > 128:
                 oldest = min(request_keys, key=lambda key: request_keys[key].get("created_at", ""))
                 request_keys.pop(oldest, None)
-            save_catalog(catalog)
+            save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
         return response
     document = next((item for item in session["documents"] if item["id"] == payload.document_id), None)
     if document is None:
         raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+    # PostgreSQL mode can move the expensive answer path out of the request.
+    # The default stays synchronous for the offline compatibility tests; the
+    # flag is explicit so operators cannot accidentally run a worker-less UI.
+    if durable_job_queue and settings.async_answer_jobs and request.headers.get("X-Worker-Job") != "1" and document.get("extraction_status") != "ready":
+        raise HTTPException(status_code=409, detail={"code": "EXTRACTION_NOT_READY", "message": "Tài liệu chưa sẵn sàng để hỏi; hãy chờ extraction hoàn tất."})
+    if durable_job_queue and settings.async_answer_jobs and request.headers.get("X-Worker-Job") != "1":
+        now = utc_now()
+        user_message = {"id": str(uuid4()), "role": "user", "body": payload.question, "document_id": document["id"], "created_at": now, "status": "accepted"}
+        assistant_message = {
+            "id": str(uuid4()), "role": "assistant", "body": "Đang tạo câu trả lời…", "document_id": document["id"], "created_at": now,
+            "status": "processing", "mode": "answer_question_job", "citations": [], "trace_id": trace_id,
+            "structured_answer": {"presentation": "processing_v1", "answer": "Đang tạo câu trả lời…", "summary": "Worker đang truy hồi evidence và kiểm tra cấu trúc trả lời.", "sections": [], "formulas": [], "tables": [], "claims": [], "warnings": [], "cited_pages": []},
+        }
+        queued_trace = [trace_event("question_received", "ok", trace_id=trace_id, question_chars=len(payload.question)), trace_event("job_enqueue", "queued", kind="answer_question")]
+        assistant_message["trace"] = queued_trace
+        session["messages"].extend([user_message, assistant_message])
+        session["updated_at"] = now
+        job = durable_job_queue.enqueue(
+            owner_id=UUID(str(session.get("owner_id", LOCAL_OWNER_ID))),
+            chat_id=UUID(session_id),
+            kind="answer_question",
+            dedup_key=f"answer:{assistant_message['id']}",
+            payload={"session_id": session_id, "document_id": document["id"], "question": payload.question, "user_message_id": user_message["id"], "assistant_message_id": assistant_message["id"], "trace_id": trace_id, "owner_id": str(session.get("owner_id", LOCAL_OWNER_ID))},
+            input_data_revision=int(session.get("data_revision") or 0),
+        )
+        save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+        response.status_code = 202
+        flow_log("ANSWER_JOB_QUEUED", trace_id=trace_id, session_id=session_id, document_id=document["id"], job_id=job.get("id"), assistant_message_id=assistant_message["id"])
+        return finish({"user_message": user_message, "assistant_message": assistant_message, "limitations": ["Câu trả lời đang được worker xử lý"], "trace_id": trace_id, "status": "queued", "job": job})
     previous_assistant = next(
         (item for item in reversed(session["messages"]) if item.get("role") == "assistant"),
         None,
@@ -820,7 +1135,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         assistant_message["trace"] = trace
         session["messages"].extend([user_message, assistant_message])
         session["updated_at"] = now
-        save_catalog(catalog)
+        save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
         flow_log("CLARIFICATION_PERSISTED", trace_id=trace_id, session_id=session_id, document_id=document["id"], assistant_message_id=assistant_message["id"], reason_code=clarification["reason_code"])
         return finish({"user_message": user_message, "assistant_message": assistant_message, "limitations": ["Đang chờ người dùng chọn cách hiểu trước khi truy hồi hoặc tính toán"], "trace_id": trace_id})
     retrieval_question = question_plan["original_question"]
@@ -851,7 +1166,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     selected_scores = {int(item[0]["page"]): item[1] for item in ranked_pages}
     operation = question_plan.get("operation") or {}
     if operation.get("type") != "lookup" or any(fact.get("measure") != "unknown" and fact.get("period") for fact in question_plan.get("facts", [])):
-        base_extraction = json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
+        base_extraction = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
         extraction = extraction_with_evidence_revisions(document, base_extraction)
         resolution = resolve_evidence(question_plan, extraction, {int(item["page"]) for item in context_pages})
         trace.append(
@@ -882,7 +1197,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
                     fact_keys=tuple(sorted(allowed_chart_facts)),
                     chart_region_keys=tuple(region["chart_region_key"] for region in candidate_charts),
                     chart_regions=tuple(candidate_charts),
-                    source_pdf_path=document_path(document["storage_name"]),
+                    source_pdf_path=cache_pdf(document["storage_name"]),
                     page_numbers=tuple(int(item["page"]) for item in context_pages),
                     fact_requirements=tuple(
                         item for item in question_plan["facts"]
@@ -960,7 +1275,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         assistant_message["trace"] = trace
         session["messages"].extend([user_message, assistant_message])
         session["updated_at"] = now
-        save_catalog(catalog)
+        save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
         flow_log("ANSWER_PERSISTED", trace_id=trace_id, session_id=session_id, document_id=document["id"], assistant_message_id=assistant_message["id"], citation_pages=structured_answer["cited_pages"], mode="deterministic_calculation", calculation_status=calculation["status"])
         return finish({
             "user_message": user_message,
@@ -1039,7 +1354,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     assistant_message["trace"] = trace
     session["messages"].extend([user_message, assistant_message])
     session["updated_at"] = now
-    save_catalog(catalog)
+    save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
     flow_log(
         "ANSWER_PERSISTED",
         trace_id=trace_id,
@@ -1061,8 +1376,8 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     response_description="Trace events theo thu tu thuc thi.",
     responses=OPENAPI_COMMON_ERRORS,
 )
-def read_session_message_trace(session_id: str, message_id: str) -> dict[str, Any]:
-    session = get_session(session_id)
+def read_session_message_trace(session_id: str, message_id: str, request: Request) -> dict[str, Any]:
+    session = get_session(session_id, owner_id_for_request(request))
     message = next((item for item in session["messages"] if item["id"] == message_id), None)
     if message is None or message.get("role") != "assistant":
         raise HTTPException(status_code=404, detail={"code": "MESSAGE_TRACE_NOT_FOUND", "message": "assistant message trace not found"})
@@ -1078,12 +1393,13 @@ def read_session_message_trace(session_id: str, message_id: str) -> dict[str, An
     response_description="Upload metadata va next_action cho PDF reader.",
     responses={413: {"description": "PDF vuot qua 100 MiB."}, 422: {"description": "Khong phai PDF hoac PDF rong."}},
 )
-async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> dict[str, Any]:
+async def upload_document(request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> dict[str, Any]:
     """Compatibility upload: persist the file in a server-owned local session."""
-    default_id = "legacy-upload-session"
+    owner_id = owner_id_for_request(request)
+    default_id = f"legacy-upload-{owner_id}"
     if default_id not in catalog["sessions"]:
         now = utc_now()
-        catalog["sessions"][default_id] = {"id": default_id, "owner_id": LOCAL_OWNER_ID, "title": "Uploads", "created_at": now, "updated_at": now, "documents": [], "messages": []}
+        catalog["sessions"][default_id] = {"id": default_id, "owner_id": str(owner_id), "title": "Uploads", "created_at": now, "updated_at": now, "documents": [], "messages": []}
     document = await persist_pdf(file, catalog["sessions"][default_id])
-    background_tasks.add_task(complete_document_extraction, default_id, document["id"])
-    return {"upload": {**document, "persistence": {"adapter": "local_filesystem", "binary_retained": True, "max_bytes": MAX_PDF_BYTES, "max_pages": MAX_PDF_PAGES}}, "next_action": "Open file_url with the PDF.js reader."}
+    background_tasks.add_task(complete_document_extraction, default_id, document["id"], trace_id_for(request), owner_id)
+    return {"upload": {**document, "persistence": {"adapter": "cloudflare_r2" if uses_remote_object_storage() else "local_filesystem", "binary_retained": True, "max_bytes": MAX_PDF_BYTES, "max_pages": MAX_PDF_PAGES}}, "next_action": "Open file_url with the PDF.js reader."}

@@ -54,7 +54,11 @@ def test_health_docs_and_openapi_expose_only_the_main_flow() -> None:
 
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json() == {
+    health_body = health.json()
+    assert {key: health_body[key] for key in (
+        "status", "adapter", "durability", "ai_mode", "ai_model",
+        "persistence_backend", "database", "storage",
+    )} == {
         "status": "ok",
         "adapter": "local_json_filesystem",
         "durability": "local_disk_logical_state",
@@ -62,6 +66,11 @@ def test_health_docs_and_openapi_expose_only_the_main_flow() -> None:
         "ai_model": "deterministic",
         "persistence_backend": "json",
         "database": {"configured": False, "status": "disabled", "backend": "json"},
+        "storage": {"backend": "local", "configured": True, "durability": "local_disk", "status": "ok"},
+    }
+    assert health_body["readiness"]["status"] in {"ready", "degraded"}
+    assert health_body["capabilities"]["ai"] == {
+        "selected": "deterministic", "status": "available", "network_probe": "not_run"
     }
     assert health.headers["x-persistence-backend"] == "json"
 
@@ -70,16 +79,34 @@ def test_health_docs_and_openapi_expose_only_the_main_flow() -> None:
     assert set(schema["paths"]) == {
         "/",
         "/health",
+        "/health/ready",
         "/api/v1/documents/uploads",
         "/api/v1/sessions",
         "/api/v1/sessions/{session_id}",
         "/api/v1/sessions/{session_id}/documents",
+        "/api/v1/sessions/{session_id}/documents/{document_id}",
         "/api/v1/sessions/{session_id}/documents/{document_id}/file",
         "/api/v1/sessions/{session_id}/documents/{document_id}/evidences",
         "/api/v1/sessions/{session_id}/documents/{document_id}/evidences/{evidence_key}/revisions",
         "/api/v1/sessions/{session_id}/messages",
-        "/api/v1/sessions/{session_id}/messages/{message_id}/trace",
-    }
+            "/api/v1/sessions/{session_id}/messages/{message_id}/trace",
+            "/api/v1/jobs",
+        "/api/v1/jobs/{job_id}",
+        "/api/v1/jobs/{job_id}/cancel",
+        "/api/v1/jobs/{job_id}/events",
+        "/api/v1/jobs/{job_id}/retry",
+        "/api/v1/projects/{project_id}/folders",
+        "/api/v1/folders/{folder_id}",
+        "/api/v1/auth/register",
+        "/api/v1/auth/login",
+        "/api/v1/auth/logout",
+        "/api/v1/auth/me",
+        "/api/v1/auth/forgot-password",
+        "/api/v1/auth/reset-password",
+        "/api/v1/auth/change-password",
+        "/api/v1/settings/profile",
+        "/api/v1/settings/preferences",
+        }
     assert schema["paths"]["/api/v1/sessions/{session_id}/messages"]["post"]["summary"] == (
         "Ask a grounded document question"
     )
@@ -89,7 +116,50 @@ def test_health_docs_and_openapi_expose_only_the_main_flow() -> None:
     assert schema["paths"]["/api/v1/sessions/{session_id}/messages/{message_id}/trace"]["get"]["summary"] == (
         "Inspect persisted message data flow"
     )
-    assert {tag["name"] for tag in schema["tags"]} == {"runtime", "sessions", "documents"}
+    assert {"get", "patch", "delete"} <= set(schema["paths"]["/api/v1/sessions/{session_id}"])
+    assert {"patch", "delete"} <= set(schema["paths"]["/api/v1/sessions/{session_id}/documents/{document_id}"])
+    assert {tag["name"] for tag in schema["tags"]} == {"runtime", "sessions", "documents", "auth", "settings", "jobs", "library"}
+
+
+def test_session_and_document_crud_archives_without_mutating_pdf_bytes() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Draft review"})
+    assert created.status_code == 200
+    session_id = created.json()["session"]["id"]
+    storage_name = None
+    try:
+        renamed = client.patch(f"/api/v1/sessions/{session_id}", json={"title": "Board review"})
+        assert renamed.status_code == 200
+        assert renamed.json()["session"]["title"] == "Board review"
+
+        uploaded = client.post(
+            f"/api/v1/sessions/{session_id}/documents",
+            files={"file": ("draft.pdf", pdf_with_text("Revenue is 120."), "application/pdf")},
+        )
+        assert uploaded.status_code == 200
+        document = uploaded.json()["document"]
+        storage_name = api_main.catalog["sessions"][session_id]["documents"][0]["storage_name"]
+        document_id = document["id"]
+
+        renamed_document = client.patch(
+            f"/api/v1/sessions/{session_id}/documents/{document_id}", json={"file_name": "final-board-copy"}
+        )
+        assert renamed_document.status_code == 200
+        assert renamed_document.json()["document"]["file_name"] == "final-board-copy.pdf"
+        assert api_main.document_path(storage_name).exists()
+
+        archived_document = client.delete(f"/api/v1/sessions/{session_id}/documents/{document_id}")
+        assert archived_document.status_code == 200
+        assert client.get(f"/api/v1/sessions/{session_id}").json()["session"]["documents"] == []
+        assert api_main.document_path(storage_name).exists()
+
+        archived_session = client.delete(f"/api/v1/sessions/{session_id}")
+        assert archived_session.status_code == 200
+        assert client.get(f"/api/v1/sessions/{session_id}").status_code == 404
+    finally:
+        if storage_name:
+            api_main.document_path(storage_name).unlink(missing_ok=True)
+        api_main.catalog["sessions"].pop(session_id, None)
+        api_main.save_catalog(api_main.catalog)
 
 
 def test_session_owns_documents_and_serves_the_uploaded_binary() -> None:

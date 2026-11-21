@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any
 
 
-RUNTIME_ROOT = Path(__file__).resolve().parents[5] / "runtime"
+_DEFAULT_RUNTIME_ROOT = Path(__file__).resolve().parents[5] / "runtime"
+# Tests and local processes can opt into an isolated catalog without changing
+# the production layout. This prevents a running API/worker from contending
+# with an integration test's atomic ``sessions.tmp`` file.
+RUNTIME_ROOT = Path(os.getenv("SOURCELENS_RUNTIME_ROOT", str(_DEFAULT_RUNTIME_ROOT))).resolve()
 CATALOG_FILE = RUNTIME_ROOT / "sessions.json"
 UPLOAD_ROOT = RUNTIME_ROOT / "uploads"
 EXTRACTION_ROOT = RUNTIME_ROOT / "extracted"

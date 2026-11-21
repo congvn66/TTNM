@@ -28,6 +28,10 @@ postgres = [
   "SQLAlchemy>=2.0,<3",
   "psycopg[binary]>=3.2,<4",
   "alembic>=1.14,<2",
+  "argon2-cffi>=23,<26",
+]
+object-storage = [
+  "boto3>=1.35,<2",
 ]
 pdf-extraction = [
   "pdfplumber>=0.11,<1",
