@@ -1,3 +1,5 @@
+import { ThemeProvider } from "../features/theme/ThemeProvider.jsx";
+
 export function AppProviders({ children }) {
-  return children;
+  return <ThemeProvider>{children}</ThemeProvider>;
 }

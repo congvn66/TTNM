@@ -1,0 +1,80 @@
+:root {
+  --ink: var(--color-text);
+  --ink-soft: var(--color-secondary);
+  --muted: var(--color-muted);
+  --subtle: #94a3b8;
+  --canvas: var(--color-background);
+  --surface: var(--color-surface);
+  --surface-soft: var(--color-surface-subtle);
+  --surface-muted: #e2e8f0;
+  --border: var(--color-border);
+  --border-strong: #cbd5e1;
+  --blue: var(--color-cta);
+  --green: var(--color-success);
+  --red: var(--color-danger);
+  --gold: #a16207;
+  --gold-dark: #854d0e;
+  --gold-soft: #fef9c3;
+  --green-soft: #ecfdf5;
+  --red-soft: #fff1f2;
+  --shadow-1: var(--shadow-sm);
+  --shadow-2: var(--shadow-md);
+  font-family: var(--font-sans);
+}
+
+[data-theme="dark"] {
+  --ink-soft: #e2e8f0;
+  --subtle: #94a3b8;
+  --surface-muted: #334155;
+  --border-strong: #475569;
+  --gold: #facc15;
+  --gold-dark: #fde68a;
+  --gold-soft: rgba(250, 204, 21, .12);
+  --green-soft: rgba(16, 185, 129, .14);
+  --red-soft: rgba(239, 68, 68, .14);
+}
+
+body { font-family: var(--font-sans); }
+/* Typography roles: one visual language across auth, workspace, reader and chat. */
+h1, h2, h3, h4, h5, h6,
+.brand strong,
+.auth-copy h1,
+.settings-heading h1,
+.connection-card h1,
+.library-header h1,
+.welcome h3,
+.job-center-header h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+
+button, input, textarea, select, label,
+.top-nav-item, .connection-pill, .storage-pill, .job-pill,
+.sidebar-nav-item, .session-button, .document-list,
+.message, .chat-composer, .toast, .auth-form,
+.settings-nav, .settings-fields, .library-toolbar {
+  font-family: var(--font-ui);
+}
+
+code, pre, kbd, samp,
+.connection-endpoint code,
+.trace-panel-heading small,
+.audit-payload-grid pre,
+.audit-field code,
+.retrieval-excerpt-card pre,
+.formula-card code {
+  font-family: var(--font-mono);
+}
+.topbar, .reader-toolbar { background: color-mix(in srgb, var(--surface) 94%, transparent); }
+[data-theme="dark"] .topbar,
+[data-theme="dark"] .reader-toolbar { background: rgba(15, 23, 42, .96); }
+[data-theme="dark"] .reader-column,
+[data-theme="dark"] .pdf-viewport { background-color: #111827; }
+[data-theme="dark"] .canvas-mat canvas { border-color: #475569; }
+[data-theme="dark"] .session-button:hover,
+[data-theme="dark"] .document-list > button:hover { background: rgba(51, 65, 85, .58); }
+
+.theme-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; border: 1px solid var(--border); border-radius: 999px; padding: 0 10px; background: var(--surface); color: var(--ink-soft); font-size: 10px; font-weight: 700; cursor: pointer; }
+.theme-toggle:hover { border-color: var(--color-cta); color: var(--color-cta); }
+.theme-toggle span { text-transform: capitalize; }

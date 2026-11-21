@@ -1,13 +1,38 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import * as pdfjs from "pdfjs-dist";
+import { createPortal } from "react-dom";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { API, request } from "../../shared/api/client.js";
+import { useTheme } from "../theme/ThemeProvider.jsx";
 
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-
-const API = window.SOURCELENS_API ?? "http://127.0.0.1:8000";
 const SESSION_KEY = "sourcelens-active-session";
 const DOCUMENT_KEY = "sourcelens-active-document";
-const REQUEST_TIMEOUT_MS = 90_000;
+const SESSION_SNAPSHOT_KEY = "sourcelens-session-snapshot-v1";
+const SESSION_SNAPSHOT_TTL_MS = 60_000;
+
+function readSessionSnapshot() {
+  try {
+    const payload = JSON.parse(sessionStorage.getItem(SESSION_SNAPSHOT_KEY) || "null");
+    if (!payload || !Array.isArray(payload.sessions)) return null;
+    return {
+      sessions: payload.sessions,
+      savedAt: Number(payload.savedAt) || 0,
+      stale: Date.now() - (Number(payload.savedAt) || 0) > SESSION_SNAPSHOT_TTL_MS,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionSnapshot(sessions) {
+  try {
+    // Keep the fast-start cache to workspace/document metadata. Chat history is
+    // fetched from the API so a tab cannot accidentally retain sensitive text.
+    const metadata = sessions.map((session) => ({ ...session, messages: [] }));
+    sessionStorage.setItem(SESSION_SNAPSHOT_KEY, JSON.stringify({ savedAt: Date.now(), sessions: metadata }));
+  } catch {
+    // Storage can be disabled or full; the network path remains authoritative.
+  }
+}
 
 function Icon({ name, size = 16 }) {
   const paths = {
@@ -15,49 +40,62 @@ function Icon({ name, size = 16 }) {
     arrowLeft: <><path d="m15 18-6-6 6-6" /><path d="M9 12h10" /></>,
     arrowRight: <><path d="m9 18 6-6-6-6" /><path d="M5 12h10" /></>,
     close: <path d="m6 6 12 12M18 6 6 18" />,
+    chevronDown: <path d="m6 9 6 6 6-6" />,
     fit: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
     folder: <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />,
+    grid: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
     link: <><path d="M10 13a5 5 0 0 0 7.1.1l1.4-1.4a5 5 0 0 0-7.1-7.1L10 6" /><path d="M14 11a5 5 0 0 0-7.1-.1l-1.4 1.4a5 5 0 0 0 7.1 7.1L14 18" /></>,
+    more: <><circle cx="5" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="19" cy="12" r="1" fill="currentColor" /></>,
+    edit: <><path d="m4 20 4.2-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z" /><path d="m13.8 7.2 3 3" /></>,
+    trash: <><path d="M4 7h16M10 11v5M14 11v5M6 7l1 13h10l1-13M9 7V4h6v3" /></>,
+    user: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c.6-3.4 3-5.2 7-5.2s6.4 1.8 7 5.2" /></>,
+    logout: <><path d="M10 5H5v14h5" /><path d="m14 8 4 4-4 4M8 12h10" /></>,
+    moon: <path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z" />,
     minus: <path d="M5 12h14" />,
     plus: <path d="M12 5v14M5 12h14" />,
     refresh: <><path d="M20 11a8 8 0 0 0-14.7-3L4 10" /><path d="M4 5v5h5" /><path d="M4 13a8 8 0 0 0 14.7 3L20 14" /><path d="M20 19v-5h-5" /></>,
     rotate: <><path d="M4 9a8 8 0 0 1 13.7-3L20 8" /><path d="M20 3v5h-5" /><path d="M20 15a8 8 0 0 1-13.7 3L4 16" /><path d="M4 21v-5h5" /></>,
     send: <><path d="m4 4 16 8-16 8 3-8z" /><path d="M7 12h13" /></>,
+    settings: <><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" /><circle cx="12" cy="12" r="3.5" /></>,
     spark: <><path d="m12 3 1.3 5.7L19 10l-5.7 1.3L12 17l-1.3-5.7L5 10l5.7-1.3z" /><path d="m19 16 .6 2.4L22 19l-2.4.6z" /></>,
+    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></>,
     trace: <><path d="M5 5h4v4H5zM15 15h4v4h-4z" /><path d="M9 7h3a3 3 0 0 1 3 3v5" /><path d="M12 15h3" /></>,
     upload: <><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 20h14" /></>,
   };
   return <svg className="ui-icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-async function request(path, options = {}) {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  let response;
-  try {
-    response = await fetch(`${API}${path}`, {
-      ...options,
-      signal: options.signal ?? controller.signal,
-      headers: { "X-Trace-Id": crypto.randomUUID(), ...(options.headers ?? {}) },
-    });
-  } catch (error) {
-    if (error?.name === "AbortError") throw new Error("Yêu cầu quá thời gian chờ. Hãy thử lại.");
-    throw new Error("Không kết nối được tới backend. Kiểm tra API đang chạy rồi thử lại.");
-  } finally {
-    window.clearTimeout(timeout);
-  }
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = body.detail;
-    if (detail && typeof detail === "object") throw new Error(`${detail.code ? `${detail.code}: ` : ""}${detail.message ?? `HTTP ${response.status}`}`);
-    throw new Error(detail ?? `HTTP ${response.status}`);
-  }
-  return body;
-}
-
 function formatBytes(value = 0) {
   if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`;
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function processingLabel(status) {
+  return ({ queued: "Đang chuẩn bị", processing: "Đang lập chỉ mục", ready: "Đã lập chỉ mục", failed: "Cần thử lại" }[status] ?? "Chưa xử lý");
+}
+
+const ERROR_COPY = {
+  AUTH_REQUIRED: "Phiên đăng nhập đã hết. Vui lòng đăng nhập lại.",
+  SESSION_TITLE_REQUIRED: "Hãy nhập tên cho phiên làm việc.",
+  SESSION_NOT_FOUND: "Không tìm thấy phiên làm việc này. Hãy tải lại danh sách.",
+  DOCUMENT_NOT_FOUND: "Không tìm thấy tài liệu này. Hãy tải lại danh sách.",
+  DATABASE_UNAVAILABLE: "Dịch vụ dữ liệu tạm thời không sẵn sàng. Hãy thử lại sau.",
+  INVALID_PDF: "Tệp không phải PDF hợp lệ hoặc không thể đọc được.",
+  PDF_TOO_LARGE: "Tệp PDF vượt quá giới hạn 100 MiB.",
+  PDF_TOO_MANY_PAGES: "Tài liệu vượt quá số trang cho phép.",
+  EXTRACTION_NOT_READY: "Tài liệu đang được lập chỉ mục. Bạn có thể hỏi khi trạng thái chuyển sang sẵn sàng.",
+  AI_PROVIDER_TIMEOUT: "AI phản hồi quá lâu. Bạn có thể thử gửi lại câu hỏi.",
+  AI_INVALID_OUTPUT: "AI trả về dữ liệu không đúng định dạng. Hãy thử lại câu hỏi.",
+};
+
+function userFacingError(value) {
+  const raw = typeof value === "string" ? value : value?.message;
+  if (!raw) return "Không thể hoàn tất thao tác. Hãy thử lại.";
+  const code = Object.keys(ERROR_COPY).find((key) => raw.includes(key));
+  if (code) return ERROR_COPY[code];
+  if (raw.includes("Không kết nối được tới backend")) return "Không thể kết nối tới máy chủ. Hãy kiểm tra API đang chạy rồi thử lại.";
+  if (raw.includes("Yêu cầu quá thời gian chờ")) return "Máy chủ phản hồi quá lâu. Hãy thử lại sau ít phút.";
+  return raw.replace(/^\w+_[A-Z_]+:\s*/, "").trim();
 }
 
 function normalizedBbox(value) {
@@ -68,6 +106,20 @@ function normalizedBbox(value) {
   return [x0, y0, x1, y1];
 }
 
+// PDF.js represents affine transforms as [a, b, c, d, e, f]. Keeping this
+// tiny operation local avoids pulling the whole PDF.js runtime into the
+// initial bundle just to derive a citation box from the already-rendered text.
+function multiplyTransform(first, second) {
+  return [
+    first[0] * second[0] + first[2] * second[1],
+    first[1] * second[0] + first[3] * second[1],
+    first[0] * second[2] + first[2] * second[3],
+    first[1] * second[2] + first[3] * second[3],
+    first[0] * second[4] + first[2] * second[5] + first[4],
+    first[1] * second[4] + first[3] * second[5] + first[5],
+  ];
+}
+
 function traceValue(value) {
   if (Array.isArray(value)) return value.join(", ");
   if (value && typeof value === "object") return JSON.stringify(value);
@@ -75,6 +127,7 @@ function traceValue(value) {
 }
 
 function presentationAnswer(message) {
+  if (message?.status === "processing" || message?.structured_answer?.presentation === "processing_v1") return { pending: true };
   if (message?.structured_answer && message.mode === "deterministic_text_retrieval") {
     return { ...message.structured_answer, presentation: "retrieval_excerpt", retrieved_excerpt: message.body ?? message.structured_answer.retrieved_excerpt ?? "" };
   }
@@ -124,6 +177,30 @@ function AuditDrawer({ traceData, traceMessage, activeDocument, onClose }) {
     <div className="audit-payload-grid"><div><span>REQUEST PAYLOAD</span><pre>{JSON.stringify(requestPayload, null, 2)}</pre></div><div><span>RESPONSE SNAPSHOT</span><pre>{JSON.stringify(responseSnapshot, null, 2)}</pre></div></div>
     <div className="audit-summary"><div><span>RETRIEVAL</span><b>{retrieval?.status ?? "—"}</b><small>{retrieval?.pages ? `trang ${retrieval.pages.join(", ")}` : "không chạy"}</small></div><div><span>AI / CALCULATOR</span><b>{calculation?.status ?? provider?.status ?? "deterministic"}</b><small>{calculation?.formula_id ?? provider?.provider ?? "question planner"}</small></div><div><span>PERSISTENCE</span><b>{persistence?.status ?? "—"}</b><small>{persistence?.artifact ?? "chưa ghi"}</small></div></div>
     <div className="audit-timeline">{trace.map((event, index) => <AuditEvent event={event} index={index} key={`${event.stage}-${event.at}-${index}`} />)}</div>
+  </section>;
+}
+
+function PerformanceDrawer({ metrics, onClose, onClear }) {
+  if (!metrics) return null;
+  const durations = metrics.filter((item) => item.ok && Number.isFinite(item.duration_ms)).map((item) => item.duration_ms);
+  const average = durations.length ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length) : 0;
+  const latest = durations[0] ?? 0;
+  const failures = metrics.filter((item) => !item.ok).length;
+  return <section className="performance-drawer" role="dialog" aria-modal="true" aria-label="Hiệu năng hệ thống">
+    <header className="performance-header"><div><span className="audit-kicker">SYSTEM PERFORMANCE</span><h3>Độ trễ & luồng thao tác</h3><small>{metrics.length} request gần nhất · đo từ trình duyệt</small></div><div className="performance-actions"><button type="button" onClick={onClear}>Xóa</button><button type="button" aria-label="Đóng performance" onClick={onClose}><Icon name="close" size={15} /></button></div></header>
+    <div className="performance-summary"><div><span>Gần nhất</span><b>{latest ? `${latest} ms` : "—"}</b></div><div><span>Trung bình</span><b>{average ? `${average} ms` : "—"}</b></div><div><span>Lỗi</span><b className={failures ? "metric-bad" : ""}>{failures}</b></div></div>
+    <div className="performance-list">{metrics.length ? metrics.map((item) => <article className={`performance-row ${item.ok ? "ok" : "failed"}`} key={item.request_id}><span className="performance-dot"></span><div><strong>{item.method} {item.path}</strong><small>{new Date(item.at).toLocaleTimeString()} · {item.status || item.error}</small></div><b>{item.duration_ms} ms</b></article>) : <p className="performance-empty">Chưa có request. Hãy tải tài liệu hoặc gửi một câu hỏi.</p>}</div>
+    <footer className="performance-footer">Latency đo từ lúc UI gửi request đến khi nhận response. Không bao gồm thời gian người dùng đọc câu trả lời.</footer>
+  </section>;
+}
+
+function JobCenterDrawer({ jobs, busy, onClose, onAction }) {
+  if (!jobs) return null;
+  const active = jobs.filter((job) => ["queued", "running"].includes(job.status));
+  return <section className="job-center-drawer" role="dialog" aria-modal="true" aria-labelledby="job-center-title">
+    <header className="job-center-header"><div><span className="audit-kicker">JOB CENTER</span><h3 id="job-center-title">Tác vụ xử lý</h3><small>Theo dõi extraction và câu trả lời đang chạy</small></div><button type="button" aria-label="Đóng Job Center" onClick={onClose}><Icon name="close" size={15} /></button></header>
+    <div className="job-center-summary"><span><i></i>{active.length} đang xử lý</span><small>Trạng thái được lưu bền theo tài khoản</small></div>
+    <div className="job-center-list">{jobs.length ? jobs.map((job) => <article className="job-center-row" key={job.id}><div className={`job-center-status ${job.status}`}><span></span></div><div className="job-center-main"><strong>{job.kind === "document_extraction" ? "Trích xuất PDF" : job.kind === "answer_generation" ? "Tạo câu trả lời" : job.kind || "Tác vụ nền"}</strong><small>{job.status} · {job.attempts ?? 0}/{job.max_attempts ?? 3} lần thử{job.error_code ? ` · ${job.error_code}` : ""}</small></div><div className="job-center-actions">{["queued", "running"].includes(job.status) && <button type="button" onClick={() => onAction(job, "cancel")} disabled={busy}>Huỷ</button>}{job.status === "failed" && <button type="button" onClick={() => onAction(job, "retry")} disabled={busy}>Thử lại</button>}</div></article>) : <div className="job-center-empty"><span>✓</span><p>Không có tác vụ gần đây.</p><small>Khi tải PDF hoặc hỏi AI, trạng thái sẽ xuất hiện ở đây.</small></div>}</div>
   </section>;
 }
 
@@ -208,11 +285,17 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
     }
     setLoading(true);
     let task;
-    try { task = pdfjs.getDocument({ url: fileUrl }); } catch (reason) {
-      setLoading(false); setError(reason?.message || "Không thể khởi tạo PDF.js"); return undefined;
-    }
-    task.promise.then((loaded) => { if (!disposed) { setPdf(loaded); setLoading(false); } }).catch((reason) => { if (!disposed) { setError(reason?.message || "Không thể đọc PDF"); setLoading(false); } });
-    return () => { disposed = true; task.destroy(); };
+    import("pdfjs-dist").then((pdfjs) => {
+      if (disposed) return null;
+      pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+      task = pdfjs.getDocument({ url: fileUrl });
+      return task.promise;
+    }).then((loaded) => {
+      if (loaded && !disposed) { setPdf(loaded); setLoading(false); }
+    }).catch((reason) => {
+      if (!disposed) { setError(reason?.message || "Không thể đọc PDF"); setLoading(false); }
+    });
+    return () => { disposed = true; task?.destroy(); };
   }, [document?.id, document?.file_url, sessionId]);
 
   useEffect(() => {
@@ -255,7 +338,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
   let itemCursor = 0;
   compactItems.forEach((value) => { itemRanges.push([itemCursor, itemCursor + value.length]); itemCursor += value.length; });
   const derivedBoxes = textViewport ? textItems.flatMap((item, index) => {
-    const transformed = pdfjs.Util.transform(textViewport.transform, item.transform || [1, 0, 0, 1, 0, 0]);
+    const transformed = multiplyTransform(textViewport.transform, item.transform || [1, 0, 0, 1, 0, 0]);
     const fontSize = Math.max(6, Math.hypot(transformed[2], transformed[3]));
     const [rangeStart, rangeEnd] = itemRanges[index] || [0, 0];
     const hit = quoteStart >= 0 && rangeEnd > quoteStart && rangeStart < quoteStart + quoteCompact.length;
@@ -278,11 +361,11 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
     setScale(Math.max(.35, Math.min(2.5, (viewportRef.current.clientWidth - 56) / base.width)));
   }, [pdf, page, rotation]);
 
-  if (!document) return <div className="empty-reader"><div className="empty-icon">PDF</div><h2>Chọn hoặc tải một tài liệu</h2><p>SourceLens sẽ lưu file theo phiên và mở chính file đó bằng PDF.js.</p></div>;
+  if (!document) return <div className="empty-reader"><div className="empty-icon">PDF</div><h2>Chọn hoặc thêm tài liệu</h2><p>Tài liệu được lưu theo phiên làm việc và mở trực tiếp trong trình đọc PDF.</p></div>;
 
   return <section className="reader-shell">
     <header className="reader-toolbar">
-      <div className="reader-file"><strong>{document.file_name}</strong><span>{formatBytes(document.byte_size)} · {document.extraction_status === "ready" ? "Text index sẵn sàng" : document.extraction_status === "queued" ? "Đang trích text…" : "Trích text thất bại"}</span></div>
+      <div className="reader-file"><strong>{document.file_name}</strong><span>{formatBytes(document.byte_size)} · {document.extraction_status === "ready" ? "Đã lập chỉ mục" : document.extraction_status === "queued" ? "Đang lập chỉ mục…" : "Lập chỉ mục thất bại"}</span></div>
       <div className="page-control"><button aria-label="Trang trước" title="Trang trước" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}><Icon name="arrowLeft" /></button><span>{page} / {pdf?.numPages ?? document.page_count ?? "—"}</span><button aria-label="Trang sau" title="Trang sau" disabled={!pdf || page >= pdf.numPages} onClick={() => setPage((value) => value + 1)}><Icon name="arrowRight" /></button></div>
       <div className="zoom-control"><button aria-label="Thu nhỏ" title="Thu nhỏ" onClick={() => setScale((value) => Math.max(.35, value - .15))}><Icon name="minus" /></button><span>{Math.round(scale * 100)}%</span><button aria-label="Phóng to" title="Phóng to" onClick={() => setScale((value) => Math.min(2.5, value + .15))}><Icon name="plus" /></button><button aria-label="Vừa chiều rộng" title="Vừa chiều rộng" onClick={fitWidth}><Icon name="fit" /></button><button aria-label="Xoay tài liệu" title="Xoay tài liệu" onClick={() => setRotation((value) => (value + 90) % 360)}><Icon name="rotate" /></button></div>
     </header>
@@ -292,20 +375,129 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
       onPointerUp={() => { dragRef.current = null; }}
       onPointerCancel={() => { dragRef.current = null; }}
       onWheel={(event) => { if (!event.ctrlKey) return; event.preventDefault(); setScale((value) => Math.max(.35, Math.min(2.5, value + (event.deltaY < 0 ? .1 : -.1)))); }}>
-      {loading && <div className="reader-loading" role="status">Đang mở PDF…</div>}
+      {loading && <div className="reader-loading" role="status">Đang mở tài liệu…</div>}
       {error && <div className="reader-error" role="alert">Không thể render PDF: {error}</div>}
       <div className="canvas-mat"><canvas ref={canvasRef} />{textLayer}</div>
     </div>
   </section>;
 }
 
-function App() {
-  const [sessions, setSessions] = useState([]);
+function ProfileMenu({ user, onSignOut, onNavigate }) {
+  const [open, setOpen] = useState(false);
+  const [profile, setProfile] = useState(user);
+  const [editing, setEditing] = useState(false);
+  const [displayName, setDisplayName] = useState(user?.display_name ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => { setProfile(user); setDisplayName(user?.display_name ?? ""); }, [user]);
+  const initial = (profile?.display_name || profile?.email || "S").trim().slice(0, 1).toUpperCase();
+  const saveProfile = async (event) => {
+    event.preventDefault();
+    if (!displayName.trim()) return;
+    setSaving(true); setError("");
+    try {
+      const body = await request("/api/v1/settings/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ display_name: displayName.trim() }) });
+      setProfile(body.user); setEditing(false);
+    } catch (reason) { setError(reason.message || "Không thể lưu hồ sơ."); }
+    finally { setSaving(false); }
+  };
+  return <div className="profile-menu">
+    <button className="profile-chip" type="button" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((value) => !value)}>
+      <span className="profile-avatar">{initial}</span>
+      <span className="profile-copy"><b>{profile?.display_name || "Workspace cá nhân"}</b><small>{profile?.email || "Chế độ demo"}</small></span>
+      <Icon name="chevronDown" size={13} />
+    </button>
+    {open && <div className="profile-popover" role="menu">
+      <div className="profile-summary"><span className="profile-avatar large">{initial}</span><div><b>{profile?.display_name || "Workspace cá nhân"}</b><small>{profile?.email || "Không yêu cầu đăng nhập"}</small></div></div>
+      <div className="profile-meta"><Icon name="user" size={14} /><span>Tài khoản và dữ liệu được phân tách theo phiên làm việc.</span></div>
+      {onNavigate && !editing && <><button className="profile-manage" type="button" onClick={() => { setOpen(false); onNavigate("/app/settings/profile"); }}><Icon name="user" size={14} /> Hồ sơ tài khoản</button><button className="profile-manage" type="button" onClick={() => { setOpen(false); onNavigate("/app/settings/preferences"); }}><Icon name="settings" size={14} /> Tuỳ chọn giao diện</button><button className="profile-manage" type="button" onClick={() => { setOpen(false); onNavigate("/app/settings/security"); }}><Icon name="trace" size={14} /> Bảo mật</button></>}
+      {onSignOut && !editing && <button className="profile-manage" type="button" onClick={() => setEditing(true)}><Icon name="edit" size={14} /> Chỉnh sửa nhanh</button>}
+      {onSignOut && editing && <form className="profile-edit-form" onSubmit={saveProfile}><label>Tên hiển thị<input autoFocus value={displayName} maxLength={120} onChange={(event) => setDisplayName(event.target.value)} /></label>{error && <p role="alert">{error}</p>}<div><button type="button" onClick={() => { setDisplayName(profile?.display_name ?? ""); setEditing(false); setError(""); }}>Hủy</button><button type="submit" disabled={saving || !displayName.trim()}>{saving ? "Đang lưu…" : "Lưu hồ sơ"}</button></div></form>}
+      {onSignOut && <button className="profile-signout" type="button" onClick={onSignOut}><Icon name="logout" size={15} /> Đăng xuất</button>}
+    </div>}
+  </div>;
+}
+
+/** Resource actions live in a body-level portal so a scrolling sidebar cannot clip them. */
+function ActionMenu({ label, onRename, onDelete }) {
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnPointer = (event) => {
+      if (triggerRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const closeOnKey = (event) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", closeOnPointer);
+    document.addEventListener("keydown", closeOnKey);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointer);
+      document.removeEventListener("keydown", closeOnKey);
+    };
+  }, [open]);
+  const toggle = () => {
+    if (open) { setOpen(false); return; }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = 184;
+    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+    const estimatedHeight = 94;
+    const top = rect.bottom + estimatedHeight > window.innerHeight ? Math.max(8, rect.top - estimatedHeight - 6) : rect.bottom + 6;
+    setPosition({ top, left });
+    setOpen(true);
+  };
+  return <>
+    <button ref={triggerRef} className="item-menu-trigger" type="button" aria-label={`Tùy chọn ${label}`} aria-expanded={open} onClick={(event) => { event.stopPropagation(); toggle(); }}><Icon name="more" size={16} /></button>
+    {open && createPortal(<div ref={menuRef} className="resource-menu-popover" role="menu" style={{ top: position.top, left: position.left }}>
+      <button type="button" role="menuitem" onClick={() => { setOpen(false); onRename(); }}><Icon name="edit" size={13} /> Đổi tên</button>
+      <button type="button" role="menuitem" className="danger" onClick={() => { setOpen(false); onDelete(); }}><Icon name="trash" size={13} /> Xóa</button>
+    </div>, document.body)}
+  </>;
+}
+
+function ResourceDialog({ dialog, busy, onClose, onConfirm }) {
+  const [value, setValue] = useState(dialog?.value ?? "");
+  useEffect(() => setValue(dialog?.value ?? ""), [dialog?.kind, dialog?.value]);
+  if (!dialog) return null;
+  const isDelete = dialog.kind.startsWith("delete");
+  return <div className="resource-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="resource-dialog-title">
+      <div className={`resource-modal-icon ${isDelete ? "danger" : ""}`}><Icon name={isDelete ? "trash" : "edit"} size={19} /></div>
+      <div><p className="dialog-kicker">{isDelete ? "XÁC NHẬN THAO TÁC" : "CHỈNH SỬA"}</p><h2 id="resource-dialog-title">{dialog.title}</h2><p>{dialog.description}</p></div>
+      {isDelete ? <div className="dialog-warning">Thao tác này sẽ ẩn mục khỏi workspace. Dữ liệu nguồn được archive để bảo toàn lịch sử.</div> : <label className="dialog-input-label">Tên hiển thị<input autoFocus value={value} onChange={(event) => setValue(event.target.value)} maxLength={dialog.maxLength ?? 255} /></label>}
+      <div className="resource-modal-actions"><button type="button" className="dialog-secondary" onClick={onClose} disabled={busy}>Hủy</button><button type="button" className={isDelete ? "dialog-danger" : "dialog-primary"} disabled={busy || (!isDelete && !value.trim())} onClick={() => onConfirm(dialog, value.trim())}>{busy ? "Đang lưu…" : isDelete ? "Xóa khỏi workspace" : "Lưu thay đổi"}</button></div>
+    </section>
+  </div>;
+}
+
+function SessionBrowser({ sessions, filteredSessions, activeSession, activeDocument, booting, search, onSearch, busy, onSelectSession, onSelectDocument, onCreate, onUpload, onDialog, onNavigate }) {
+  return <aside className="session-sidebar session-browser">
+    <div className="sidebar-nav" aria-label="Điều hướng workspace"><button className="sidebar-nav-item active" type="button"><Icon name="grid" size={14} /><span>Workspace</span></button><button className="sidebar-nav-item" type="button" onClick={() => onNavigate?.("/app/library")}><Icon name="folder" size={14} /><span>Thư viện tài liệu</span><small>{sessions.reduce((count, session) => count + session.documents.length, 0)}</small></button></div>
+    <div className="sidebar-divider"></div>
+    <div className="session-heading"><div><small>WORKSPACE GẦN ĐÂY</small><h2>Phiên làm việc</h2></div><button className="session-create-button" aria-label="Tạo phiên làm việc mới" title="Tạo phiên làm việc mới" onClick={onCreate} disabled={busy}><Icon name="add" size={14} /><span>Tạo mới</span></button></div>
+    <input className="session-search" aria-label="Tìm phiên hoặc tài liệu" value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Tìm phiên hoặc tài liệu…" />
+    <div className="session-list">{booting && !sessions.length && <div className="session-loading" role="status">Đang tải workspace…</div>}{!booting && !filteredSessions.length && <div className="session-loading">Không tìm thấy phiên hoặc tài liệu phù hợp.</div>}{filteredSessions.map((session) => <section className={`session-item ${session.id === activeSession?.id ? "active" : ""}`} key={session.id}>
+      <div className="session-row"><button className="session-button" title={session.title} onClick={() => onSelectSession(session)}><span className="session-icon"><Icon name="folder" size={14} /></span><span><b>{session.title}</b><small>{session.documents.length} tài liệu</small></span></button><ActionMenu label={session.title} onRename={() => onDialog({ kind: "rename-session", id: session.id, value: session.title, title: "Đổi tên phiên", description: "Tên này chỉ dùng để tổ chức workspace của bạn.", maxLength: 120 })} onDelete={() => onDialog({ kind: "delete-session", id: session.id, title: "Xóa phiên này?", description: `Phiên “${session.title}” và lịch sử hỏi đáp sẽ được archive.` })} /></div>
+      {session.id === activeSession?.id && <div className="document-list"><div className="document-list-heading"><span>Tài liệu trong phiên</span><button type="button" className="session-upload-button" onClick={onUpload}><Icon name="upload" size={13} /> Thêm tài liệu</button></div>{session.documents.map((document) => <div className={`document-row ${document.id === activeDocument?.id ? "selected" : ""}`} key={document.id}><button className="document-button" title={document.file_name} onClick={() => onSelectDocument(document.id)}><span className="pdf-dot">PDF</span><span><b>{document.file_name}</b><small>{formatBytes(document.byte_size)} · {document.page_count ?? "?"} trang · {processingLabel(document.extraction_status)}</small></span></button><ActionMenu label={document.file_name} onRename={() => onDialog({ kind: "rename-document", id: document.id, value: document.file_name.slice(0, -4), title: "Đổi tên tài liệu", description: "PDF gốc và các citation không thay đổi.", maxLength: 251 })} onDelete={() => onDialog({ kind: "delete-document", id: document.id, title: "Xóa tài liệu này?", description: `Tài liệu “${document.file_name}” sẽ không còn hiện trong phiên.` })} /></div>)}{!session.documents.length && <button className="empty-document" onClick={onUpload}><Icon name="add" size={13} /> Thêm tài liệu đầu tiên</button>}</div>}</section>)}</div>
+    <div className="sidebar-note"><b>Giới hạn tệp · 100 MiB</b></div>
+  </aside>;
+}
+
+function App({ user = null, onSignOut = null, onNavigate }) {
+  const { preference, resolvedTheme, setPreference } = useTheme();
+  const [initialSessionSnapshot] = useState(readSessionSnapshot);
+  const [sessions, setSessions] = useState(() => initialSessionSnapshot?.sessions ?? []);
   const [activeSessionId, setActiveSessionId] = useState(localStorage.getItem(SESSION_KEY));
   const [activeDocumentId, setActiveDocumentId] = useState(localStorage.getItem(DOCUMENT_KEY));
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
-  const [booting, setBooting] = useState(true);
+  const [booting, setBooting] = useState(() => !initialSessionSnapshot?.sessions?.length);
+  const [connectionState, setConnectionState] = useState("checking");
+  const [runtimeHealth, setRuntimeHealth] = useState(null);
+  const [bootError, setBootError] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState("info");
   const [retryQuestion, setRetryQuestion] = useState("");
@@ -319,11 +511,39 @@ function App() {
   const [evidenceData, setEvidenceData] = useState(null);
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [pendingMessages, setPendingMessages] = useState([]);
+  const [activeJobs, setActiveJobs] = useState([]);
+  const [jobsOpen, setJobsOpen] = useState(false);
+  const [requestMetrics, setRequestMetrics] = useState([]);
+  const [performanceOpen, setPerformanceOpen] = useState(false);
+  const [resourceDialog, setResourceDialog] = useState(null);
   const uploadRef = useRef(null);
   const bootedRef = useRef(false);
+  const uploadQueryConsumedRef = useRef(false);
 
-  const showNotice = useCallback((message, kind = "info") => { setNotice(message); setNoticeKind(kind); }, []);
+  const showNotice = useCallback((message, kind = "info") => { setNotice(userFacingError(message)); setNoticeKind(kind); }, []);
   const clearNotice = useCallback(() => { setNotice(""); setRetryQuestion(""); }, []);
+
+  useEffect(() => {
+    const onRequest = (event) => setRequestMetrics((current) => [event.detail, ...current].slice(0, 40));
+    window.addEventListener("sourcelens:request", onRequest);
+    return () => window.removeEventListener("sourcelens:request", onRequest);
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let timer;
+    const probe = async () => {
+      try {
+        const result = await request("/health");
+        if (!disposed) setRuntimeHealth(result);
+      } catch {
+        if (!disposed) setRuntimeHealth(null);
+      }
+      if (!disposed) timer = window.setTimeout(probe, 30000);
+    };
+    probe();
+    return () => { disposed = true; window.clearTimeout(timer); };
+  }, []);
 
   const refresh = useCallback(async (preferredSession) => {
     const response = await request("/api/v1/sessions");
@@ -333,33 +553,86 @@ function App() {
       next = [created.session];
     }
     setSessions(next);
-    const selected = preferredSession ?? activeSessionId;
-    if (!next.some((item) => item.id === selected)) setActiveSessionId(next[0].id);
+    writeSessionSnapshot(next);
+    setConnectionState("online");
+    setBootError("");
+    const fallbackSession = next.find((item) => item.documents?.length) ?? next[0];
+    const selected = preferredSession && next.some((item) => item.id === preferredSession)
+      ? preferredSession
+      : (next.some((item) => item.id === activeSessionId) ? activeSessionId : fallbackSession.id);
+    if (selected !== activeSessionId) setActiveSessionId(selected);
   }, [activeSessionId]);
+
+  const refreshJobs = useCallback(async () => {
+    try {
+      const jobs = await request("/api/v1/jobs");
+      setActiveJobs(jobs.jobs ?? []);
+    } catch {
+      // Job Center is an enhancement; a temporary status request failure must
+      // not blank the document workspace or block chat interaction.
+    }
+  }, []);
 
   useEffect(() => {
     if (bootedRef.current) return;
     bootedRef.current = true;
-    refresh().catch((error) => showNotice(error.message, "error")).finally(() => setBooting(false));
+    refresh()
+      .catch((error) => {
+        setConnectionState("offline");
+        setBootError(error.message);
+        showNotice(error.message, "error");
+      })
+      .finally(() => setBooting(false));
   }, [refresh, showNotice]);
   useEffect(() => { if (activeSessionId) localStorage.setItem(SESSION_KEY, activeSessionId); }, [activeSessionId]);
   useEffect(() => { if (activeDocumentId) localStorage.setItem(DOCUMENT_KEY, activeDocumentId); }, [activeDocumentId]);
 
   const activeSession = sessions.find((item) => item.id === activeSessionId) ?? sessions[0];
   const activeDocument = activeSession?.documents.find((item) => item.id === activeDocumentId) ?? activeSession?.documents[0] ?? null;
+  useEffect(() => {
+    if (uploadQueryConsumedRef.current || !activeSession || new URLSearchParams(window.location.search).get("upload") !== "1") return;
+    uploadQueryConsumedRef.current = true;
+    window.setTimeout(() => uploadRef.current?.click(), 80);
+  }, [activeSession?.id]);
   useEffect(() => { if (activeDocument && activeDocument.id !== activeDocumentId) setActiveDocumentId(activeDocument.id); }, [activeSession?.id, activeDocument?.id, activeDocumentId]);
   useEffect(() => { setTraceData(null); setTraceMessage(null); setEvidenceData(null); setCitationPage(null); setCitationQuote(""); setCitationBbox(null); }, [activeSession?.id, activeDocument?.id]);
   useEffect(() => {
     if (!activeSession || activeDocument?.extraction_status !== "queued") return undefined;
-    const timer = window.setInterval(() => refresh(activeSession.id).catch((error) => showNotice(error.message, "error")), 1500);
-    return () => window.clearInterval(timer);
+    let disposed = false;
+    let timer;
+    const poll = async () => {
+      try { await refresh(activeSession.id); }
+      catch (error) { if (!disposed) showNotice(error.message, "error"); }
+      if (!disposed) timer = window.setTimeout(poll, 1500);
+    };
+    poll();
+    return () => { disposed = true; window.clearTimeout(timer); };
   }, [activeSession?.id, activeDocument?.id, activeDocument?.extraction_status, refresh, showNotice]);
 
   const filteredSessions = useMemo(() => sessions.filter((session) => session.title.toLowerCase().includes(search.toLowerCase()) || session.documents.some((document) => document.file_name.toLowerCase().includes(search.toLowerCase()))), [sessions, search]);
   const persistedMessages = (activeSession?.messages ?? []).filter((message) => !activeDocument || message.document_id === activeDocument.id);
   const messages = [...persistedMessages, ...pendingMessages.filter((message) => message.session_id === activeSession?.id && message.document_id === activeDocument?.id)];
-  const modeLabel = messages.some((message) => message.mode?.startsWith("ai:")) ? "AI + grounded" : "retrieval local";
   const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant" && !message.pending && !message.failed);
+  const modeLabel = latestAssistant?.mode?.startsWith("ai:") ? "AI có dẫn nguồn" : "Tra cứu nội bộ";
+  const answerProcessing = (activeSession?.messages ?? []).some((message) => message.role === "assistant" && (message.status === "processing" || message.structured_answer?.presentation === "processing_v1"));
+  useEffect(() => {
+    refreshJobs();
+    const hasActiveWork = activeDocument?.extraction_status === "queued" || answerProcessing;
+    const timer = window.setInterval(refreshJobs, hasActiveWork ? 5000 : 15000);
+    return () => window.clearInterval(timer);
+  }, [activeDocument?.extraction_status, answerProcessing, refreshJobs]);
+  useEffect(() => {
+    if (!activeSession || !answerProcessing) return undefined;
+    let disposed = false;
+    let timer;
+    const poll = async () => {
+      try { await refresh(activeSession.id); }
+      catch (error) { if (!disposed) showNotice(error.message, "error"); }
+      if (!disposed) timer = window.setTimeout(poll, 1200);
+    };
+    poll();
+    return () => { disposed = true; window.clearTimeout(timer); };
+  }, [activeSession?.id, answerProcessing, refresh, showNotice]);
   const requestInFlightRef = useRef(false);
   const forceChatScrollRef = useRef(false);
   const retryMetaRef = useRef(null);
@@ -373,25 +646,108 @@ function App() {
     const frame = window.requestAnimationFrame(() => node.scrollTo({ top: node.scrollHeight, behavior: force ? "smooth" : "auto" }));
     forceChatScrollRef.current = false;
     return () => window.cancelAnimationFrame(frame);
-  }, [messages.length, activeSession?.id, activeDocument?.id]);
+  }, [messages.length, messages.at(-1)?.id, messages.at(-1)?.body, messages.at(-1)?.status, activeSession?.id, activeDocument?.id]);
 
   async function createSession() {
+    if (busy) return;
+    setBusy(true);
+    clearNotice();
+    try {
+      const created = await request("/api/v1/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: `Phiên phân tích ${sessions.length + 1}` }),
+      });
+      const createdSession = created.session;
+      // Render the new session immediately. A slow list refresh must not make a
+      // successful create operation look like a failed button click.
+      setSessions((current) => {
+        const next = [createdSession, ...current.filter((session) => session.id !== createdSession.id)];
+        writeSessionSnapshot(next);
+        return next;
+      });
+      setActiveSessionId(createdSession.id);
+      setActiveDocumentId(null);
+      setConnectionState("online");
+      showNotice("Đã tạo phiên làm việc mới.");
+      refresh(createdSession.id).catch((error) => showNotice(`Phiên đã được tạo nhưng danh sách chưa đồng bộ: ${userFacingError(error)}`, "error"));
+    } catch (error) {
+      showNotice(error, "error");
+    } finally { setBusy(false); }
+  }
+
+  async function confirmResourceAction(dialog, value) {
+    if (!dialog) return;
     setBusy(true);
     try {
-      const created = await request("/api/v1/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: `Phiên phân tích ${sessions.length + 1}` }) });
-      setActiveSessionId(created.session.id); setActiveDocumentId(null); await refresh(created.session.id);
-    } catch (error) { showNotice(error.message, "error"); } finally { setBusy(false); }
+      if (dialog.kind === "rename-session") {
+        await request(`/api/v1/sessions/${dialog.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: value }) });
+        setSessions((current) => { const next = current.map((session) => session.id === dialog.id ? { ...session, title: value } : session); writeSessionSnapshot(next); return next; });
+        refresh(dialog.id).catch(() => {});
+        showNotice("Đã đổi tên phiên.");
+      } else if (dialog.kind === "delete-session") {
+        await request(`/api/v1/sessions/${dialog.id}`, { method: "DELETE" });
+        const remaining = sessions.filter((session) => session.id !== dialog.id);
+        const nextId = remaining[0]?.id ?? null;
+        setSessions(remaining); writeSessionSnapshot(remaining);
+        setActiveSessionId(nextId);
+        setActiveDocumentId(null);
+        refresh(nextId).catch(() => {});
+        showNotice("Đã đưa phiên vào lưu trữ.");
+      } else if (dialog.kind === "rename-document" && activeSession) {
+        await request(`/api/v1/sessions/${activeSession.id}/documents/${dialog.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file_name: value }) });
+        setSessions((current) => { const next = current.map((session) => session.id !== activeSession.id ? session : { ...session, documents: session.documents.map((document) => document.id === dialog.id ? { ...document, file_name: value.endsWith(".pdf") ? value : `${value}.pdf` } : document) }); writeSessionSnapshot(next); return next; });
+        refresh(activeSession.id).catch(() => {});
+        showNotice("Đã đổi tên tài liệu.");
+      } else if (dialog.kind === "delete-document" && activeSession) {
+        await request(`/api/v1/sessions/${activeSession.id}/documents/${dialog.id}`, { method: "DELETE" });
+        setSessions((current) => { const next = current.map((session) => session.id !== activeSession.id ? session : { ...session, documents: session.documents.filter((document) => document.id !== dialog.id) }); writeSessionSnapshot(next); return next; });
+        setActiveDocumentId(null);
+        refresh(activeSession.id).catch(() => {});
+        showNotice("Đã đưa tài liệu vào lưu trữ.");
+      }
+      setResourceDialog(null);
+    } catch (error) {
+      showNotice(error.message, "error");
+    } finally { setBusy(false); }
+  }
+
+  async function retryBackend() {
+    setBooting(true);
+    setConnectionState("checking");
+    setBootError("");
+    clearNotice();
+    try {
+      await refresh();
+    } catch (error) {
+      setConnectionState("offline");
+      setBootError(error.message);
+    } finally {
+      setBooting(false);
+    }
+  }
+
+  async function handleJobAction(job, action) {
+    setBusy(true);
+    try {
+      await request(`/api/v1/jobs/${job.id}/${action}`, { method: "POST" });
+      await refresh(activeSession?.id);
+      showNotice(action === "cancel" ? "Đã huỷ tác vụ." : "Đã đưa tác vụ vào hàng đợi thử lại.");
+    } catch (error) { showNotice(error.message, "error"); }
+    finally { setBusy(false); }
   }
 
   async function upload(file) {
     if (!file || !activeSession) return;
     if (file.size > 100 * 1024 * 1024) { showNotice("PDF vượt giới hạn 100 MiB.", "error"); return; }
-    setBusy(true); showNotice("Đang upload và trích text từ PDF…");
+    setBusy(true); showNotice("Đang tải lên và lập chỉ mục tài liệu…");
     try {
       const form = new FormData(); form.append("file", file);
       const result = await request(`/api/v1/sessions/${activeSession.id}/documents`, { method: "POST", body: form });
-      setActiveDocumentId(result.document.id); await refresh(activeSession.id);
-      showNotice(`Đã lưu ${result.document.file_name} (${formatBytes(result.document.byte_size)}); extraction đang chạy nền.`);
+      setSessions((current) => { const next = current.map((session) => session.id !== activeSession.id ? session : { ...session, documents: [...session.documents.filter((document) => document.id !== result.document.id), result.document], updated_at: new Date().toISOString() }); writeSessionSnapshot(next); return next; });
+      setActiveDocumentId(result.document.id);
+      refresh(activeSession.id).catch(() => {});
+      showNotice(`Đã thêm ${result.document.file_name} (${formatBytes(result.document.byte_size)}). Nội dung đang được lập chỉ mục ở nền.`);
     } catch (error) { showNotice(error.message, "error"); } finally { setBusy(false); if (uploadRef.current) uploadRef.current.value = ""; }
   }
 
@@ -461,17 +817,64 @@ function App() {
     finally { setEvidenceBusy(false); }
   }
 
+  const nextTheme = preference === "light" ? "dark" : preference === "dark" ? "system" : "light";
+  const activeJobCount = activeJobs.filter((job) => ["queued", "running"].includes(job.status)).length;
+  const readinessState = runtimeHealth?.readiness?.status ?? (runtimeHealth ? "checking" : "offline");
+  const readinessLabel = readinessState === "ready" ? "Hệ thống sẵn sàng" : readinessState === "degraded" ? "Cần kiểm tra tích hợp" : readinessState === "checking" ? "Đang kiểm tra hệ thống" : "Chưa kết nối API";
+  const readinessBlockers = runtimeHealth?.readiness?.blockers?.join(", ") || "";
+
+  if (!booting && connectionState === "offline" && !sessions.length) {
+    return <div className="app-shell connection-shell">
+      <a className="skip-link" href="#main-content">Bỏ qua điều hướng</a>
+      <header className="topbar">
+        <div className="brand"><span>S</span><div><strong>SourceLens</strong><small>Document intelligence</small></div></div>
+        <div className="top-actions"><span className="connection-pill offline"><i></i>API offline</span></div>
+      </header>
+      <main className="connection-screen" id="main-content">
+        <section className="connection-card" role="alert">
+          <div className="connection-icon"><Icon name="trace" size={24} /></div>
+          <span className="eyebrow">KẾT NỐI HỆ THỐNG</span>
+          <h1>Backend chưa sẵn sàng</h1>
+          <p>{bootError || "Frontend chưa nhận được phản hồi từ API."}</p>
+          <div className="connection-endpoint"><span>API endpoint</span><code>{API}</code></div>
+          <button onClick={retryBackend}><Icon name="refresh" size={15} /> Thử kết nối lại</button>
+          <small>Uvicorn cần chạy trên cổng 8000. Vite sẽ chuyển tiếp các request <code>/api</code> tới backend.</small>
+        </section>
+      </main>
+    </div>;
+  }
+
   return <div className="app-shell">
-    <header className="topbar"><div className="brand"><span>S</span><strong>SourceLens</strong></div><div className="breadcrumb">Workspace <b>/</b> {activeSession?.title ?? "Đang tải…"}</div><div className="top-actions"><button className="audit-button" disabled={!activeDocument || activeDocument.extraction_status !== "ready" || evidenceBusy} onClick={openEvidence}><Icon name="link" size={14} /> Dữ liệu</button><button className="audit-button" disabled={!latestAssistant || traceBusy} onClick={() => openTrace(latestAssistant)}><Icon name="trace" size={14} /> {traceData ? "Đang xem audit" : "Mở audit"}</button><span className="storage-pill">Local workspace</span><button className="upload-button" disabled={!activeSession || busy} onClick={() => uploadRef.current?.click()}><Icon name="upload" size={14} /> Tải PDF</button><input ref={uploadRef} type="file" accept="application/pdf,.pdf" hidden onChange={(event) => upload(event.target.files?.[0])} /></div></header>
-    <main className="workspace">
-      <aside className="session-sidebar"><div className="session-heading"><div><small>WORKSPACE</small><h2>Phiên tài liệu</h2></div><button aria-label="Tạo phiên mới" title="Tạo phiên mới" onClick={createSession} disabled={busy}><Icon name="add" /></button></div><input className="session-search" aria-label="Tìm phiên hoặc tài liệu" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm phiên hoặc tài liệu…" />
-        <div className="session-list">{booting && !sessions.length && <div className="session-loading" role="status">Đang tải workspace…</div>}{!booting && !filteredSessions.length && <div className="session-loading">Chưa có phiên phù hợp.</div>}{filteredSessions.map((session) => <section className={`session-item ${session.id === activeSession?.id ? "active" : ""}`} key={session.id}><button className="session-button" onClick={() => { setActiveSessionId(session.id); setActiveDocumentId(session.documents[0]?.id ?? null); }}><span className="session-icon"><Icon name="folder" size={14} /></span><span><b>{session.title}</b><small>{session.documents.length} tài liệu</small></span></button>{session.id === activeSession?.id && <div className="document-list">{session.documents.map((document) => <button key={document.id} className={document.id === activeDocument?.id ? "selected" : ""} onClick={() => setActiveDocumentId(document.id)}><span className="pdf-dot">PDF</span><span><b>{document.file_name}</b><small>{formatBytes(document.byte_size)} · {document.page_count ?? "?"} trang</small></span></button>)}{!session.documents.length && <button className="empty-document" onClick={() => uploadRef.current?.click()}><Icon name="add" size={13} /> Thêm PDF đầu tiên</button>}</div>}</section>)}</div>
-        <div className="sidebar-note"><b>100 MiB / PDF</b><span>Binary và metadata được lưu local theo session.</span></div>
-      </aside>
+    <a className="skip-link" href="#main-content">Bỏ qua điều hướng</a>
+    <header className="topbar">
+      <div className="brand"><span>S</span><div><strong>SourceLens</strong><small>Document intelligence</small></div></div>
+      <div className="topbar-context"><span>WORKSPACE</span><strong>{activeDocument?.file_name ?? "Thư viện tài liệu"}</strong></div>
+      <nav className="top-nav" aria-label="Điều hướng chính"><button className="top-nav-item active" type="button"><Icon name="grid" size={14} /> Workspace</button><button className="top-nav-item" type="button" onClick={() => onNavigate?.("/app/library")}><Icon name="folder" size={14} /> Tài liệu</button></nav>
+      <div className="top-actions">
+        <span className={`connection-pill ${readinessState === "ready" ? "online" : readinessState === "offline" ? "offline" : "checking"}`} title={readinessBlockers || readinessLabel}><i></i>{readinessLabel}</span>
+        {activeJobs.length > 0 && <button className="job-pill" type="button" aria-label={`Mở trung tâm tác vụ, ${activeJobs.length} tác vụ`} onClick={() => setJobsOpen(true)}><i></i>{activeJobCount > 0 ? `${activeJobCount} đang xử lý` : "Trung tâm tác vụ"}</button>}
+        <button className="icon-button" type="button" title={`Chuyển giao diện sang ${nextTheme}`} aria-label={`Chuyển giao diện sang ${nextTheme}`} onClick={() => setPreference(nextTheme)}><Icon name={resolvedTheme === "dark" ? "moon" : "sun"} size={15} /></button>
+        <button className="audit-button" disabled={!activeDocument || activeDocument.extraction_status !== "ready" || evidenceBusy} onClick={openEvidence}><Icon name="link" size={14} /> Nguồn & số liệu</button>
+        <ProfileMenu user={user} onSignOut={onSignOut} onNavigate={onNavigate} />
+        <button className="upload-button" disabled={!activeSession || busy} onClick={() => uploadRef.current?.click()}><Icon name="upload" size={14} /> Thêm tài liệu</button>
+        <input ref={uploadRef} type="file" accept="application/pdf,.pdf" hidden onChange={(event) => upload(event.target.files?.[0])} />
+      </div>
+    </header>
+    <main className="workspace" id="main-content">
+      <SessionBrowser sessions={sessions} filteredSessions={filteredSessions} activeSession={activeSession} activeDocument={activeDocument} booting={booting} search={search} onSearch={setSearch} busy={busy} onSelectSession={(session) => { setActiveSessionId(session.id); setActiveDocumentId(session.documents[0]?.id ?? null); }} onSelectDocument={setActiveDocumentId} onCreate={createSession} onUpload={() => uploadRef.current?.click()} onDialog={setResourceDialog} onNavigate={onNavigate} />
       <section className="reader-column"><PdfViewer document={activeDocument} sessionId={activeSession?.id} citationPage={citationPage} evidenceQuote={citationQuote} evidenceBbox={citationBbox} />{notice && <div className={`toast ${noticeKind}`} role={noticeKind === "error" ? "alert" : "status"} aria-live="polite"><span>{notice}</span>{retryQuestion && <button onClick={() => submitQuestion(retryQuestion)} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}<button className="toast-close" aria-label="Đóng thông báo" onClick={clearNotice}><Icon name="close" size={13} /></button></div>}</section>
-      <aside className="chat-column"><header className="chat-header"><div className="ai-avatar">S</div><div><h2>Hỏi tài liệu</h2><span>{activeDocument ? activeDocument.file_name : "Chưa chọn tài liệu"}</span></div><span className="mode-badge">{modeLabel}</span></header><div className="chat-body">{!messages.length && <div className="welcome"><div className="welcome-mark"><Icon name="spark" size={18} /></div><h3>Tôi có thể giúp bạn tìm gì?</h3><p>Câu trả lời mặc định dùng retrieval xác định. Khi bật OpenRouter, câu trả lời có summary, claims, công thức, bảng và cảnh báo theo schema.</p>{activeDocument?.extraction_status === "ready" && <button onClick={() => setQuery("Tóm tắt nội dung chính của tài liệu")}>Tóm tắt nội dung chính</button>}</div>}{messages.map((message) => <article key={message.id} className={`message ${message.role}`}><span className="message-avatar">{message.role === "user" ? "B" : "S"}</span><div><small>{message.role === "user" ? "Bạn" : "SourceLens"}</small><StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} onCitation={(page, quote, bbox) => { setCitationPage(page); setCitationQuote(quote); setCitationBbox(normalizedBbox(bbox)); }} />{message.needs_update && <div className="answer-status-note stale-answer"><Icon name="refresh" size={13} /><span>Dữ liệu đầu vào đã thay đổi; câu trả lời này cần tính lại.</span></div>}{message.citations?.map((citation, index) => <button className="citation" key={index} onClick={() => { setCitationPage(citation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(citation.bbox)); }}><Icon name="link" size={12} /> Trang {citation.page}{citation.bbox ? " · bbox" : ""}</button>)}{message.role === "assistant" && !message.pending && !message.failed && <button className="trace-button" disabled={traceBusy} onClick={() => openTrace(message.id)}><Icon name="trace" size={12} /> {traceBusy ? "Đang đọc flow…" : "Data flow"}</button>}</div></article>)}{traceData && <div className="trace-panel"><div className="trace-panel-heading"><div><strong>Data flow audit</strong><small>{traceData.trace?.length ?? 0} events · trace_id {traceData.trace_id ?? "—"}</small></div><button aria-label="Đóng data flow" onClick={() => setTraceData(null)}><Icon name="close" size={14} /></button></div>{(traceData.trace ?? []).map((event, index) => <div className="trace-event" key={`${event.stage}-${index}`}><span className={`trace-dot ${event.status}`}></span><div><b>{event.stage}</b><small>{event.status} · {event.at}</small>{event.provider && <em>{event.provider}</em>}{event.pages && <em>trang: {event.pages.join(", ")}</em>}{event.scores && <em>score: {event.scores.join(", ")}</em>}{event.context_manifest && <em>context: {event.context_manifest.map((item) => `p${item.page} · ${item.chars} ký tự · ${item.text_sha256.slice(0, 10)}…`).join(" | ")}</em>}{event.citation_pages && <em>citation: {event.citation_pages.join(", ")}</em>}</div></div>)}</div>}</div><form className="chat-composer" onSubmit={ask}><textarea aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Tải PDF để bắt đầu" : activeDocument.extraction_status === "ready" ? "Hỏi về tài liệu này…" : "Đang tạo text index…"} disabled={!activeDocument || activeDocument.extraction_status !== "ready" || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Text index sẵn sàng" : activeDocument?.extraction_status === "queued" ? "Extraction đang chạy" : "Chưa có text index"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status !== "ready" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form></aside>
-      <AuditDrawer traceData={traceData} traceMessage={traceMessage} activeDocument={activeDocument} onClose={() => { setTraceData(null); setTraceMessage(null); }} />
+      <aside className="chat-column">
+        <header className="chat-header"><div className="ai-avatar">S</div><div><h2>Trợ lý tài liệu</h2><span>{activeDocument ? activeDocument.file_name : "Chưa chọn tài liệu"}</span></div><span className="mode-badge">{modeLabel}</span></header>
+        <div className="chat-body">
+          {!messages.length && <div className="welcome"><div className="welcome-mark"><Icon name="spark" size={18} /></div><h3>Bắt đầu với tài liệu của bạn</h3><p>Đặt câu hỏi để nhận câu trả lời có dẫn nguồn, trích dẫn theo trang và cấu trúc rõ ràng.</p>{activeDocument?.extraction_status === "ready" && <button onClick={() => setQuery("Tóm tắt nội dung chính của tài liệu")}>Tóm tắt tài liệu</button>}</div>}
+          {messages.map((message) => <article key={message.id} className={`message ${message.role}`}><span className="message-avatar">{message.role === "user" ? "B" : "S"}</span><div><small>{message.role === "user" ? "Bạn" : "Trợ lý SourceLens"}</small><StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} onCitation={(page, quote, bbox) => { setCitationPage(page); setCitationQuote(quote); setCitationBbox(normalizedBbox(bbox)); }} />{message.needs_update && <div className="answer-status-note stale-answer"><Icon name="refresh" size={13} /><span>Dữ liệu nguồn đã thay đổi; câu trả lời này cần được cập nhật.</span></div>}{message.citations?.map((citation, index) => <button className="citation" key={index} onClick={() => { setCitationPage(citation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(citation.bbox)); }}><Icon name="link" size={12} /> Trang {citation.page}{citation.bbox ? " · vùng trích dẫn" : ""}</button>)}{message.role === "assistant" && !message.pending && !message.failed && <button className="trace-button" disabled={traceBusy} onClick={() => openTrace(message.id)}><Icon name="trace" size={12} /> {traceBusy ? "Đang tải luồng…" : "Xem luồng dữ liệu"}</button>}</div></article>)}
+          {traceData && <div className="trace-panel"><div className="trace-panel-heading"><div><strong>Luồng dữ liệu</strong><small>{traceData.trace?.length ?? 0} sự kiện · trace_id {traceData.trace_id ?? "—"}</small></div><button aria-label="Đóng luồng dữ liệu" onClick={() => setTraceData(null)}><Icon name="close" size={14} /></button></div>{(traceData.trace ?? []).map((event, index) => <div className="trace-event" key={`${event.stage}-${index}`}><span className={`trace-dot ${event.status}`}></span><div><b>{event.stage}</b><small>{event.status} · {event.at}</small>{event.provider && <em>{event.provider}</em>}{event.pages && <em>trang: {event.pages.join(", ")}</em>}{event.scores && <em>điểm: {event.scores.join(", ")}</em>}{event.context_manifest && <em>ngữ cảnh: {event.context_manifest.map((item) => `trang ${item.page} · ${item.chars} ký tự · ${item.text_sha256.slice(0, 10)}…`).join(" | ")}</em>}{event.citation_pages && <em>trích dẫn: {event.citation_pages.join(", ")}</em>}</div></div>)}</div>}
+        </div>
+        <form className="chat-composer" onSubmit={ask}><textarea aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Thêm tài liệu để bắt đầu" : activeDocument.extraction_status === "ready" ? "Đặt câu hỏi về tài liệu…" : activeDocument.extraction_status === "failed" ? "Lập chỉ mục thất bại — mở Trung tâm tác vụ để thử lại" : "Đang lập chỉ mục nội dung…"} disabled={!activeDocument || activeDocument.extraction_status !== "ready" || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Đã lập chỉ mục" : activeDocument?.extraction_status === "failed" ? "Lập chỉ mục thất bại" : activeDocument?.extraction_status === "queued" ? "Đang lập chỉ mục…" : "Chưa lập chỉ mục"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status !== "ready" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form>
+      </aside>
       <EvidenceDrawer data={evidenceData} busy={evidenceBusy} onClose={() => setEvidenceData(null)} onFocus={(evidence) => { setCitationPage(evidence.page_number); setCitationQuote(""); setCitationBbox(normalizedBbox(evidence.bbox)); }} onSave={saveEvidence} />
+      <ResourceDialog dialog={resourceDialog} busy={busy} onClose={() => setResourceDialog(null)} onConfirm={confirmResourceAction} />
+      <JobCenterDrawer jobs={jobsOpen ? activeJobs : null} busy={busy} onClose={() => setJobsOpen(false)} onAction={handleJobAction} />
     </main>
   </div>;
 }
