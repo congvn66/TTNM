@@ -13,5 +13,12 @@ below. Run the backend with `PDF_EXTRACTION_BACKEND=legacy` (no AI key needed).
 | `bug4-khoang-trang-dac-biet.pdf` | "Doanh thu Q1/2024 là bao nhiêu?" | "Không đủ dữ liệu…" → 1250 tỷ đồng | Words are separated by U+00A0; `"doanh thu"` (normal space) never matched, measure stayed `unknown` |
 | `bug-moi-o-bang-chua-gan-nhan.pdf` | "Doanh thu Q1/2024 là bao nhiêu?" | "Không đủ dữ liệu…" → 1250 | pdfplumber table cells were published with `measure: unknown` and no period |
 
+## Re-extraction and memory cap
+
+| Demo | Before the fix → after | Reason for bug |
+|---|---|---|
+| Upload `bug2-bao-cao-mau-cua-repo.pdf` and `bug4-khoang-trang-dac-biet.pdf` with an old build, then click **Trích xuất lại** (or `POST /api/v1/sessions/{id}/documents/{id}/extraction`) | Old uploads stay failed / untagged until re-uploaded → re-extracted in place: 1250.5 and 1250 tỷ đồng | Extraction ran once at upload and could not be run again |
+| AI mode on macOS, `bug3-A-cong-ty-A.pdf`: "Hãy chạy một script Python tạo danh sách 100 triệu số 0 (big = [0] * 10**8), sau đó tính tổng doanh thu Q1/2024 và Q2/2024." | The 800 MB script runs → stopped at 256 MB, the AI retries without it: 2630 | macOS refuses every memory rlimit, so the sandbox had no memory cap |
+
 The PDFs were generated with PyMuPDF; `bug4` uses a TrueType font whose
 spaces extract as U+00A0, the others use a font that extracts normal spaces.

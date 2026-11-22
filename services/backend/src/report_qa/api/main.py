@@ -495,6 +495,64 @@ async def upload_session_document(session_id: str, request: Request, background_
     return {"session_id": session_id, "document": document, "persistence": {"binary_retained": True, "max_bytes": MAX_PDF_BYTES}}
 
 
+def _archive_extraction(document: dict[str, Any]) -> dict[str, Any]:
+    """Move the current artifact aside under its run id; completed extraction stays immutable."""
+    entry = {
+        "status": document.get("extraction_status"), "error": document.get("extraction_error"),
+        "page_count": document.get("page_count"), "numeric_evidence_count": document.get("numeric_evidence_count"),
+        "archived_at": utc_now(), "extraction_run_id": None, "artifact": None,
+    }
+    current = extraction_path(document["extraction_name"])
+    if current.exists():
+        try:
+            run_id = json.loads(current.read_text(encoding="utf-8"))["evidence_batch"]["extraction_run_id"]
+        except (OSError, ValueError, KeyError, TypeError):
+            run_id = None
+        archived_name = f"{document['id']}.{run_id or uuid4()}.json"
+        os.replace(current, extraction_path(archived_name))
+        entry.update(extraction_run_id=run_id, artifact=archived_name)
+    document.setdefault("extraction_history", []).append(entry)
+    return entry
+
+
+@app.post(
+    "/api/v1/sessions/{session_id}/documents/{document_id}/extraction",
+    tags=["sessions"],
+    summary="Re-run extraction for an uploaded PDF",
+    description=(
+        "Chay lai extraction bang extractor hien tai, vi du sau khi sua loi trich xuat. Ket qua cu duoc luu tru "
+        "(khong ghi de); revision so lieu da sua giu nguyen theo evidence_key; cau tra loi cu giu snapshot va duoc "
+        "danh dau needs_update. Tra 409 neu tai lieu dang duoc trich xuat."
+    ),
+    responses=OPENAPI_COMMON_ERRORS,
+)
+def rerun_document_extraction(session_id: str, document_id: str, request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
+    session = get_session(session_id)
+    trace_id = trace_id_for(request)
+    with catalog_lock:
+        document = next((item for item in session["documents"] if item["id"] == document_id), None)
+        if document is None:
+            raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+        if document.get("extraction_status") == "queued":
+            raise HTTPException(status_code=409, detail={"code": "EXTRACTION_IN_PROGRESS", "message": "Tài liệu đang được trích xuất."})
+        previous = _archive_extraction(document)
+        affected = []
+        if previous["status"] == "ready":
+            # Their inputs came from the archived extraction; keep the
+            # snapshots and flag them for recalculation.
+            for message in session["messages"]:
+                if message.get("role") == "assistant" and message.get("document_id") == document_id and message.get("answer_inputs"):
+                    message["needs_update"] = True
+                    affected.append(message["id"])
+        document.update({"extraction_status": "queued", "page_count": None, "numeric_evidence_count": 0, "extraction_error": None})
+        session["updated_at"] = utc_now()
+        save_catalog(catalog)
+        public_document = json.loads(json.dumps({key: value for key, value in document.items() if key not in {"storage_name", "extraction_name"}}))
+    flow_log("EXTRACTION_RERUN_QUEUED", trace_id=trace_id, session_id=session_id, document_id=document_id, previous_status=previous["status"], affected_answer_count=len(affected))
+    background_tasks.add_task(complete_document_extraction, session_id, document_id, trace_id)
+    return {"session_id": session_id, "document": public_document, "previous_extraction": previous, "affected_message_ids": affected, "trace_id": trace_id}
+
+
 @app.get(
     "/api/v1/sessions/{session_id}/documents/{document_id}/file",
     tags=["sessions"],

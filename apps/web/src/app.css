@@ -4,3 +4,4 @@
 .pdf-text-layer { position: absolute; inset: 30px; overflow: hidden; pointer-events: none; }
 .pdf-text-layer span { position: absolute; overflow: hidden; white-space: pre; color: transparent; transform-origin: 0 0; }
 .pdf-text-layer span.evidence-hit { color: transparent; background: rgba(249, 220, 72, .58); border-radius: 2px; box-shadow: 0 0 0 1px rgba(160, 120, 18, .3); }
+.reextract-button{display:flex;align-items:center;gap:5px;height:27px;border:1px solid #cbd7cd;border-radius:6px;background:#fff;color:#345845;padding:0 9px;font-size:10px;font-weight:750;cursor:pointer;white-space:nowrap}.reextract-button:disabled{opacity:.45;cursor:default}

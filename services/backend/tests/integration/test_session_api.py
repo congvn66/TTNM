@@ -75,6 +75,7 @@ def test_health_docs_and_openapi_expose_only_the_main_flow() -> None:
         "/api/v1/sessions/{session_id}",
         "/api/v1/sessions/{session_id}/documents",
         "/api/v1/sessions/{session_id}/documents/{document_id}/file",
+        "/api/v1/sessions/{session_id}/documents/{document_id}/extraction",
         "/api/v1/sessions/{session_id}/documents/{document_id}/evidences",
         "/api/v1/sessions/{session_id}/documents/{document_id}/evidences/{evidence_key}/revisions",
         "/api/v1/sessions/{session_id}/messages",
@@ -605,5 +606,69 @@ def test_calculation_answer_separates_value_and_unit() -> None:
         )
         assert response.status_code == 200, response.text
         assert response.json()["assistant_message"]["body"] == "Kết quả: 120 VND."
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_failed_upload_can_be_extracted_again_without_reupload(monkeypatch) -> None:
+    from report_qa.application.evidence_extraction import extract_legacy_pdf_artifact
+
+    def broken_extractor(path, document_version_id):
+        raise RuntimeError("old extractor bug")
+
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", broken_extractor)
+    created = client.post("/api/v1/sessions", json={"title": "Re-extract failed"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2025 was 100.")
+        assert client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_status"] == "failed"
+
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", extract_legacy_pdf_artifact)
+        rerun = client.post(f"/api/v1/sessions/{created['id']}/documents/{document_id}/extraction")
+
+        assert rerun.status_code == 200, rerun.text
+        assert rerun.json()["previous_extraction"]["status"] == "failed"
+        document = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]
+        assert (document["extraction_status"], document["page_count"]) == ("ready", 1)
+        assert [entry["status"] for entry in document["extraction_history"]] == ["failed"]
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_reextracting_a_ready_document_archives_the_old_result_and_keeps_edits() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Re-extract ready"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2025 was 100. Revenue Q1/2026 was 120.")
+        answer = client.post(
+            f"/api/v1/sessions/{created['id']}/messages",
+            json={"document_id": document_id, "question": "By what percent did revenue change from Q1/2025 to Q1/2026?"},
+        ).json()["assistant_message"]
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        item = next(row for row in client.get(f"{base}/evidences").json()["evidences"] if row["current_numeric_value"] == "100")
+        client.post(f"{base}/evidences/{item['evidence_key']}/revisions", json={"numeric_value": "110", "reason": "Đối chiếu PDF", "expected_revision_id": item["current_revision_id"]})
+        stored = api_main.catalog["sessions"][created["id"]]["documents"][0]
+        old_run_id = json.loads(api_main.extraction_path(stored["extraction_name"]).read_text(encoding="utf-8"))["evidence_batch"]["extraction_run_id"]
+
+        rerun = client.post(f"{base}/extraction")
+
+        assert rerun.status_code == 200, rerun.text
+        previous = rerun.json()["previous_extraction"]
+        assert (previous["status"], previous["extraction_run_id"]) == ("ready", old_run_id)
+        assert api_main.extraction_path(previous["artifact"]).exists()  # archived, not overwritten
+        assert answer["id"] in rerun.json()["affected_message_ids"]
+        after = next(row for row in client.get(f"{base}/evidences").json()["evidences"] if row["evidence_key"] == item["evidence_key"])
+        assert (after["original_numeric_value"], after["current_numeric_value"]) == ("100", "110")
+    finally:
+        api_main.extraction_path(f"{document_id}.{old_run_id}.json").unlink(missing_ok=True)
+        cleanup_session(created["id"])
+
+
+def test_reextraction_is_refused_while_extraction_is_running() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Re-extract busy"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2025 was 100.")
+        api_main.catalog["sessions"][created["id"]]["documents"][0]["extraction_status"] = "queued"
+        busy = client.post(f"/api/v1/sessions/{created['id']}/documents/{document_id}/extraction")
+        assert busy.status_code == 409
+        assert busy.json()["detail"]["code"] == "EXTRACTION_IN_PROGRESS"
     finally:
         cleanup_session(created["id"])
