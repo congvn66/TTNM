@@ -92,7 +92,8 @@ def answer_document(session, document, question, trace_id, trace, catalog, *, ov
     complete = complete or client.complete
     extraction = json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
     current = overlay(document, with_chart_batches(document, extraction))
-    read_regions = {r.get("chart_region_key") for r in document.get("chart_extractions", [])}
+    # A read whose visual check failed does not count: the AI may read it again.
+    read_regions = {r.get("chart_region_key") for r in document.get("chart_extractions", []) if not r.get("visual_check_error")}
     # Full text, current numeric values and readable chart regions.
     context = {
         "pages": current["pages"],
@@ -120,8 +121,15 @@ def answer_document(session, document, question, trace_id, trace, catalog, *, ov
     })
 
     def chart_tool(key):
+        # Reuse a completed read, but not one whose visual check failed (e.g.
+        # provider HTTP 503): caching that left every value of the chart
+        # unverified for good. DePlot's own output is cached on disk, so a
+        # retry only repeats the visual check.
         cached = next(
-            (r for r in reversed(document.get("chart_extractions", [])) if r.get("chart_region_key") == key),
+            (
+                r for r in reversed(document.get("chart_extractions", []))
+                if r.get("chart_region_key") == key and not r.get("visual_check_error")
+            ),
             None,
         )
         if cached is None:

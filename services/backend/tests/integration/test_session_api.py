@@ -436,6 +436,8 @@ def test_ready_missing_fact_calls_only_selected_chart(monkeypatch):
         assert calls[0].fact_keys == ('baseline',)
         assert calls[0].chart_region_keys == ('revenue-chart',)
         assert len(calls[0].fact_requirements) == 1
+        # The reason is saved with the answer, not only in the HTTP response.
+        assert any('biểu đồ' in warning for warning in response.json()['assistant_message']['structured_answer']['warnings'])
     finally:
         cleanup_session(created['id'])
 
@@ -670,5 +672,35 @@ def test_reextraction_is_refused_while_extraction_is_running() -> None:
         busy = client.post(f"/api/v1/sessions/{created['id']}/documents/{document_id}/extraction")
         assert busy.status_code == 409
         assert busy.json()["detail"]["code"] == "EXTRACTION_IN_PROGRESS"
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_subject_only_lookup_uses_table_evidence_when_it_exists(monkeypatch) -> None:
+    # Recorded Docling output: table cells carry the row header (Q1..Q4) as
+    # subject and no period. "Doanh thu Q1" used to skip evidence entirely.
+    from pathlib import Path
+
+    recorded = json.loads((Path(__file__).parents[4] / "examples/tien-extraction/output/document.json").read_text(encoding="utf-8"))
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", lambda path, version: {**recorded, "evidence_batch": {**recorded["evidence_batch"], "document_version_id": version}})
+    created = client.post("/api/v1/sessions", json={"title": "Subject lookup"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu theo quy.")
+        answer = client.post(f"/api/v1/sessions/{created['id']}/messages", json={"document_id": document_id, "question": "Doanh thu Q1 là bao nhiêu?"})
+        assert answer.status_code == 200, answer.text
+        assistant = answer.json()["assistant_message"]
+        assert assistant["mode"] == "deterministic_calculation"
+        assert assistant["answer_inputs"][0]["value"] == "1250.50"
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_subject_only_lookup_without_matching_evidence_keeps_the_text_answer() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Subject fallback"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue in region North grew strongly this year.")
+        answer = client.post(f"/api/v1/sessions/{created['id']}/messages", json={"document_id": document_id, "question": "Revenue region North?"})
+        assert answer.status_code == 200, answer.text
+        assert answer.json()["assistant_message"]["mode"] == "deterministic_text_retrieval"
     finally:
         cleanup_session(created["id"])

@@ -732,6 +732,7 @@ def ensure_document_evidence_state(document: dict[str, Any], extraction: dict[st
     for evidence in (extraction.get("evidence_batch") or {}).get("evidences", []):
         key = evidence["evidence_key"]
         if key in items:
+            _record_reread_value(state, items[key], evidence.get("numeric_value"))
             continue
         now = utc_now()
         initial = {
@@ -744,6 +745,26 @@ def ensure_document_evidence_state(document: dict[str, Any], extraction: dict[st
             "current_revision_id": initial["id"], "revisions": [initial],
         }
     return state
+
+
+def _record_reread_value(state: dict[str, Any], item: dict[str, Any], value: str | None) -> None:
+    """Append the value a later read supplies when the first read withheld it.
+
+    E.g. a chart whose visual check failed (provider 503) is read again and
+    now verified under the same evidence key. Without this the key kept its
+    first, empty value forever. User edits always win; history stays append-only.
+    """
+    current = item["revisions"][-1]
+    if value is None or current.get("numeric_value") is not None or current.get("action") == "edit":
+        return
+    revision = {
+        "id": str(uuid4()), "revision_no": len(item["revisions"]) + 1, "action": "reread", "created_at": utc_now(),
+        "numeric_value": value, "old_numeric_value": None, "previous_revision_id": current["id"],
+        "reason": "Giá trị được đọc lại và xác minh.",
+    }
+    item["revisions"].append(revision)
+    item["current_revision_id"] = revision["id"]
+    state["data_revision"] = state.get("data_revision", 0) + 1
 
 
 def extraction_with_evidence_revisions(document: dict[str, Any], extraction: dict[str, Any]) -> dict[str, Any]:
@@ -971,7 +992,21 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     )
     selected_scores = {int(item[0]["page"]): item[1] for item in ranked_pages}
     operation = question_plan.get("operation") or {}
-    if operation.get("type") != "lookup" or any(fact.get("measure") != "unknown" and fact.get("period") for fact in question_plan.get("facts", [])):
+    facts = question_plan.get("facts", [])
+    structured = operation.get("type") != "lookup" or any(fact.get("measure") != "unknown" and fact.get("period") for fact in facts)
+    if not structured and any(fact.get("measure") != "unknown" and fact.get("subject") for fact in facts):
+        # A lookup naming only a subject ("doanh thu vùng A") used to skip
+        # evidence and charts entirely. Use them when they can answer: a
+        # matching number, or a chart on the retrieved pages; otherwise keep
+        # the text answer.
+        probe_extraction = extraction_with_evidence_revisions(document, with_chart_batches(document, json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))))
+        context_page_numbers = {int(item["page"]) for item in context_pages}
+        probe = resolve_evidence(question_plan, probe_extraction, context_page_numbers)
+        structured = probe["status"] == "resolved" or (
+            probe["status"] == "chart_required"
+            and any(int(region["page_number"]) in context_page_numbers for region in probe_extraction.get("chart_regions", []))
+        )
+    if structured:
         base_extraction = with_chart_batches(document, json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8")))
         extraction = extraction_with_evidence_revisions(document, base_extraction)
         resolution = resolve_evidence(question_plan, extraction, {int(item["page"]) for item in context_pages})
@@ -1043,6 +1078,14 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
             )
         )
         answer, structured_answer = calculation_answer(question_plan, calculation, resolution["bindings"])
+        if resolution["status"] == "chart_required":
+            # The reason was only in the HTTP response's limitations, so the
+            # saved answer just said "Không đủ dữ liệu" with no explanation.
+            chart_attempted = any(event["stage"] == "chart_read" for event in trace)
+            structured_answer["warnings"].append(
+                "Đã đọc biểu đồ nhưng chưa xác minh được nhãn/trục, nên không dùng số đọc được; chế độ AI có bước kiểm tra trực quan."
+                if chart_attempted else "Số liệu cần lấy từ biểu đồ nhưng chưa xác định được biểu đồ nguồn."
+            )
         citations = [
             {
                 "page": int(item["page_number"]),

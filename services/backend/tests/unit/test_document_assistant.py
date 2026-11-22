@@ -199,3 +199,89 @@ def test_chart_batch_is_persisted_and_current_revision_is_exposed(tmp_path, monk
     assert state["original_numeric_value"] == "26"
     read.assert_called_once()
     assert save.call_count >= 3
+
+
+def test_chart_read_with_a_failed_visual_check_is_retried_on_the_next_question(tmp_path, monkeypatch):
+    # A provider 503 during the visual check used to be cached, leaving every
+    # value of that chart unverified for all later questions.
+    from report_qa.api import document_assistant_flow as flow
+    from report_qa.api.main import extraction_with_evidence_revisions, snapshot_answer_revision
+
+    base = json.loads((REPO / "examples/tien-extraction/output/document.json").read_text())
+    path = tmp_path / "base.json"
+    path.write_text(json.dumps(base))
+    monkeypatch.setattr(flow, "extraction_path", lambda name: path)
+    monkeypatch.setattr(flow, "save_catalog", Mock())
+    region = base["chart_regions"][0]["chart_region_key"]
+    empty_batch = {**base["evidence_batch"], "scope": "on_demand_chart", "evidences": [], "warnings": [],
+                   "trigger": {"question_plan_id": "q", "fact_keys": ["b"], "chart_region_keys": [region]}}
+    read = Mock(side_effect=[
+        {"status": "completed", "evidence_batch": empty_batch, "raw_output": "B | 26", "visual_check_error": "HTTP 503"},
+        {"status": "completed", "evidence_batch": empty_batch, "raw_output": "B | 26", "visual_check_error": None},
+    ])
+    monkeypatch.setattr(flow, "read_chart_region", read)
+    doc = {"id": "doc", "extraction_name": "base.json", "storage_name": "source.pdf"}
+    session = {"messages": []}
+
+    def ask():
+        flow.answer_document(
+            session, doc, "B?", "trace", [], {"sessions": {"test": session}},
+            overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision,
+            complete=sequence({"action": "read_chart", "chart_region_key": region},
+                              {"action": "answer", "answer": "Không đọc được.", "not_found": True}),
+        )
+
+    ask()
+    ask()
+    ask()  # third question reuses the successful read
+    assert read.call_count == 2
+
+
+def test_value_withheld_by_a_failed_check_is_filled_in_when_the_chart_is_read_again(tmp_path, monkeypatch):
+    # The first read stored the key with no value; the verified re-read used
+    # the same key, but the empty first value stayed current forever.
+    from report_qa.api import document_assistant_flow as flow
+    from report_qa.api.main import extraction_with_evidence_revisions, snapshot_answer_revision
+
+    base = json.loads((REPO / "examples/tien-extraction/output/document.json").read_text())
+    path = tmp_path / "base.json"
+    path.write_text(json.dumps(base))
+    monkeypatch.setattr(flow, "extraction_path", lambda name: path)
+    monkeypatch.setattr(flow, "save_catalog", Mock())
+    region = base["chart_regions"][0]["chart_region_key"]
+
+    def batch(value, status):
+        chart = copy.deepcopy(base["evidence_batch"]["evidences"][0])
+        chart.update(
+            evidence_key="chart-e", source_region_key=region, source_type="chart", numeric_value=value, raw_text="77",
+            data_status=status, extraction_method="direct_label", method_label="đọc từ nhãn", table_locator=None,
+            chart_read={"chart_region_key": region, "series_label": "Revenue", "category_label": "E", "axis_label": None,
+                        "axis_unit": None, "lower_tick": None, "upper_tick": None, "assumptions": ["test"]},
+        )
+        return {**base["evidence_batch"], "scope": "on_demand_chart", "evidences": [chart], "warnings": [],
+                "trigger": {"question_plan_id": "q", "fact_keys": ["e"], "chart_region_keys": [region]}}
+
+    read = Mock(side_effect=[
+        {"status": "completed", "evidence_batch": batch(None, "ambiguous"), "raw_output": "E | 77", "visual_check_error": "HTTP 503"},
+        {"status": "completed", "evidence_batch": batch("77", "valid"), "raw_output": "E | 77", "visual_check_error": None},
+    ])
+    monkeypatch.setattr(flow, "read_chart_region", read)
+    doc = {"id": "doc", "extraction_name": "base.json", "storage_name": "source.pdf"}
+    session = {"messages": []}
+
+    def ask(*actions):
+        return flow.answer_document(
+            session, doc, "E?", "trace", [], {"sessions": {"test": session}},
+            overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision, complete=sequence(*actions),
+        )["assistant_message"]
+
+    ask({"action": "read_chart", "chart_region_key": region}, {"action": "answer", "answer": "Chưa xác minh.", "not_found": True})
+    message = ask(
+        {"action": "read_chart", "chart_region_key": region},
+        {"action": "python", "code": "result = value('chart-e')"},
+        {"action": "answer", "answer": "Vùng E là 77.", "evidence_keys": ["chart-e"]},
+    )
+
+    assert message["tool_calculations"][0]["result"]["result"] == "77"
+    revisions = doc["evidence_state"]["items"]["chart-e"]["revisions"]
+    assert [(r["action"], r["numeric_value"]) for r in revisions] == [("initialize", None), ("reread", "77")]
