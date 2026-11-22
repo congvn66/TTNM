@@ -108,3 +108,15 @@ def test_assistant_runs_script_retries_errors_and_cites_its_inputs():
     assert [c["result"]["result"] for c in result["calculations"]] == ["2230.50"]
     feedback = json.loads(complete.call_args.args[1])["tool_results"]
     assert feedback[0]["result"]["status"] == "failed"
+
+
+def test_memory_hungry_script_is_stopped_on_every_platform():
+    # macOS refuses RLIMIT_AS, so without a watcher an 800 MB list just ran.
+    import time
+
+    started = time.monotonic()
+    result = run_calculation("big = [0] * (10 ** 8)\nresult = value('a')", facts())
+
+    assert result["status"] == "failed"
+    assert "memory" in result["error"].lower()
+    assert time.monotonic() - started < 4
