@@ -8,7 +8,9 @@
   </head>
   <body>
     <div id="app"></div>
-    <script>window.SOURCELENS_API="http://127.0.0.1:8001";</script>
+    <!-- The API base defaults to http://127.0.0.1:8000 in src/App.jsx (the
+         port the README starts uvicorn on). To point at another backend, set
+         window.SOURCELENS_API in a script before main.jsx. -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
