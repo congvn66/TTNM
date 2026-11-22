@@ -144,10 +144,16 @@ def validate_script(code, evidence=None):
 _RUNNER = r"""
 import json,sys,math,statistics,resource,decimal
 from decimal import Decimal
-resource.setrlimit(resource.RLIMIT_CPU,(2,2))
-resource.setrlimit(resource.RLIMIT_AS,(256*1024*1024,256*1024*1024))
-resource.setrlimit(resource.RLIMIT_FSIZE,(0,0))
-resource.setrlimit(resource.RLIMIT_NOFILE,(16,16))
+def limit(name, value):
+    # macOS rejects RLIMIT_AS (ValueError); a limit the OS refuses must not
+    # stop the calculation. CPU time and the parent's wall-clock timeout
+    # still bound every script.
+    try: resource.setrlimit(getattr(resource, name), (value, value))
+    except (ValueError, OSError, AttributeError): pass
+limit('RLIMIT_CPU', 2)
+limit('RLIMIT_AS', 256*1024*1024)
+limit('RLIMIT_FSIZE', 0)
+limit('RLIMIT_NOFILE', 16)
 payload=json.load(sys.stdin)
 used=[]
 printed=[]

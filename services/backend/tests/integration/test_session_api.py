@@ -499,3 +499,111 @@ def test_planner_provider_failure_falls_back_to_rules(monkeypatch):
         assert plan_event["planner"] == "rules" and plan_event["planner_fallback"] == "PLANNER_PROVIDER_FAILED"
     finally:
         cleanup_session(created["id"])
+
+
+def _upload(session_id: str, text: str, name: str = "doc.pdf") -> str:
+    uploaded = client.post(
+        f"/api/v1/sessions/{session_id}/documents",
+        files={"file": (name, pdf_with_text(text), "application/pdf")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    return uploaded.json()["document"]["id"]
+
+
+def test_clarification_on_one_document_is_not_applied_to_another() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Two documents"}).json()["session"]
+    try:
+        text = "Revenue Q1/2025 was 100. Revenue Q1/2026 was 120."
+        first_doc = _upload(created["id"], text, "a.pdf")
+        second_doc = _upload(created["id"], text, "b.pdf")
+        asked = client.post(
+            f"/api/v1/sessions/{created['id']}/messages",
+            json={"document_id": first_doc, "question": "How much did revenue increase from Q1/2025 to Q1/2026?"},
+        )
+        assert asked.json()["assistant_message"]["mode"] == "question_clarification"
+
+        elsewhere = client.post(
+            f"/api/v1/sessions/{created['id']}/messages",
+            json={"document_id": second_doc, "question": "Percentage change"},
+        )
+        assert elsewhere.status_code in {200, 422}, elsewhere.text
+        if elsewhere.status_code == 200:
+            plan = elsewhere.json()["assistant_message"]["question_plan"]
+            assert plan["original_question"] == "Percentage change"
+            assert (plan.get("operation") or {}).get("type") != "growth_rate"
+
+        # The clarification is still pending on the document it was asked about.
+        answered = client.post(
+            f"/api/v1/sessions/{created['id']}/messages",
+            json={"document_id": first_doc, "question": "Percentage change"},
+        )
+        assert answered.status_code == 200, answered.text
+        assert answered.json()["assistant_message"]["calculation_result"]["value"] == "20"
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_revision_endpoints_return_409_while_extraction_is_not_ready(monkeypatch) -> None:
+    def broken_extractor(path, document_version_id):
+        raise RuntimeError("extractor failed")
+
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", broken_extractor)
+    created = client.post("/api/v1/sessions", json={"title": "Failed extraction"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2025 was 100.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}/evidences/ev-any/revisions"
+        history = client.get(base)
+        edit = client.post(base, json={"numeric_value": "1", "reason": "test", "expected_revision_id": "x"})
+        assert (history.status_code, edit.status_code) == (409, 409)
+        assert history.json()["detail"]["code"] == edit.json()["detail"]["code"] == "EXTRACTION_NOT_READY"
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_same_number_with_a_different_spelling_is_not_a_new_revision() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Same value"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2025 was 100.")
+        evidences = client.get(f"/api/v1/sessions/{created['id']}/documents/{document_id}/evidences").json()["evidences"]
+        item = next(row for row in evidences if row["current_numeric_value"] == "100")
+        response = client.post(
+            f"/api/v1/sessions/{created['id']}/documents/{document_id}/evidences/{item['evidence_key']}/revisions",
+            json={"numeric_value": "100.00", "reason": "same number", "expected_revision_id": item["current_revision_id"]},
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"]["code"] == "VALUE_UNCHANGED"
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_queued_documents_are_extracted_again_after_a_restart() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Interrupted extraction"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2025 was 100.")
+        document = api_main.catalog["sessions"][created["id"]]["documents"][0]
+        # Simulate a process that stopped before the background task ran.
+        document.update({"extraction_status": "queued", "page_count": None, "numeric_evidence_count": 0})
+        api_main.extraction_path(document["extraction_name"]).unlink()
+
+        resumed = api_main.resume_interrupted_extractions(background=False)
+
+        assert document_id in resumed
+        session = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]
+        assert session["documents"][0]["extraction_status"] == "ready"
+        assert session["documents"][0]["page_count"] == 1
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_calculation_answer_separates_value_and_unit() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Unit spacing"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120 VND.")
+        response = client.post(
+            f"/api/v1/sessions/{created['id']}/messages",
+            json={"document_id": document_id, "question": "What was revenue in Q1/2026?"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["assistant_message"]["body"] == "Kết quả: 120 VND."
+    finally:
+        cleanup_session(created["id"])

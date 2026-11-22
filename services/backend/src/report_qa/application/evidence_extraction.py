@@ -8,18 +8,61 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from report_qa.domain.contracts import validate_document_evidence_v2
+from report_qa.application.numeric_extraction import canonical_decimal
 from report_qa.application.ocr_extraction import TesseractPdfOcr
 from report_qa.application.table_extraction import PdfPlumberTableExtractor
 
 
 NUMBER_RE = re.compile(r"(?<![\w/])[-+]?(?:\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,]\d+)?%?")
-QUARTER_RE = re.compile(r"(?i)\b(?:q|quý\s*)([1-4])\s*[/\- ]\s*((?:19|20)\d{2})\b")
+QUARTER_RE = re.compile(r"(?i)\b(?:q|quý\s*)([1-4])\s*[/\-\s]\s*((?:19|20)\d{2})\b")
 YEAR_RE = re.compile(r"(?<![/\d])((?:19|20)\d{2})(?!\d)")
+# "Q1" in a table header with no year next to it.
+BARE_QUARTER_RE = re.compile(r"(?i)\b(?:q|quý\s*)([1-4])\b(?!\s*[/\-]\s*(?:19|20)\d{2})")
+
+
+def _matrix_product(m: Any, n: Any) -> list[float]:
+    """Affine product m x n for PDF matrices [a, b, c, d, e, f]."""
+    return [
+        m[0] * n[0] + m[1] * n[2], m[0] * n[1] + m[1] * n[3],
+        m[2] * n[0] + m[3] * n[2], m[2] * n[1] + m[3] * n[3],
+        m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5],
+    ]
+
+
+def _single_year(text: str) -> str | None:
+    years = set(YEAR_RE.findall(text))
+    return years.pop() if len(years) == 1 else None
+
+
+def _period_for(context: str, raw: str, page_year: str | None) -> dict[str, Any] | None:
+    """Period next to the number; a bare "Q1" header takes the page's only year."""
+    period = _period_near(context, context.rfind(raw))
+    if period is None and page_year:
+        match = BARE_QUARTER_RE.search(context)
+        if match:
+            quarter = int(match.group(1))
+            period = {
+                "label": f"Q{quarter}/{page_year}",
+                "start": f"{page_year}-{(quarter - 1) * 3 + 1:02d}-01",
+                "end": None,
+                "granularity": "quarter",
+            }
+    return period
+
+
+def _keyword_text(text: str) -> str:
+    """Casefolded text for keyword checks.
+
+    PDFs often separate words with U+00A0 (non-breaking space) and may store
+    Vietnamese diacritics decomposed; both made "doanh thu" never match.
+    """
+    return " ".join(unicodedata.normalize("NFKC", text).split()).casefold()
 
 
 def _clamp(value: float) -> float:
@@ -68,10 +111,10 @@ def _decimal_text(raw: str) -> str:
             value = "".join(pieces)
         else:
             value = ".".join(pieces)
-    value = value.lstrip("0") or "0"
-    if value.startswith("."):
-        value = f"0{value}"
-    return f"{sign}{value}" if value != "0" else "0"
+    # Canonical form drops a leading "+" ("+12" was passed through and failed
+    # contract validation for the whole document) and raises ValueError for
+    # text that is not a number, which the caller records as a warning.
+    return canonical_decimal(f"{sign}{value}")
 
 
 def _period_near(text: str, number_start: int) -> dict[str, Any] | None:
@@ -102,7 +145,7 @@ def _period_near(text: str, number_start: int) -> dict[str, Any] | None:
 
 
 def _unit_near(text: str, raw: str) -> str | None:
-    lowered = text.casefold()
+    lowered = _keyword_text(text)
     if raw.endswith("%") or "phần trăm" in lowered or "percent" in lowered:
         return "PERCENT"
     if ("million" in lowered or "triệu" in lowered) and ("vnd" in lowered or "đồng" in lowered):
@@ -123,7 +166,7 @@ def _unit_near(text: str, raw: str) -> str | None:
 
 
 def _measure(text: str) -> str:
-    lowered = text.casefold()
+    lowered = _keyword_text(text)
     aliases = (
         (("doanh thu", "revenue"), "doanh_thu"),
         (("lợi nhuận", "profit"), "loi_nhuan"),
@@ -154,13 +197,21 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
         height = float(page.mediabox.height) or 1.0
         spans: list[dict[str, Any]] = []
 
-        def visitor(text: str, _cm: Any, tm: Any, _font: Any, font_size: float) -> None:
+        def visitor(text: str, cm: Any, tm: Any, _font: Any, font_size: float) -> None:
             if not text or not text.strip():
                 return
-            spans.append({"text": text, "x": float(tm[4]), "y": float(tm[5]), "font_size": float(font_size or 10.0)})
+            # The text matrix is relative to the current transformation
+            # matrix. Using tm alone put text drawn under a "cm" translation
+            # (e.g. a table block) at the wrong place: wrong bbox, rows merged
+            # across blocks, and table cells never matched to the pdfplumber
+            # region, so every cell was published twice.
+            matrix = _matrix_product(tm, cm)
+            scale = (matrix[2] ** 2 + matrix[3] ** 2) ** 0.5 or 1.0
+            spans.append({"text": text, "x": float(matrix[4]), "y": float(matrix[5]), "font_size": float(font_size or 10.0) * scale})
 
         page_text = page.extract_text(visitor_text=visitor) or ""
         pages.append({"page": page_number, "text": page_text})
+        page_year = _single_year(page_text)
 
         # OCR is intentionally page-scoped and only used when the PDF has no
         # usable text layer.  A missing engine becomes an explicit warning;
@@ -271,7 +322,7 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
                         "semantic": {
                             "measure": _measure(semantic_context),
                             "subject": None,
-                            "period": _period_near(semantic_context, semantic_context.rfind(raw)),
+                            "period": _period_for(semantic_context, raw, page_year),
                             "unit": _unit_near(semantic_context, raw),
                             "dimensions": {},
                         },
@@ -305,7 +356,20 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
             cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
             return any(number == item["page_number"] and left <= cx <= right and top <= cy <= bottom for number, (left, top, right, bottom) in complex_tables.regions)
         evidences = [item for item in evidences if not inside_complex_region(item)]
-        evidences.extend(complex_tables.evidences)
+        # pdfplumber cells arrive untagged (measure "unknown", no period);
+        # tag them from their row/column headers like every other number.
+        page_years = {page["page"]: _single_year(page["text"]) for page in pages}
+        for item in complex_tables.evidences:
+            context = complex_tables.contexts.get(item["evidence_key"], item["raw_text"])
+            evidences.append({
+                **item,
+                "semantic": {
+                    **item["semantic"],
+                    "measure": _measure(context),
+                    "period": _period_for(context, item["raw_text"], page_years.get(item["page_number"])),
+                    "unit": _unit_near(context, item["raw_text"]),
+                },
+            })
         contexts.update(complex_tables.contexts)
     warnings.extend(complex_tables.warnings)
 

@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from report_qa.api.ai_provider import ProviderError, planner_client
 from report_qa.api.session_storage import (
+    catalog_lock,
     document_path,
     extraction_path,
     save_catalog,
@@ -129,10 +130,11 @@ def answer_document(session, document, question, trace_id, trace, catalog, *, ov
                 document_path(document["storage_name"]), region, document["id"], str(uuid4()), complete=complete,
             )
             validate_extraction_batch(result["evidence_batch"])
-            document.setdefault("chart_extractions", []).append({**result, "chart_region_key": key, "created_at": utc_now()})
-            # Persist chart values immediately so the Data drawer shows them,
-            # even if a later model request fails.
-            save_catalog(catalog)
+            with catalog_lock:
+                document.setdefault("chart_extractions", []).append({**result, "chart_region_key": key, "created_at": utc_now()})
+                # Persist chart values immediately so the Data drawer shows
+                # them, even if a later model request fails.
+                save_catalog(catalog)
         else:
             result = cached
         refreshed = overlay(document, with_chart_batches(document, extraction))
@@ -200,7 +202,8 @@ def answer_document(session, document, question, trace_id, trace, catalog, *, ov
     trace.append({"stage": "persistence", "status": "committed", "at": utc_now(), "assistant_message_id": assistant["id"]})
     assistant["trace"] = trace
     user = {"id": str(uuid4()), "role": "user", "body": question, "document_id": document["id"], "created_at": now}
-    session["messages"].extend([user, assistant])
-    session["updated_at"] = now
-    save_catalog(catalog)
+    with catalog_lock:
+        session["messages"].extend([user, assistant])
+        session["updated_at"] = now
+        save_catalog(catalog)
     return {"user_message": user, "assistant_message": assistant, "trace_id": trace_id, "limitations": []}
