@@ -25,7 +25,7 @@ MULTI_OPERAND = {"sum", "compare", "ranking"}
 ALL_SOURCES = ["table", "text", "chart"]
 REASON_CODES = {"AMBIGUOUS_MEASURE", "AMBIGUOUS_PERIOD", "AMBIGUOUS_OPERATION", "AMBIGUOUS_SUBJECT", "MISSING_CONTEXT"}
 
-SYSTEM_PROMPT = """Bạn là bộ hiểu câu hỏi cho hệ thống hỏi đáp trên báo cáo PDF.
+SYSTEM_PROMPT = """Bạn là bộ hiểu câu hỏi cho hệ thống hỏi đáp trên báo cáo.
 Nhiệm vụ DUY NHẤT: đổi câu hỏi thành một kế hoạch JSON. Bạn KHÔNG tính toán, KHÔNG trả lời câu hỏi.
 Bạn không được xem giá trị số. Chương trình sẽ tìm số và tính.
 
@@ -52,6 +52,12 @@ reason_code: AMBIGUOUS_OPERATION, AMBIGUOUS_MEASURE, AMBIGUOUS_PERIOD, AMBIGUOUS
 
 3. Ngoài phạm vi, ví dụ dự báo, xin ý kiến, phép tính không có trong danh sách, hoặc câu cần hai bước:
 {"status":"unsupported","reason":"<lý do ngắn>"}
+
+Các câu hỏi factual về nội dung tài liệu như định nghĩa, mô tả, tên bảng, schema hoặc trường dữ liệu
+không phải câu hỏi ngoài phạm vi. Với dạng câu hỏi không cần một số liệu cụ thể, trả về ready với
+operation lookup và một fact có key "value", measure "unknown", subject/period/unit là null; hệ thống
+sẽ truy hồi đoạn văn/bảng phù hợp và chỉ trả lời theo nội dung có dẫn nguồn. Chỉ trả unsupported khi
+người dùng yêu cầu dự báo, ý kiến hoặc phép tính thực sự không được hỗ trợ.
 
 QUY TẮC:
 - "Tăng bao nhiêu" mà không nói theo % hay số tuyệt đối: needs_clarification AMBIGUOUS_OPERATION.
@@ -203,6 +209,42 @@ def unsupported_plan(question: str, document_version_id: str) -> dict[str, Any]:
     return plan
 
 
+def _is_document_structure_question(question: str) -> bool:
+    """Recognize factual questions about document schemas so they reach retrieval.
+
+    The planner's numeric catalog cannot represent table/field/definition questions.
+    These remain safe because answer generation still receives retrieved document
+    excerpts and validates citations against that context.
+    """
+    text = _plain(question)
+    concepts = ("evidence", "schema", "database", "table", "bang", "extracted", "field", "truong", "cot")
+    return sum(1 for concept in concepts if concept in text) >= 2 or (
+        "evidence" in text and any(word in text for word in ("cac", "nhung", "lien quan", "truong", "bang"))
+    )
+
+
+def document_lookup_plan(question: str, document_version_id: str) -> dict[str, Any]:
+    """Build a retrieval-only plan for factual document questions without a numeric fact."""
+    plan = _base(question, document_version_id)
+    plan["facts"] = [{
+        "fact_key": "document_answer",
+        "measure": "document_content",
+        "subject": None,
+        "period": None,
+        "unit": None,
+        "dimensions": {},
+        "required": True,
+        "allowed_sources": ["text", "table"],
+    }]
+    plan["operation"] = {
+        "type": "lookup",
+        "formula_id": FORMULAS["lookup"],
+        "operand_fact_keys": ["document_answer"],
+        "result_unit": None,
+    }
+    return plan
+
+
 def _text(value: Any) -> str | None:
     if value is None:
         return None
@@ -234,6 +276,8 @@ def plan_from_model_output(raw: dict[str, Any], question: str, document_version_
     """Turn the model's short JSON into a full question-plan-v2. The model never writes the operation contract itself."""
     status = raw.get("status")
     if status == "unsupported":
+        if _is_document_structure_question(question):
+            return document_lookup_plan(question, document_version_id)
         return unsupported_plan(question, document_version_id)
     if status == "needs_clarification":
         reason = raw.get("reason_code") if raw.get("reason_code") in REASON_CODES else "AMBIGUOUS_OPERATION"
@@ -521,6 +565,8 @@ def plan_question(question: str, document_version_id: str, *, catalog: list[Cata
             fallback = getattr(exc, "code", None) or "PLANNER_PROVIDER_FAILED"
     if plan is None:
         plan = build_question_plan(question, document_version_id, prior_clarification_plan)
+    if plan.get("status") == "unsupported" and _is_document_structure_question(question):
+        plan = document_lookup_plan(question, document_version_id)
     plan, applied = apply_rules(plan, question, catalog, history, chosen_reason=chosen)
     return PlanResult(plan=plan, planner=planner, fallback_code=fallback, rules_applied=applied)
 

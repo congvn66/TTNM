@@ -128,6 +128,14 @@ Thoi gian retention, account deletion SLA va du lieu user study phai duoc chot t
 
 ## 11. DDL va migration
 
+Migration `0008_drop_legacy_evidence_checks` bỏ hai constraint baseline
+`extracted_evidences_check` và `evidence_revisions_check` còn sót sau migration
+0007. Hai constraint này từ chối evidence chưa xác định ở trạng thái
+`ambiguous`/`unreadable`, khiến worker không publish được artifact hợp lệ.
+Các constraint `*_value_shape_check` từ 0007 tiếp tục kiểm tra hình dạng dữ
+liệu. Downgrade 0008 không khôi phục các constraint baseline không tương thích;
+khắc phục tiếp theo bằng migration mới.
+
 `initial-schema.sql` la baseline review/prototype, khong thay the migration. Khi scaffold backend, chuyen no thanh Alembic migration `0001`, chay test up/down va them trigger/constraint con thieu sau khi co test race condition.
 
 ## 12. So do quan he

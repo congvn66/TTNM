@@ -5,7 +5,16 @@ function emitRequestMetric(metric) {
   window.dispatchEvent(new CustomEvent("sourcelens:request", { detail: metric }));
 }
 
-export const API = (window.SOURCELENS_API ?? import.meta.env.VITE_API_URL ?? window.location.origin).replace(/\/$/, "");
+// In Vite development the UI and API run on separate ports. Keep a safe
+// local default so a missing .env value cannot silently send API requests to
+// the Vite dev server (which produces the misleading "backend unavailable"
+// screen). Production deployments can still provide VITE_API_URL or use the
+// same-origin fallback.
+export const API = (
+  window.SOURCELENS_API
+  ?? import.meta.env.VITE_API_URL
+  ?? (import.meta.env.DEV ? "http://127.0.0.1:8000" : window.location.origin)
+).replace(/\/$/, "");
 
 const ERROR_MESSAGES = {
   AI_PROVIDER_UNAVAILABLE: "Không kết nối được tới dịch vụ AI. Kiểm tra mạng hoặc thử lại sau.",

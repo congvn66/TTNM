@@ -41,6 +41,7 @@ function Icon({ name, size = 16 }) {
     arrowRight: <><path d="m9 18 6-6-6-6" /><path d="M5 12h10" /></>,
     close: <path d="m6 6 12 12M18 6 6 18" />,
     chevronDown: <path d="m6 9 6 6 6-6" />,
+    copy: <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
     fit: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
     folder: <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />,
     grid: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
@@ -134,12 +135,6 @@ function multiplyTransform(first, second) {
   ];
 }
 
-function traceValue(value) {
-  if (Array.isArray(value)) return value.join(", ");
-  if (value && typeof value === "object") return JSON.stringify(value);
-  return String(value ?? "—");
-}
-
 function presentationAnswer(message) {
   if (message?.status === "processing" || message?.structured_answer?.presentation === "processing_v1") return { pending: true };
   if (message?.structured_answer && message.mode === "deterministic_text_retrieval") {
@@ -164,34 +159,6 @@ function presentationAnswer(message) {
     warnings: ["Đây là trích đoạn trực tiếp từ tài liệu; chưa có phân tích hoặc tính toán bổ sung."],
     cited_pages: page ? [page] : [],
   };
-}
-
-function AuditEvent({ event, index }) {
-  const excluded = new Set(["stage", "status", "at", "context_manifest"]);
-  const fields = Object.entries(event).filter(([key]) => !excluded.has(key));
-  return <details className={`audit-event ${event.status}`} open={index === 0}>
-    <summary><span className={`trace-dot ${event.status}`}></span><span className="audit-event-main"><b>{event.stage}</b><small>{event.status} · {event.at}</small></span><span className="audit-chevron">⌄</span></summary>
-    <div className="audit-event-body">{fields.map(([key, value]) => <div className="audit-field" key={key}><span>{key}</span><code>{traceValue(value)}</code></div>)}{event.context_manifest?.map((item) => <div className="audit-context" key={`${event.stage}-${item.page}-${item.text_sha256}`}><strong>Context p{item.page}</strong><span>{item.chars} ký tự</span><code>sha256:{item.text_sha256.slice(0, 16)}…</code></div>)}</div>
-  </details>;
-}
-
-function AuditDrawer({ traceData, traceMessage, activeDocument, onClose }) {
-  if (!traceData) return null;
-  const trace = traceData.trace ?? [];
-  const retrieval = trace.find((event) => event.stage === "retrieval");
-  const provider = trace.find((event) => event.stage === "ai_provider");
-  const calculation = trace.find((event) => event.stage === "calculation");
-  const persistence = trace.find((event) => event.stage === "persistence");
-  const requestPayload = { session_id: traceData.session_id, document_id: traceMessage?.document_id ?? activeDocument?.id, question: traceMessage?.question ?? null };
-  const responseSnapshot = { message_id: traceData.message_id, mode: traceMessage?.mode ?? null, question_plan: traceMessage?.question_plan ?? null, calculation_result: traceMessage?.calculation_result ?? null, answer_inputs: traceMessage?.answer_inputs ?? [], citations: traceMessage?.citations ?? [], structured_answer: Boolean(traceMessage?.structured_answer), body_chars: traceMessage?.body?.length ?? 0 };
-  return <section className="audit-drawer" role="dialog" aria-label="Data flow audit">
-    <header className="audit-drawer-header"><div><span className="audit-kicker">INSPECTOR</span><h3>Data flow audit</h3><small>{trace.length} events · trace_id {traceData.trace_id ?? "—"}</small></div><button aria-label="Đóng audit inspector" onClick={onClose}><Icon name="close" size={15} /></button></header>
-    <div className="audit-scope-grid"><div><span>SESSION</span><code>{traceData.session_id ?? "—"}</code></div><div><span>DOCUMENT</span><code>{activeDocument?.id ?? traceMessage?.document_id ?? "—"}</code></div><div><span>MESSAGE</span><code>{traceData.message_id ?? "—"}</code></div></div>
-    <div className="audit-request"><span>REQUEST</span><p>{traceMessage?.question ?? "Payload câu hỏi không nằm trong trace cũ."}</p></div>
-    <div className="audit-payload-grid"><div><span>REQUEST PAYLOAD</span><pre>{JSON.stringify(requestPayload, null, 2)}</pre></div><div><span>RESPONSE SNAPSHOT</span><pre>{JSON.stringify(responseSnapshot, null, 2)}</pre></div></div>
-    <div className="audit-summary"><div><span>RETRIEVAL</span><b>{retrieval?.status ?? "—"}</b><small>{retrieval?.pages ? `trang ${retrieval.pages.join(", ")}` : "không chạy"}</small></div><div><span>AI / CALCULATOR</span><b>{calculation?.status ?? provider?.status ?? "deterministic"}</b><small>{calculation?.formula_id ?? provider?.provider ?? "question planner"}</small></div><div><span>PERSISTENCE</span><b>{persistence?.status ?? "—"}</b><small>{persistence?.artifact ?? "chưa ghi"}</small></div></div>
-    <div className="audit-timeline">{trace.map((event, index) => <AuditEvent event={event} index={index} key={`${event.stage}-${event.at}-${index}`} />)}</div>
-  </section>;
 }
 
 function PerformanceDrawer({ metrics, onClose, onClear }) {
@@ -302,7 +269,9 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
     import("pdfjs-dist").then((pdfjs) => {
       if (disposed) return null;
       pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-      task = pdfjs.getDocument({ url: fileUrl });
+      // The file endpoint is protected by the HttpOnly session cookie. PDF.js
+      // must opt in to credentials when it performs its own URL request.
+      task = pdfjs.getDocument({ url: fileUrl, withCredentials: true });
       return task.promise;
     }).then((loaded) => {
       if (loaded && !disposed) { setPdf(loaded); setLoading(false); }
@@ -519,9 +488,6 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const [citationPage, setCitationPage] = useState(null);
   const [citationQuote, setCitationQuote] = useState("");
   const [citationBbox, setCitationBbox] = useState(null);
-  const [traceData, setTraceData] = useState(null);
-  const [traceMessage, setTraceMessage] = useState(null);
-  const [traceBusy, setTraceBusy] = useState(false);
   const [evidenceData, setEvidenceData] = useState(null);
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [pendingMessages, setPendingMessages] = useState([]);
@@ -532,6 +498,8 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const [resourceDialog, setResourceDialog] = useState(null);
   const uploadRef = useRef(null);
   const bootedRef = useRef(false);
+  const refreshSequenceRef = useRef(0);
+  const sessionRefreshSequenceRef = useRef(0);
   const uploadQueryConsumedRef = useRef(false);
 
   const showNotice = useCallback((message, kind = "info") => { setNotice(userFacingError(message)); setNoticeKind(kind); }, []);
@@ -560,26 +528,58 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   }, []);
 
   const refresh = useCallback(async (preferredSession) => {
+    const refreshSequence = ++refreshSequenceRef.current;
     const response = await request("/api/v1/sessions");
     let next = response.sessions ?? [];
     if (!next.length) {
       const created = await request("/api/v1/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Phiên phân tích đầu tiên" }) });
       next = [created.session];
     }
-    setSessions(next);
-    writeSessionSnapshot(next);
-    setConnectionState("online");
-    setBootError("");
     const fallbackSession = next.find((item) => item.documents?.length) ?? next[0];
     const selected = preferredSession && next.some((item) => item.id === preferredSession)
       ? preferredSession
       : (next.some((item) => item.id === activeSessionId) ? activeSessionId : fallbackSession.id);
+    // The list endpoint intentionally returns metadata only (messages=[]).
+    // Hydrate the selected session before replacing state, otherwise every
+    // refresh removes chat history and stops polling accepted answer jobs.
+    const detail = await request(`/api/v1/sessions/${selected}`);
+    if (refreshSequence !== refreshSequenceRef.current) return;
+    next = next.map((session) => session.id === selected ? detail.session : session);
+    setSessions(next);
+    writeSessionSnapshot(next);
+    setConnectionState("online");
+    setBootError("");
     if (selected !== activeSessionId) setActiveSessionId(selected);
   }, [activeSessionId]);
+
+  const refreshSessionDetail = useCallback(async (sessionId) => {
+    if (!sessionId) return false;
+    const sequence = ++sessionRefreshSequenceRef.current;
+    const detail = await request(`/api/v1/sessions/${sessionId}`);
+    if (sequence !== sessionRefreshSequenceRef.current) return false;
+    setSessions((current) => {
+      const next = current.map((session) => session.id === sessionId ? detail.session : session);
+      writeSessionSnapshot(next);
+      return next;
+    });
+    return true;
+  }, []);
+
+  useEffect(() => {
+    if (activeSessionId && !booting) refresh(activeSessionId).catch((error) => showNotice(error.message, "error"));
+  }, [activeSessionId, booting, refresh, showNotice]);
 
   const refreshJobs = useCallback(async () => {
     try {
       const jobs = await request("/api/v1/jobs");
+      // Queue failures/cancellation can happen outside the extraction function
+      // (expired lease, worker crash). Reflect them instead of polling forever.
+      setSessions((current) => current.map((session) => ({ ...session, documents: session.documents.map((document) => {
+        if (document.extraction_status === "ready") return document;
+        const job = (jobs.jobs ?? []).find((item) => item.kind === "extract_document" && item.payload?.document_id === document.id);
+        const status = { queued: "queued", running: "processing", failed: "failed", cancelled: "failed" }[job?.status];
+        return status ? { ...document, extraction_status: status, extraction_error: job.error_code ?? (job.status === "cancelled" ? "CANCELLED" : null) } : document;
+      }) })));
       // Keep recent failures visible for retry, but never count completed or
       // cancelled work as an active job.  Previously the unfiltered list made
       // the header show a stale “đang xử lý” pill after the worker finished.
@@ -613,7 +613,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     window.setTimeout(() => uploadRef.current?.click(), 80);
   }, [activeSession?.id]);
   useEffect(() => { if (activeDocument && activeDocument.id !== activeDocumentId) setActiveDocumentId(activeDocument.id); }, [activeSession?.id, activeDocument?.id, activeDocumentId]);
-  useEffect(() => { setTraceData(null); setTraceMessage(null); setEvidenceData(null); setCitationPage(null); setCitationQuote(""); setCitationBbox(null); }, [activeSession?.id, activeDocument?.id]);
+  useEffect(() => { setEvidenceData(null); setCitationPage(null); setCitationQuote(""); setCitationBbox(null); }, [activeSession?.id, activeDocument?.id]);
   useEffect(() => {
     // The worker can expose both queued and processing. Stop polling only once
     // the document reaches a terminal state; otherwise the composer could stay
@@ -622,20 +622,47 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     let disposed = false;
     let timer;
     const poll = async () => {
-      try { await refresh(activeSession.id); }
+      try { await refreshSessionDetail(activeSession.id); }
       catch (error) { if (!disposed) showNotice(error.message, "error"); }
       if (!disposed) timer = window.setTimeout(poll, 1500);
     };
     poll();
     return () => { disposed = true; window.clearTimeout(timer); };
-  }, [activeSession?.id, activeDocument?.id, activeDocument?.extraction_status, refresh, showNotice]);
+  }, [activeSession?.id, activeDocument?.id, activeDocument?.extraction_status, refreshSessionDetail, showNotice]);
 
   const filteredSessions = useMemo(() => sessions.filter((session) => session.title.toLowerCase().includes(search.toLowerCase()) || session.documents.some((document) => document.file_name.toLowerCase().includes(search.toLowerCase()))), [sessions, search]);
   const persistedMessages = (activeSession?.messages ?? []).filter((message) => !activeDocument || message.document_id === activeDocument.id);
-  const messages = [...persistedMessages, ...pendingMessages.filter((message) => message.session_id === activeSession?.id && message.document_id === activeDocument?.id)];
+  const pendingForActive = pendingMessages.filter((message) => message.session_id === activeSession?.id && message.document_id === activeDocument?.id);
+  // A polling response can arrive before the POST handler's own refresh. Merge
+  // by stable server ID so the accepted turn never vanishes or appears twice.
+  const persistedIds = new Set(persistedMessages.map((message) => message.id));
+  const combinedMessages = [...persistedMessages, ...pendingForActive.filter((message) => !persistedIds.has(message.id))];
+  // A legacy snapshot may have replies separated from their questions. Use
+  // the persisted reply link, while retaining the order of question turns.
+  const repliesByQuestion = new Map();
+  for (const message of combinedMessages) {
+    if (message.role === "assistant" && message.reply_to_message_id) {
+      const replies = repliesByQuestion.get(message.reply_to_message_id) ?? [];
+      replies.push(message);
+      repliesByQuestion.set(message.reply_to_message_id, replies);
+    }
+  }
+  const questionIds = new Set(combinedMessages.filter((message) => message.role === "user").map((message) => message.id));
+  const messages = combinedMessages.flatMap((message) => {
+    if (message.role === "assistant" && questionIds.has(message.reply_to_message_id)) return [];
+    return message.role === "user" ? [message, ...(repliesByQuestion.get(message.id) ?? [])] : [message];
+  });
+  useEffect(() => {
+    if (!persistedMessages.length) return;
+    const persistedIds = new Set(persistedMessages.map((message) => message.id));
+    setPendingMessages((current) => {
+      const next = current.filter((message) => !persistedIds.has(message.id));
+      return next.length === current.length ? current : next;
+    });
+  }, [activeSession?.id, activeDocument?.id, persistedMessages]);
   const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant" && !message.pending && !message.failed);
   const modeLabel = latestAssistant?.mode?.startsWith("ai:") ? "AI có dẫn nguồn" : "Dựa trên tài liệu";
-  const answerProcessing = (activeSession?.messages ?? []).some((message) => message.role === "assistant" && (message.status === "processing" || message.structured_answer?.presentation === "processing_v1"));
+  const answerProcessing = messages.some((message) => message.role === "assistant" && (message.status === "processing" || message.structured_answer?.presentation === "processing_v1"));
   useEffect(() => {
     refreshJobs();
     const hasActiveWork = ["queued", "processing"].includes(activeDocument?.extraction_status) || answerProcessing;
@@ -647,13 +674,13 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     let disposed = false;
     let timer;
     const poll = async () => {
-      try { await refresh(activeSession.id); }
+      try { await refreshSessionDetail(activeSession.id); }
       catch (error) { if (!disposed) showNotice(error.message, "error"); }
       if (!disposed) timer = window.setTimeout(poll, 1200);
     };
     poll();
     return () => { disposed = true; window.clearTimeout(timer); };
-  }, [activeSession?.id, answerProcessing, refresh, showNotice]);
+  }, [activeSession?.id, answerProcessing, refreshSessionDetail, showNotice]);
   const requestInFlightRef = useRef(false);
   const forceChatScrollRef = useRef(false);
   const retryMetaRef = useRef(null);
@@ -775,7 +802,11 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   async function submitQuestion(questionInput) {
     const question = questionInput?.trim();
     const idempotencyKey = retryMetaRef.current?.question === question ? retryMetaRef.current.key : crypto.randomUUID();
-    if (!question || requestInFlightRef.current || busy || !activeDocument || activeDocument.extraction_status !== "ready" || !activeSession) return;
+    if (!question || requestInFlightRef.current || busy || !activeDocument || !activeSession) return;
+    if (activeDocument.extraction_status === "failed") {
+      showNotice("Tài liệu chưa thể đọc nên chưa thể trả lời. Hãy thử xử lý lại tài liệu trong Trung tâm tác vụ.", "error");
+      return;
+    }
     requestInFlightRef.current = true;
     forceChatScrollRef.current = true;
     const userId = crypto.randomUUID();
@@ -785,19 +816,27 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     setQuery(""); setRetryQuestion(""); setBusy(true); clearNotice();
     try {
       const result = await request(`/api/v1/sessions/${activeSession.id}/messages`, { method: "POST", body: JSON.stringify({ document_id: activeDocument.id, question }), headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey } });
-      let refreshSucceeded = true;
-      try { await refresh(activeSession.id); }
-      catch (refreshError) {
-        refreshSucceeded = false;
-        setPendingMessages((current) => current.map((message) => message.id === userId ? { ...result.user_message, pending: false } : message.id === pendingId ? { ...result.assistant_message, pending: false } : message));
-        showNotice(`Đã nhận câu trả lời nhưng chưa tải lại lịch sử: ${refreshError.message}`, "error");
-      }
-      if (refreshSucceeded) setPendingMessages((current) => current.filter((message) => message.id !== userId && message.id !== pendingId));
+      if (result.job) setActiveJobs((current) => [result.job, ...current.filter((job) => job.id !== result.job.id)]);
+      // The API has accepted the turn; show its durable message IDs now and
+      // release the composer while the background answer job is still running.
+      setPendingMessages((current) => current.map((message) => message.id === userId
+        ? { ...result.user_message, ...scope, pending: false }
+        : message.id === pendingId ? { ...result.assistant_message, ...scope, pending: false } : message));
+      requestInFlightRef.current = false;
+      setBusy(false);
       retryMetaRef.current = null;
       const firstCitation = result.assistant_message?.citations?.[0];
       if (firstCitation?.page) { setCitationPage(firstCitation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(firstCitation.bbox)); }
+      try { await refreshSessionDetail(activeSession.id); }
+      catch (refreshError) {
+        showNotice(`Đã nhận câu trả lời nhưng chưa tải lại lịch sử: ${refreshError.message}`, "error");
+      }
     } catch (error) {
-      setPendingMessages((current) => current.filter((message) => message.id !== userId && message.id !== pendingId));
+      // Keep a failed turn in the transcript. Removing it made a rejected or
+      // unreachable request look like the whole conversation had reset.
+      setPendingMessages((current) => current.map((message) => message.id === userId
+        ? { ...message, pending: false, failed: true, status: "failed" }
+        : message.id === pendingId ? { ...message, body: error.message, pending: false, failed: true, status: "failed", structured_answer: null } : message));
       retryMetaRef.current = { question, key: idempotencyKey };
       setRetryQuestion(question); showNotice(error.message, "error");
     } finally { requestInFlightRef.current = false; setBusy(false); }
@@ -805,17 +844,18 @@ function App({ user = null, onSignOut = null, onNavigate }) {
 
   async function ask(event) { event.preventDefault(); await submitQuestion(query); }
 
-  async function openTrace(message) {
-    const messageId = typeof message === "string" ? message : message?.id;
-    if (!activeSession || !messageId) return;
-    const selectedMessage = typeof message === "string" ? messages.find((item) => item.id === message) ?? null : message;
-    const selectedIndex = selectedMessage ? messages.findIndex((item) => item.id === selectedMessage.id) : -1;
-    const previousMessage = selectedIndex > 0 ? messages[selectedIndex - 1] : null;
-    setTraceMessage(selectedMessage ? { ...selectedMessage, question: previousMessage?.role === "user" ? previousMessage.body : null } : null);
-    setTraceBusy(true);
-    try { setTraceData(await request(`/api/v1/sessions/${activeSession.id}/messages/${messageId}/trace`)); }
-    catch (error) { showNotice(error.message, "error"); }
-    finally { setTraceBusy(false); }
+  async function stopAnswer(message) {
+    let job = activeJobs.find((item) => item.kind === "answer_question" && item.payload?.assistant_message_id === message.id && ["queued", "running"].includes(item.status));
+    try {
+      if (!job) {
+        const result = await request("/api/v1/jobs");
+        job = (result.jobs ?? []).find((item) => item.kind === "answer_question" && item.payload?.assistant_message_id === message.id && ["queued", "running"].includes(item.status));
+      }
+      if (!job) { showNotice("Không tìm thấy tác vụ đang chạy. Đang cập nhật cuộc trò chuyện."); await refreshSessionDetail(activeSession.id); return; }
+      await request(`/api/v1/jobs/${job.id}/cancel`, { method: "POST" });
+      await Promise.all([refreshSessionDetail(activeSession.id), refreshJobs()]);
+      showNotice("Đã dừng tạo câu trả lời.");
+    } catch (error) { showNotice(error.message, "error"); }
   }
 
   async function openEvidence() {
@@ -885,10 +925,9 @@ function App({ user = null, onSignOut = null, onNavigate }) {
         <header className="chat-header"><div className="ai-avatar">S</div><div><h2>Trợ lý tài liệu</h2><span>{activeDocument ? activeDocument.file_name : "Chưa chọn tài liệu"}</span></div><span className="mode-badge">{modeLabel}</span></header>
         <div className="chat-body">
           {!messages.length && <div className="welcome"><div className="welcome-mark"><Icon name="spark" size={18} /></div><h3>Bắt đầu với tài liệu của bạn</h3><p>Đặt câu hỏi để nhận câu trả lời có dẫn nguồn, trích dẫn theo trang và cấu trúc rõ ràng.</p>{activeDocument?.extraction_status === "ready" && <button onClick={() => setQuery("Tóm tắt nội dung chính của tài liệu")}>Tóm tắt tài liệu</button>}</div>}
-          {messages.map((message) => <article key={message.id} className={`message ${message.role}`}><span className="message-avatar">{message.role === "user" ? "B" : "S"}</span><div><small>{message.role === "user" ? "Bạn" : "Trợ lý SourceLens"}</small><StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} onCitation={(page, quote, bbox) => { setCitationPage(page); setCitationQuote(quote); setCitationBbox(normalizedBbox(bbox)); }} />{message.needs_update && <div className="answer-status-note stale-answer"><Icon name="refresh" size={13} /><span>Dữ liệu nguồn đã thay đổi; câu trả lời này cần được cập nhật.</span></div>}{message.citations?.map((citation, index) => <button className="citation" key={index} onClick={() => { setCitationPage(citation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(citation.bbox)); }}><Icon name="link" size={12} /> Trang {citation.page}{citation.bbox ? " · vùng trích dẫn" : ""}</button>)}{message.role === "assistant" && !message.pending && !message.failed && <button className="trace-button" disabled={traceBusy} onClick={() => openTrace(message.id)}><Icon name="trace" size={12} /> {traceBusy ? "Đang tải luồng…" : "Xem luồng dữ liệu"}</button>}</div></article>)}
-          {traceData && <div className="trace-panel"><div className="trace-panel-heading"><div><strong>Luồng dữ liệu</strong><small>{traceData.trace?.length ?? 0} sự kiện · trace_id {traceData.trace_id ?? "—"}</small></div><button aria-label="Đóng luồng dữ liệu" onClick={() => setTraceData(null)}><Icon name="close" size={14} /></button></div>{(traceData.trace ?? []).map((event, index) => <div className="trace-event" key={`${event.stage}-${index}`}><span className={`trace-dot ${event.status}`}></span><div><b>{event.stage}</b><small>{event.status} · {event.at}</small>{event.provider && <em>{event.provider}</em>}{event.pages && <em>trang: {event.pages.join(", ")}</em>}{event.scores && <em>điểm: {event.scores.join(", ")}</em>}{event.context_manifest && <em>ngữ cảnh: {event.context_manifest.map((item) => `trang ${item.page} · ${item.chars} ký tự · ${item.text_sha256.slice(0, 10)}…`).join(" | ")}</em>}{event.citation_pages && <em>trích dẫn: {event.citation_pages.join(", ")}</em>}</div></div>)}</div>}
+          {messages.map((message, index) => <article key={message.id} className={`message ${message.role} ${message.failed || message.status === "failed" ? "failed" : ""}`}><span className="message-avatar">{message.role === "user" ? "B" : "S"}</span><div><small>{message.role === "user" ? "Bạn" : "Trợ lý SourceLens"}</small><StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} onCitation={(page, quote, bbox) => { setCitationPage(page); setCitationQuote(quote); setCitationBbox(normalizedBbox(bbox)); }} />{message.role === "assistant" && message.status === "processing" && <button className="retry-answer-button" type="button" onClick={() => stopAnswer(message)}>Dừng trả lời</button>}{(message.failed || message.status === "failed") && message.role === "assistant" && <button className="retry-answer-button" type="button" onClick={() => { const previous = messages.find((item) => item.id === message.reply_to_message_id) ?? messages[index - 1]; if (previous?.role === "user") submitQuestion(previous.body); }} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}{message.role === "user" && !message.pending && <button className="message-icon-button" type="button" aria-label="Sửa câu hỏi" title="Sửa câu hỏi" onClick={() => { setQuery(message.body); document.querySelector('.chat-composer textarea')?.focus(); }}><Icon name="edit" size={14} /></button>}{message.role === "assistant" && message.body && !message.pending && !message.failed && message.status !== "failed" && message.status !== "processing" && <button className="message-icon-button" type="button" aria-label="Sao chép câu trả lời" title="Sao chép câu trả lời" onClick={async () => { try { await navigator.clipboard.writeText(message.body); showNotice("Đã sao chép."); } catch { showNotice("Không thể sao chép.", "error"); } }}><Icon name="copy" size={14} /></button>}{message.needs_update && <div className="answer-status-note stale-answer"><Icon name="refresh" size={13} /><span>Dữ liệu nguồn đã thay đổi; câu trả lời này cần được cập nhật.</span></div>}{message.citations?.map((citation, citationIndex) => <button className="citation" key={citationIndex} onClick={() => { setCitationPage(citation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(citation.bbox)); }}><Icon name="link" size={12} /> Trang {citation.page}{citation.bbox ? " · vùng trích dẫn" : ""}</button>)}</div></article>)}
         </div>
-        <form className="chat-composer" onSubmit={ask}><textarea aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Thêm tài liệu để bắt đầu" : activeDocument.extraction_status === "ready" ? "Đặt câu hỏi về tài liệu…" : activeDocument.extraction_status === "failed" ? "Chưa thể đọc tài liệu — mở Trung tâm tác vụ để thử lại" : "Đang chuẩn bị tài liệu…"} disabled={!activeDocument || activeDocument.extraction_status !== "ready" || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Sẵn sàng để hỏi" : activeDocument?.extraction_status === "failed" ? "Chưa thể đọc tài liệu" : activeDocument?.extraction_status === "queued" || activeDocument?.extraction_status === "processing" ? "Đang chuẩn bị tài liệu…" : "Chưa sẵn sàng"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status !== "ready" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form>
+        <form className="chat-composer" onSubmit={ask}><textarea aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Thêm tài liệu để bắt đầu" : activeDocument.extraction_status === "ready" ? "Đặt câu hỏi về tài liệu…" : activeDocument.extraction_status === "failed" ? "Chưa thể đọc tài liệu — mở Trung tâm tác vụ để thử lại" : "Đặt câu hỏi — trợ lý sẽ trả lời khi tài liệu sẵn sàng…"} disabled={!activeDocument || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Trợ lý sẵn sàng" : activeDocument?.extraction_status === "failed" ? "Tài liệu chưa đọc được" : activeDocument?.extraction_status === "queued" || activeDocument?.extraction_status === "processing" ? "Câu hỏi sẽ được xử lý sau khi đọc tài liệu" : "Chưa sẵn sàng"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status === "failed" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form>
       </aside>
       <EvidenceDrawer data={evidenceData} busy={evidenceBusy} onClose={() => setEvidenceData(null)} onFocus={(evidence) => { setCitationPage(evidence.page_number); setCitationQuote(""); setCitationBbox(normalizedBbox(evidence.bbox)); }} onSave={saveEvidence} />
       <ResourceDialog dialog={resourceDialog} busy={busy} onClose={() => setResourceDialog(null)} onConfirm={confirmResourceAction} />

@@ -136,7 +136,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                     "created_at": self._iso(item["document_created_at"]),
                     "storage_name": item["storage_key"],
                     "extraction_name": f"{item['version_id']}.json",
-                    "extraction_status": "ready" if item["extraction_status"] == "completed" else item["extraction_status"] or ("ready" if item["version_status"] == "ready" else "queued"),
+                    "extraction_status": "ready" if item["extraction_status"] == "completed" else "processing" if item["extraction_status"] == "running" else item["extraction_status"] or ("ready" if item["version_status"] == "ready" else "queued"),
                     "page_count": item["page_count"],
                     "numeric_evidence_count": int(item["evidence_count"] or 0),
                     "extraction_error": item["extraction_error"],
@@ -190,7 +190,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         for item in document_rows:
             version_id = item["version_id"]
             document_id = item["document_id"]
-            extraction_status = "ready" if item["extraction_status"] == "completed" else item["extraction_status"] or ("ready" if item["version_status"] == "ready" else "queued")
+            extraction_status = "ready" if item["extraction_status"] == "completed" else "processing" if item["extraction_status"] == "running" else item["extraction_status"] or ("ready" if item["version_status"] == "ready" else "queued")
             extraction_name = f"{version_id}.json"
             if self.extraction_root:
                 target_path = self.extraction_root / extraction_name
@@ -276,7 +276,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
             messages_by_id[message["id"]] = message
             session["messages"].append(message)
         for item in message_rows:
-            if item["role"] == "user" and item["reply_to_message_id"] is None:
+            if item["role"] != "user":
                 continue
             message = messages_by_id.get(str(item["id"]))
             if message and message["role"] == "user":
@@ -556,6 +556,8 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         )
         if version_status == "failed":
             self._execute("UPDATE extraction_runs SET status='failed',completed_at=now(),error_code=%s WHERE id=%s", (document.get("extraction_error") or "EXTRACTION_FAILED", run_id))
+        elif version_status == "processing":
+            self._execute("UPDATE extraction_runs SET status='running',started_at=now(),completed_at=NULL,error_code=NULL WHERE id=%s AND status <> 'completed'", (run_id,))
         chat_status = "queued" if version_status == "uploaded" else version_status
         self._execute(
             """INSERT INTO chat_documents (chat_id,document_version_id,status,error_code)
@@ -846,7 +848,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
             except (ValueError, TypeError):
                 continue
             exists = self._execute("SELECT id,status,current_answer_revision_id FROM messages WHERE id=%s AND chat_id=%s", (assistant_id, chat_id))
-            is_processing = assistant.get("status") == "processing" or assistant.get("mode") == "answer_question_job"
+            is_processing = assistant.get("status") == "processing" or (not assistant.get("status") and assistant.get("mode") == "answer_question_job")
             revision = (assistant.get("answer_revisions") or [{}])[0]
             try:
                 revision_id = self._uuid(revision.get("id"))
@@ -867,7 +869,9 @@ class PostgresRuntimeStore(PostgresRevisionStore):
             }
             if exists:
                 if is_processing:
-                    self._execute("UPDATE messages SET content=%s,status='processing',needs_update=%s,updated_at=now() WHERE id=%s", (assistant.get("body", ""), bool(assistant.get("needs_update")), assistant_id))
+                    if exists[0].get("status") in {"completed", "failed"}:
+                        continue
+                    self._execute("UPDATE messages SET content=%s,status='processing',needs_update=%s,updated_at=now() WHERE id=%s AND status='processing'", (assistant.get("body", ""), bool(assistant.get("needs_update")), assistant_id))
                     continue
                 current_revision = exists[0].get("current_answer_revision_id")
                 incoming_id = revision_id

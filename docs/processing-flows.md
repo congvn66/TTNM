@@ -179,3 +179,27 @@ Nếu message gần nhất là clarification về operation, câu trả lời ng
 When `REPORT_QA_AI_MODE=gemini`, retrieval still happens first and only the top three extracted pages are sent to `gemini-2.5-flash`. The request uses `responseMimeType=application/json` and `responseSchema`. When `REPORT_QA_AI_MODE=openrouter`, the same context and schema are sent to the configured OpenRouter model through `/api/v1/chat/completions` using `response_format.type=json_schema`. The server parses the provider envelope, validates every string/array/table/formula, requires claim quotes to occur in the selected page text, and rejects any `cited_pages` or `evidence_pages` outside the selected context. Only after validation is `structured_answer` persisted alongside the plain-text fallback and page citations.
 
 The trace order becomes `question_received -> retrieval -> ai_provider(running) -> ai_provider(validated) -> answer_generation -> persistence`. Retrieval includes a `context_manifest` with selected page scores, character counts and text hashes so an audit can prove what context was sent without dumping PDF text. A provider error produces a 502 with a stable code and no assistant message. Formula fields are never executed as model code: the server recognizes the supported growth shape and calculates it with Decimal (`calculator=decimal_growth_v1`); unsupported shapes remain `unverified` and are shown as presentation-only.
+
+## 15. Sửa luồng upload/extraction ngày 23-11-2026
+
+Upload lưu PDF và enqueue `extract_document`; Docling chạy trong worker riêng.
+DePlot chỉ được gọi bởi pipeline trả lời khi cần một vùng biểu đồ, không chạy
+trong bước upload. Mỗi extraction job phải hydrate lại phiên từ PostgreSQL,
+kể cả phiên đã có trong cache worker, để thấy file mới trong cùng phiên.
+
+Worker publish `processing` trước khi đọc. PostgreSQL extraction run dùng
+`running`, được API ánh xạ thành `processing`. Thành công publish artifact và
+evidence rồi chuyển `ready`; lỗi đọc/publish chuyển document thành `failed`
+và ném lỗi cho queue để retry hữu hạn, không acknowledge job thành công.
+Mất kết nối DB vẫn cần phục hồi lease; không được xem là đã publish lỗi.
+
+Người dùng được soạn và gửi câu hỏi khi tài liệu đang đọc. Trong runtime có
+durable queue, API lưu câu hỏi cùng assistant message ở trạng thái `processing`,
+trả HTTP 202 và enqueue `answer_question`. Nếu nguồn chưa sẵn sàng, giao diện
+hiển thị câu hỏi đã nhận và thông báo đang chờ tài liệu; chưa sinh câu trả lời
+thiếu nguồn. Worker phải được vận hành cùng API; bật riêng Uvicorn chưa đủ.
+
+Migration `0008_drop_legacy_evidence_checks` bỏ hai constraint baseline còn sót
+để evidence `ambiguous`/`unreadable` hợp lệ có thể được publish. Các constraint
+value-shape từ migration 0007 vẫn giữ hiệu lực. Migration 0008 dùng forward fix;
+downgrade không khôi phục các constraint baseline không tương thích.

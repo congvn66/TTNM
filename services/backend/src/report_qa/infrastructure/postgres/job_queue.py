@@ -217,11 +217,16 @@ class PostgresJobQueue:
 
     def cancel(self, *, owner_id: UUID, job_id: UUID) -> bool:
         with self._connect() as connection:
-            result = connection.execute("UPDATE jobs SET status='cancelled',finished_at=now(),lease_token=NULL,lease_expires_at=NULL WHERE id=%s AND owner_id=%s AND status IN ('queued','running')", (job_id, owner_id))
-            if result.rowcount == 1:
+            row = connection.execute("UPDATE jobs SET status='cancelled',finished_at=now(),lease_token=NULL,lease_expires_at=NULL WHERE id=%s AND owner_id=%s AND status IN ('queued','running') RETURNING kind,chat_id,payload", (job_id, owner_id)).fetchone()
+            if row:
+                if row['kind'] == 'answer_question' and (row['payload'] or {}).get('assistant_message_id'):
+                    message_id = UUID(row['payload']['assistant_message_id'])
+                    message = connection.execute("UPDATE messages SET status='failed',content=%s,updated_at=now() WHERE id=%s AND chat_id=%s AND status='processing' RETURNING current_answer_revision_id", ('Đã dừng tạo câu trả lời.', message_id, row['chat_id'])).fetchone()
+                    if message and message['current_answer_revision_id']:
+                        connection.execute("UPDATE answer_revisions SET answer_status='processing_error',answer_text=%s,result=jsonb_set(COALESCE(result,'{}'::jsonb),'{structured_answer}','null'::jsonb,true) WHERE id=%s", ('Đã dừng tạo câu trả lời.', message['current_answer_revision_id']))
                 event_no = connection.execute("SELECT COALESCE(MAX(event_no),0)+1 AS next FROM job_events WHERE job_id=%s", (job_id,)).fetchone()["next"]
                 connection.execute("INSERT INTO job_events (job_id,event_no,event_type,payload) VALUES (%s,%s,'cancelled','{}'::jsonb)", (job_id, event_no))
-            return result.rowcount == 1
+            return bool(row)
 
     def retry(self, *, owner_id: UUID, job_id: UUID) -> dict[str, Any] | None:
         """Explicitly requeue a terminal failed job without changing its id."""

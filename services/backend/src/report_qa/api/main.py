@@ -500,25 +500,36 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
     # requested chat from PostgreSQL before touching the extraction artifact;
     # relying only on the API process cache would silently acknowledge a job
     # without updating the database.
-    if postgres_runtime and session_id not in catalog["sessions"]:
+    # Each upload can add a document to an existing session. Never reuse the
+    # worker's stale session snapshot from an earlier job in that session.
+    if postgres_runtime:
         loaded = _runtime_for_owner(owner_id or LOCAL_OWNER_ID).load_session(UUID(session_id))
         if loaded is not None:
             catalog["sessions"][session_id] = loaded
     session = catalog["sessions"].get(session_id)
     if session is None:
-        return
+        raise RuntimeError("EXTRACTION_SESSION_NOT_FOUND")
     document = next((item for item in session.get("documents", []) if item["id"] == document_id), None)
     if document is None:
         flow_log("EXTRACTION_SKIPPED", trace_id=trace_id, session_id=session_id, document_id=document_id, reason="document_not_found")
-        return
+        raise RuntimeError("EXTRACTION_DOCUMENT_NOT_FOUND")
     flow_log("EXTRACTION_STARTED", trace_id=trace_id, session_id=session_id, document_id=document_id)
+    document.update(extraction_status="processing", extraction_error=None)
+    save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
     extraction = extract_pdf_pages(cache_pdf(document["storage_name"]), document["extraction_name"], document_id)
     document.update({"extraction_status": extraction["status"], "page_count": extraction["page_count"], "numeric_evidence_count": extraction["numeric_evidence_count"], "extraction_error": extraction["error"]})
     if extraction["status"] == "ready":
         artifact = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
         ensure_document_evidence_state(document, artifact)
     session["updated_at"] = utc_now()
-    save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+    try:
+        save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+    except Exception:
+        document.update(extraction_status="failed", extraction_error="EXTRACTION_PUBLISH_FAILED")
+        # Persist a terminal document state when the artifact cannot be saved
+        # (e.g. schema validation); never leave the UI polling indefinitely.
+        save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+        raise
     flow_log(
         "EXTRACTION_FINISHED",
         trace_id=trace_id,
@@ -529,6 +540,9 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
         numeric_evidence_count=extraction["numeric_evidence_count"],
         error=extraction["error"],
     )
+    if extraction["status"] != "ready":
+        # The worker must retry/fail the job instead of acknowledging success.
+        raise RuntimeError(f"EXTRACTION_FAILED:{extraction['error']}")
 
 
 @app.get(
@@ -1047,8 +1061,6 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     # PostgreSQL mode can move the expensive answer path out of the request.
     # The default stays synchronous for the offline compatibility tests; the
     # flag is explicit so operators cannot accidentally run a worker-less UI.
-    if durable_job_queue and settings.async_answer_jobs and request.headers.get("X-Worker-Job") != "1" and document.get("extraction_status") != "ready":
-        raise HTTPException(status_code=409, detail={"code": "EXTRACTION_NOT_READY", "message": "Tài liệu chưa sẵn sàng để hỏi; hãy chờ extraction hoàn tất."})
     if durable_job_queue and settings.async_answer_jobs and request.headers.get("X-Worker-Job") != "1":
         now = utc_now()
         user_message = {"id": str(uuid4()), "role": "user", "body": payload.question, "document_id": document["id"], "created_at": now, "status": "accepted"}
@@ -1057,7 +1069,15 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
             "status": "processing", "mode": "answer_question_job", "citations": [], "trace_id": trace_id,
             "structured_answer": {"presentation": "processing_v1", "answer": "Đang tạo câu trả lời…", "summary": "Worker đang truy hồi evidence và kiểm tra cấu trúc trả lời.", "sections": [], "formulas": [], "tables": [], "claims": [], "warnings": [], "cited_pages": []},
         }
-        queued_trace = [trace_event("question_received", "ok", trace_id=trace_id, question_chars=len(payload.question)), trace_event("job_enqueue", "queued", kind="answer_question")]
+        queued_trace = [
+            trace_event("question_received", "ok", trace_id=trace_id, question_chars=len(payload.question)),
+            trace_event("job_enqueue", "queued", kind="answer_question"),
+        ]
+        if document.get("extraction_status") != "ready":
+            queued_trace.append(trace_event("wait_for_document", "waiting", extraction_status=document.get("extraction_status", "queued")))
+            assistant_message["body"] = "Đã nhận câu hỏi. Trợ lý sẽ trả lời ngay khi tài liệu sẵn sàng."
+            assistant_message["structured_answer"]["answer"] = assistant_message["body"]
+            assistant_message["structured_answer"]["summary"] = "Câu hỏi đang chờ tài liệu được đọc xong."
         assistant_message["trace"] = queued_trace
         session["messages"].extend([user_message, assistant_message])
         session["updated_at"] = now
@@ -1072,7 +1092,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
         response.status_code = 202
         flow_log("ANSWER_JOB_QUEUED", trace_id=trace_id, session_id=session_id, document_id=document["id"], job_id=job.get("id"), assistant_message_id=assistant_message["id"])
-        return finish({"user_message": user_message, "assistant_message": assistant_message, "limitations": ["Câu trả lời đang được worker xử lý"], "trace_id": trace_id, "status": "queued", "job": job})
+        return finish({"user_message": user_message, "assistant_message": assistant_message, "limitations": [], "trace_id": trace_id, "status": "queued", "job": job})
     previous_assistant = next(
         (item for item in reversed(session["messages"]) if item.get("role") == "assistant"),
         None,
