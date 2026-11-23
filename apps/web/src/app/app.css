@@ -210,6 +210,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .message p { margin: 0; border: 1px solid var(--border); border-radius: 4px 11px 11px; padding: 10px 11px; background: var(--surface-soft); color: var(--ink-soft); font-size: 11px; line-height: 1.58; white-space: pre-wrap; }
 .message.user p { border-color: var(--ink); border-radius: 11px 4px 11px 11px; background: var(--ink); color: #fff; }
 .message.pending .message-avatar { box-shadow: 0 0 0 3px rgba(167, 123, 32, .13); }
+.message.failed p { border-color: #fecaca; background: #fff7f7; color: #991b1b; }
+.retry-answer-button { display: inline-flex; align-items: center; gap: 5px; margin-top: 7px; border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px; background: var(--surface); color: var(--ink-soft); font-size: 10px; font-weight: 700; }
+.retry-answer-button:hover:not(:disabled) { border-color: #b91c1c; color: #b91c1c; }
+.message-icon-button { display: inline-grid; place-items: center; width: 30px; height: 30px; margin: 6px 5px 0 0; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.message-icon-button:hover { border-color: var(--border); background: var(--surface-soft); color: var(--ink); }
+.message-icon-button:focus-visible { outline: 2px solid var(--focus, #3478c8); outline-offset: 2px; }
 .chat-composer { margin: 0 14px 14px; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 11px; background: var(--surface); box-shadow: 0 8px 24px rgba(24, 24, 27, .07); }
 .chat-composer:focus-within { border-color: #bd9e5f; box-shadow: 0 0 0 3px rgba(167, 123, 32, .10), 0 8px 24px rgba(24, 24, 27, .07); }
 .chat-composer textarea { display: block; width: 100%; min-height: 78px; max-height: 170px; resize: none; border: 0; padding: 12px; outline: 0; background: var(--surface); color: var(--ink); font-size: 11px; line-height: 1.5; }

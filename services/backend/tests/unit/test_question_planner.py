@@ -176,6 +176,21 @@ def test_unsupported_question_has_no_operation():
     assert result.plan["status"] == "unsupported" and result.plan["operation"] is None and result.plan["facts"] == []
 
 
+def test_evidence_schema_question_is_retrieved_instead_of_rejected_as_unsupported():
+    result = plan("Các bảng liên quan tới evidence?", {"status": "unsupported", "reason": "không có chỉ tiêu số"})
+    assert result.plan["status"] == "ready"
+    assert result.plan["operation"]["type"] == "lookup"
+    assert result.plan["facts"][0]["measure"] == "document_content"
+    assert result.plan["facts"][0]["period"] is None
+
+
+def test_evidence_schema_question_uses_retrieval_when_planner_provider_is_offline():
+    result = plan_question("Các bảng liên quan tới evidence?", "docv-1", catalog=CATALOG)
+    assert result.plan["status"] == "ready"
+    assert result.planner == "rules"
+    assert result.plan["operation"]["type"] == "lookup"
+
+
 def test_named_percent_overrides_an_absolute_pick():
     reply = {"status": "ready", "operation": "absolute_change", "facts": [fact("current"), fact("baseline", period="Q1/2025")]}
     result = plan("Doanh thu Q1/2026 tăng bao nhiêu phần trăm so với Q1/2025?", reply)
