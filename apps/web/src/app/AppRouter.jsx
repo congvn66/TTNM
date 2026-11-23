@@ -14,6 +14,9 @@ function currentPath() {
  */
 export default function AppRouter({ user = null, onSignOut = null }) {
   const [path, setPath] = useState(currentPath);
+  const [currentUser, setCurrentUser] = useState(user);
+
+  useEffect(() => setCurrentUser(user), [user]);
 
   useEffect(() => {
     const onPopState = () => setPath(currentPath());
@@ -31,12 +34,12 @@ export default function AppRouter({ user = null, onSignOut = null }) {
 
   if (path.startsWith("/app/settings")) {
     const section = path.split("/").filter(Boolean)[2] || "profile";
-    return <SettingsScreen section={section} user={user} onSignOut={onSignOut} onNavigate={navigate} />;
+    return <SettingsScreen section={section} user={currentUser} onUserChange={setCurrentUser} onSignOut={onSignOut} onNavigate={navigate} />;
   }
 
   if (path.startsWith("/app/library")) {
     return <LibraryScreen onNavigate={navigate} />;
   }
 
-  return <WorkspaceScreen user={user} onSignOut={onSignOut} onNavigate={navigate} />;
+  return <WorkspaceScreen user={currentUser} onSignOut={onSignOut} onNavigate={navigate} />;
 }

@@ -23,4 +23,27 @@ describe("AuthGate recovery scenes", () => {
     await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Nếu email tồn tại"));
     expect(requestMock).toHaveBeenCalledWith("/api/v1/auth/forgot-password", expect.objectContaining({ method: "POST" }));
   });
+
+  it("keeps the register form deep-linkable", async () => {
+    window.history.pushState({}, "", "/login");
+    render(<AuthGate />);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Đăng nhập vào tài liệu của bạn" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Chưa có tài khoản? Tạo tài khoản" }));
+    expect(window.location.pathname).toBe("/register");
+    expect(screen.getByRole("heading", { name: "Bắt đầu với SourceLens" })).toBeTruthy();
+  });
+
+  it("moves authenticated users to the workspace URL", async () => {
+    window.history.pushState({}, "", "/login");
+    requestMock.mockImplementation((path) => path === "/api/v1/auth/me"
+      ? Promise.reject({ status: 401 })
+      : Promise.resolve({ user: { email: "reader@example.com" } }));
+    render(<AuthGate>{() => <div>Workspace ready</div>}</AuthGate>);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Đăng nhập vào tài liệu của bạn" })).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "reader@example.com" } });
+    fireEvent.change(screen.getByLabelText("Mật khẩu"), { target: { value: "password-123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Đăng nhập" }));
+    await waitFor(() => expect(screen.getByText("Workspace ready")).toBeTruthy());
+    expect(window.location.pathname).toBe("/app/workspace");
+  });
 });
