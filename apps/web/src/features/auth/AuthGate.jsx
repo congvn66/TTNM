@@ -45,7 +45,12 @@ export default function AuthGate({ children }) {
   if (state.status === "unavailable") return <main className="auth-gate"><section className="auth-card"><AuthMark /><p className="auth-eyebrow">SourceLens</p><h1>Chưa thể mở phiên làm việc</h1><p className="auth-muted">Dịch vụ đăng nhập hiện chưa sẵn sàng. Hãy kiểm tra kết nối rồi thử lại.</p><button className="auth-primary" onClick={() => window.location.reload()}>Thử lại</button></section></main>;
 
   const switchMode = (nextMode) => {
-    const nextPath = nextMode === "forgot" ? "/forgot-password" : nextMode === "reset" ? "/reset-password" : "/login";
+    const nextPath = {
+      login: "/login",
+      register: "/register",
+      forgot: "/forgot-password",
+      reset: "/reset-password",
+    }[nextMode] ?? "/login";
     window.history.replaceState({}, "", nextPath);
     setMode(nextMode); setError(""); setSuccess("");
   };
@@ -59,9 +64,11 @@ export default function AuthGate({ children }) {
         setSuccess("Nếu email tồn tại, hướng dẫn đặt lại mật khẩu đã được gửi. Kiểm tra hộp thư của bạn.");
       } else if (mode === "reset") {
         const body = await request("/api/v1/auth/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: form.token, password: form.password }) });
+        window.history.replaceState({}, "", "/app/workspace");
         setState({ status: "authenticated", user: body.user });
       } else {
         const body = await request(`/api/v1/auth/${mode}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(mode === "register" ? form : { email: form.email, password: form.password }) });
+        window.history.replaceState({}, "", "/app/workspace");
         setState({ status: "authenticated", user: body.user });
       }
     } catch (reason) {

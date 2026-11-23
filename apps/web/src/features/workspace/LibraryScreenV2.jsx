@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { request } from "../../shared/api/client.js";
+import { useDialogFocus } from "../../shared/ui/useDialogFocus.js";
 
 const SESSION_KEY = "sourcelens-active-session";
 const DOCUMENT_KEY = "sourcelens-active-document";
@@ -19,15 +20,22 @@ function ErrorNotice({ children, onRetry }) {
 function LibraryDialog({ dialog, busy, onClose, onConfirm }) {
   const [value, setValue] = useState(dialog?.value ?? "");
   useEffect(() => setValue(dialog?.value ?? ""), [dialog]);
+  const dialogRef = useDialogFocus(Boolean(dialog), onClose);
   if (!dialog) return null;
   const naming = dialog.kind === "name";
+  const submit = (event) => {
+    event.preventDefault();
+    const nextValue = value.trim();
+    if (busy || (naming && !nextValue)) return;
+    onConfirm(nextValue);
+  };
   return <div className="resource-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="library-dialog-title">
+    <form ref={dialogRef} className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="library-dialog-title" tabIndex="-1" onSubmit={submit}>
       <div className={`resource-modal-icon ${dialog.danger ? "danger" : ""}`}><span aria-hidden="true">{dialog.danger ? "!" : "✎"}</span></div>
       <div><p className="dialog-kicker">{dialog.danger ? "XÁC NHẬN" : "CHỈNH SỬA"}</p><h2 id="library-dialog-title">{dialog.title}</h2><p>{dialog.description}</p></div>
-      {naming && <label className="dialog-input-label">Tên hiển thị<input autoFocus value={value} maxLength={120} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onConfirm(value.trim()); } }} /></label>}
-      <div className="resource-modal-actions"><button type="button" className="dialog-secondary" onClick={onClose} disabled={busy}>Hủy</button><button type="button" className={dialog.danger ? "dialog-danger" : "dialog-primary"} disabled={busy || (naming && !value.trim())} onClick={() => onConfirm(value.trim())}>{busy ? "Đang lưu…" : dialog.danger ? "Xác nhận" : "Lưu thay đổi"}</button></div>
-    </section>
+      {naming && <label className="dialog-input-label">Tên hiển thị<input autoFocus value={value} maxLength={120} onChange={(event) => setValue(event.target.value)} /></label>}
+      <div className="resource-modal-actions"><button type="button" className="dialog-secondary" onClick={onClose} disabled={busy}>Hủy</button><button type="submit" className={dialog.danger ? "dialog-danger" : "dialog-primary"} disabled={busy || (naming && !value.trim())}>{busy ? "Đang lưu…" : dialog.danger ? "Xác nhận" : "Lưu thay đổi"}</button></div>
+    </form>
   </div>;
 }
 
@@ -96,7 +104,7 @@ export default function LibraryScreen({ onNavigate }) {
   function openNameDialog(title, value, description, action) { setDialog({ kind: "name", title, value, description, action }); }
   function openConfirmDialog(title, description, action) { setDialog({ kind: "confirm", title, description, danger: true, action }); }
   async function confirmDialog(value) { const action = dialog?.action; setDialog(null); if (action) await action(value); }
-  function createProject() { openNameDialog("Tạo project mới", "Project mới", "Project giúp gom các phiên và thư mục cùng một công việc.", (value) => mutate(async () => { const body = await request("/api/v1/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: value }) }); setProjectId(body.project.id); })); }
+  function createProject() { openNameDialog("Tạo project mới", "Project mới", "Project giúp gom các phiên và thư mục cùng một công việc.", (value) => mutate(async () => { const body = await request("/api/v1/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: value }) }); setProjectId(body.project.id); return body; })); }
   function createFolder() { if (!projectId) return; openNameDialog("Tạo thư mục", "Thư mục mới", "Đặt tên để dễ tìm tài liệu trong project này.", (value) => mutate(() => request(`/api/v1/projects/${projectId}/folders`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: value }) }))); }
   function renameProject() { const project = projects.find((item) => item.id === projectId); if (project) openNameDialog("Đổi tên project", project.name, "Tên mới chỉ thay đổi cách hiển thị trong thư viện.", (value) => mutate(() => request(`/api/v1/projects/${projectId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: value }) }))); }
   function renameFolder(folder) { openNameDialog("Đổi tên thư mục", folder.name, "Tài liệu bên trong thư mục không bị thay đổi.", (value) => mutate(() => request(`/api/v1/folders/${folder.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: value, expected_version: folder.version }) }))); }

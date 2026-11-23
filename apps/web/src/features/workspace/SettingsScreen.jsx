@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { request } from "../../shared/api/client.js";
+import { useDialogFocus } from "../../shared/ui/useDialogFocus.js";
 import { useTheme } from "../theme/ThemeProvider.jsx";
 
 const NAV = [
@@ -27,9 +28,10 @@ function initials(user) { return (user?.display_name || user?.email || "S").trim
 function FieldError({ children }) { return children ? <span className="settings-field-error" role="alert">{children}</span> : null; }
 
 function ConfirmDialog({ dialog, busy, onClose, onConfirm }) {
+  const dialogRef = useDialogFocus(Boolean(dialog), onClose);
   if (!dialog) return null;
   return <div className="resource-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="settings-confirm-title">
+    <section ref={dialogRef} className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="settings-confirm-title" tabIndex="-1">
       <div className="resource-modal-icon danger"><span aria-hidden="true">!</span></div>
       <div><p className="dialog-kicker">XÁC NHẬN</p><h2 id="settings-confirm-title">{dialog.title}</h2><p>{dialog.description}</p></div>
       <div className="resource-modal-actions"><button type="button" className="dialog-secondary" onClick={onClose} disabled={busy}>Hủy</button><button type="button" className="dialog-danger" onClick={onConfirm} disabled={busy}>{busy ? "Đang xử lý…" : "Xác nhận"}</button></div>
@@ -197,11 +199,15 @@ function SecuritySettings() {
   </>;
 }
 
-export default function SettingsScreen({ section = "profile", user = null, onSignOut = null, onNavigate }) {
+export default function SettingsScreen({ section = "profile", user = null, onUserChange = null, onSignOut = null, onNavigate }) {
   const safeSection = NAV.some((item) => item.id === section) ? section : "profile";
   const [profile, setProfile] = useState(user);
   useEffect(() => setProfile(user), [user]);
-  const content = useMemo(() => safeSection === "profile" ? <ProfileSettings user={profile} onProfileChange={setProfile} /> : safeSection === "preferences" ? <PreferencesSettings /> : <SecuritySettings />, [profile, safeSection]);
+  const updateProfile = (nextProfile) => {
+    setProfile(nextProfile);
+    onUserChange?.(nextProfile);
+  };
+  const content = useMemo(() => safeSection === "profile" ? <ProfileSettings user={profile} onProfileChange={updateProfile} /> : safeSection === "preferences" ? <PreferencesSettings /> : <SecuritySettings />, [profile, safeSection, onUserChange]);
   return <div className="settings-shell">
     <a className="skip-link" href="#settings-content">Bỏ qua điều hướng</a>
     <SettingsHeader section={safeSection} user={profile} onNavigate={onNavigate} onSignOut={onSignOut} />

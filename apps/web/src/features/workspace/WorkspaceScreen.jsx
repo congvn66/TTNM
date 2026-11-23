@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { API, request } from "../../shared/api/client.js";
+import { useDialogFocus } from "../../shared/ui/useDialogFocus.js";
 import { useTheme } from "../theme/ThemeProvider.jsx";
 
 const SESSION_KEY = "sourcelens-active-session";
@@ -209,9 +210,10 @@ function PerformanceDrawer({ metrics, onClose, onClear }) {
 }
 
 function JobCenterDrawer({ jobs, busy, onClose, onAction }) {
+  const dialogRef = useDialogFocus(Boolean(jobs), onClose);
   if (!jobs) return null;
   const active = jobs.filter((job) => ["queued", "running"].includes(job.status));
-  return <section className="job-center-drawer" role="dialog" aria-modal="true" aria-labelledby="job-center-title">
+  return <section ref={dialogRef} className="job-center-drawer" role="dialog" aria-modal="true" aria-labelledby="job-center-title" tabIndex="-1">
     <header className="job-center-header"><div><span className="audit-kicker">TRUNG TÂM TÁC VỤ</span><h3 id="job-center-title">Tác vụ đang chạy</h3><small>Theo dõi việc chuẩn bị tài liệu và câu trả lời</small></div><button type="button" aria-label="Đóng trung tâm tác vụ" onClick={onClose}><Icon name="close" size={15} /></button></header>
     <div className="job-center-summary"><span><i></i>{active.length} đang xử lý</span><small>Trạng thái được lưu bền theo tài khoản</small></div>
     <div className="job-center-list">{jobs.length ? jobs.map((job) => <article className="job-center-row" key={job.id}><div className={`job-center-status ${job.status}`}><span></span></div><div className="job-center-main"><strong>{["document_extraction", "extract_document"].includes(job.kind) ? "Chuẩn bị tài liệu" : ["answer_generation", "generate_answer"].includes(job.kind) ? "Tạo câu trả lời" : "Tác vụ đang chạy"}</strong><small>{job.status === "queued" ? "Đang chờ xử lý" : job.status === "running" ? "Đang xử lý" : job.status === "failed" ? "Cần thử lại" : "Đã hoàn tất"}{job.error_code ? ` · ${job.error_code}` : ""}</small></div><div className="job-center-actions">{["queued", "running"].includes(job.status) && <button type="button" onClick={() => onAction(job, "cancel")} disabled={busy}>Huỷ</button>}{job.status === "failed" && <button type="button" onClick={() => onAction(job, "retry")} disabled={busy}>Thử lại</button>}</div></article>) : <div className="job-center-empty"><span>✓</span><p>Không có tác vụ gần đây.</p><small>Khi tải PDF hoặc hỏi AI, trạng thái sẽ xuất hiện ở đây.</small></div>}</div>
@@ -222,9 +224,10 @@ function EvidenceDrawer({ data, busy, onClose, onFocus, onSave }) {
   const [editingKey, setEditingKey] = useState(null);
   const [value, setValue] = useState("");
   const [reason, setReason] = useState("");
+  const dialogRef = useDialogFocus(Boolean(data), onClose);
   if (!data) return null;
   const beginEdit = (evidence) => { setEditingKey(evidence.evidence_key); setValue(evidence.current_numeric_value ?? ""); setReason(""); };
-  return <section className="evidence-drawer" role="dialog" aria-label="Dữ liệu số và lịch sử sửa">
+  return <section ref={dialogRef} className="evidence-drawer" role="dialog" aria-modal="true" aria-label="Dữ liệu số và lịch sử sửa" tabIndex="-1">
     <header className="audit-drawer-header"><div><span className="audit-kicker">DATA REVISION</span><h3>Dữ liệu đầu vào</h3><small>revision {data.data_revision ?? 0} · giá trị gốc không bị ghi đè</small></div><button aria-label="Đóng dữ liệu" onClick={onClose}><Icon name="close" size={15} /></button></header>
     <div className="evidence-drawer-body">{data.evidences?.length ? data.evidences.map((evidence) => <article className="evidence-record" key={evidence.evidence_key}>
       <button className="evidence-record-main" onClick={() => onFocus(evidence)}><span>p.{evidence.page_number} · {evidence.method_label}</span><b>{evidence.current_numeric_value}</b><small>Gốc: {evidence.original_numeric_value} · {evidence.revision_count} revision</small><code>{evidence.evidence_key}</code></button>
@@ -286,6 +289,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
   const [citationQuote, setCitationQuote] = useState("");
   const [citationBbox, setCitationBbox] = useState(null);
   const dragRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -374,20 +378,25 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
     const base = pdfPage.getViewport({ scale: 1, rotation });
     setScale(Math.max(.35, Math.min(2.5, (viewportRef.current.clientWidth - 56) / base.width)));
   }, [pdf, page, rotation]);
+  const changePage = (nextPage) => {
+    if (!pdf) return;
+    setPage(Math.min(Math.max(1, nextPage), pdf.numPages));
+    viewportRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  };
 
   if (!document) return <div className="empty-reader"><div className="empty-icon">PDF</div><h2>Chọn hoặc thêm tài liệu</h2><p>Tài liệu được lưu theo phiên làm việc và mở trực tiếp trong trình đọc PDF.</p></div>;
 
   return <section className="reader-shell">
     <header className="reader-toolbar">
       <div className="reader-file"><strong>{document.file_name}</strong><span>{formatBytes(document.byte_size)} · {processingLabel(document.extraction_status)}</span></div>
-      <div className="page-control"><button aria-label="Trang trước" title="Trang trước" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}><Icon name="arrowLeft" /></button><span>{page} / {pdf?.numPages ?? document.page_count ?? "—"}</span><button aria-label="Trang sau" title="Trang sau" disabled={!pdf || page >= pdf.numPages} onClick={() => setPage((value) => value + 1)}><Icon name="arrowRight" /></button></div>
+      <div className="page-control"><button aria-label="Trang trước" title="Trang trước" disabled={page <= 1} onClick={() => changePage(page - 1)}><Icon name="arrowLeft" /></button><span>{page} / {pdf?.numPages ?? document.page_count ?? "—"}</span><button aria-label="Trang sau" title="Trang sau" disabled={!pdf || page >= pdf.numPages} onClick={() => changePage(page + 1)}><Icon name="arrowRight" /></button></div>
       <div className="zoom-control"><button aria-label="Thu nhỏ" title="Thu nhỏ" onClick={() => setScale((value) => Math.max(.35, value - .15))}><Icon name="minus" /></button><span>{Math.round(scale * 100)}%</span><button aria-label="Phóng to" title="Phóng to" onClick={() => setScale((value) => Math.min(2.5, value + .15))}><Icon name="plus" /></button><button aria-label="Vừa chiều rộng" title="Vừa chiều rộng" onClick={fitWidth}><Icon name="fit" /></button><button aria-label="Xoay tài liệu" title="Xoay tài liệu" onClick={() => setRotation((value) => (value + 90) % 360)}><Icon name="rotate" /></button></div>
     </header>
-    <div className={`pdf-viewport ${dragRef.current ? "dragging" : ""}`} ref={viewportRef}
-      onPointerDown={(event) => { const node = viewportRef.current; dragRef.current = { x: event.clientX, y: event.clientY, left: node.scrollLeft, top: node.scrollTop }; node.setPointerCapture(event.pointerId); }}
+    <div className={`pdf-viewport ${dragging ? "dragging" : ""}`} ref={viewportRef}
+      onPointerDown={(event) => { if (event.pointerType === "touch") return; const node = viewportRef.current; dragRef.current = { x: event.clientX, y: event.clientY, left: node.scrollLeft, top: node.scrollTop }; setDragging(true); node.setPointerCapture(event.pointerId); }}
       onPointerMove={(event) => { if (!dragRef.current) return; const node = viewportRef.current; node.scrollLeft = dragRef.current.left - (event.clientX - dragRef.current.x); node.scrollTop = dragRef.current.top - (event.clientY - dragRef.current.y); }}
-      onPointerUp={() => { dragRef.current = null; }}
-      onPointerCancel={() => { dragRef.current = null; }}
+      onPointerUp={() => { dragRef.current = null; setDragging(false); }}
+      onPointerCancel={() => { dragRef.current = null; setDragging(false); }}
       onWheel={(event) => { if (!event.ctrlKey) return; event.preventDefault(); setScale((value) => Math.max(.35, Math.min(2.5, value + (event.deltaY < 0 ? .1 : -.1)))); }}>
       {loading && <div className="reader-loading" role="status">Đang mở tài liệu…</div>}
       {error && <div className="reader-error" role="alert">Không thể render PDF: {error}</div>}
@@ -397,6 +406,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
 }
 
 function ProfileMenu({ user, onSignOut, onNavigate }) {
+  const menuRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState(user);
   const [editing, setEditing] = useState(false);
@@ -404,6 +414,20 @@ function ProfileMenu({ user, onSignOut, onNavigate }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => { setProfile(user); setDisplayName(user?.display_name ?? ""); }, [user]);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (event.type === "keydown" && event.key !== "Escape") return;
+      if (event.type === "pointerdown" && menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [open]);
   const initial = (profile?.display_name || profile?.email || "S").trim().slice(0, 1).toUpperCase();
   const saveProfile = async (event) => {
     event.preventDefault();
@@ -415,7 +439,7 @@ function ProfileMenu({ user, onSignOut, onNavigate }) {
     } catch (reason) { setError(reason.message || "Không thể lưu hồ sơ."); }
     finally { setSaving(false); }
   };
-  return <div className="profile-menu">
+  return <div className="profile-menu" ref={menuRef}>
     <button className="profile-chip" type="button" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((value) => !value)}>
       <span className="profile-avatar">{initial}</span>
       <span className="profile-copy"><b>{profile?.display_name || "Workspace cá nhân"}</b><small>{profile?.email || "Chế độ demo"}</small></span>
@@ -475,10 +499,11 @@ function ActionMenu({ label, onRename, onDelete }) {
 function ResourceDialog({ dialog, busy, onClose, onConfirm }) {
   const [value, setValue] = useState(dialog?.value ?? "");
   useEffect(() => setValue(dialog?.value ?? ""), [dialog?.kind, dialog?.value]);
+  const dialogRef = useDialogFocus(Boolean(dialog), onClose);
   if (!dialog) return null;
   const isDelete = dialog.kind.startsWith("delete");
   return <div className="resource-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="resource-dialog-title">
+    <section ref={dialogRef} className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="resource-dialog-title" tabIndex="-1">
       <div className={`resource-modal-icon ${isDelete ? "danger" : ""}`}><Icon name={isDelete ? "trash" : "edit"} size={19} /></div>
       <div><p className="dialog-kicker">{isDelete ? "XÁC NHẬN THAO TÁC" : "CHỈNH SỬA"}</p><h2 id="resource-dialog-title">{dialog.title}</h2><p>{dialog.description}</p></div>
       {isDelete ? <div className="dialog-warning">Thao tác này sẽ ẩn mục khỏi workspace. Dữ liệu nguồn được archive để bảo toàn lịch sử.</div> : <label className="dialog-input-label">Tên hiển thị<input autoFocus value={value} onChange={(event) => setValue(event.target.value)} maxLength={dialog.maxLength ?? 255} /></label>}
@@ -794,8 +819,6 @@ function App({ user = null, onSignOut = null, onNavigate }) {
       }
       if (refreshSucceeded) setPendingMessages((current) => current.filter((message) => message.id !== userId && message.id !== pendingId));
       retryMetaRef.current = null;
-      const firstCitation = result.assistant_message?.citations?.[0];
-      if (firstCitation?.page) { setCitationPage(firstCitation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(firstCitation.bbox)); }
     } catch (error) {
       setPendingMessages((current) => current.filter((message) => message.id !== userId && message.id !== pendingId));
       retryMetaRef.current = { question, key: idempotencyKey };

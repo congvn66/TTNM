@@ -189,7 +189,8 @@ def project_library(project_id: UUID, request: Request):
         documents = connection.execute(
             """SELECT pd.document_id,pd.folder_id,pd.display_name,pd.sort_order,pd.version,
                       d.title,d.created_at,dv.file_name,dv.byte_size,dv.page_count,dv.status AS version_status,
-                      COALESCE(er.status,'queued') AS extraction_status,c.id AS session_id,c.title AS session_title
+                       CASE WHEN er.status='completed' THEN 'ready' ELSE COALESCE(er.status,'queued') END AS extraction_status,
+                       c.id AS session_id,c.title AS session_title
                  FROM project_documents pd
                  JOIN documents d ON d.id=pd.document_id AND d.owner_id=pd.owner_id AND d.deleted_at IS NULL
                  LEFT JOIN LATERAL (SELECT * FROM document_versions WHERE document_id=d.id ORDER BY version_no DESC LIMIT 1) dv ON TRUE

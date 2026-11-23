@@ -139,6 +139,22 @@
 .evidence-edit-form button[type=submit] { border-color: var(--ink); background: var(--ink); color: #fff; }
 .evidence-empty { padding: 18px; color: var(--muted); font-size: 10px; text-align: center; }
 
+[data-theme="dark"] .evidence-quote {
+  border-color: #475569;
+  background: rgba(56, 189, 248, .10);
+  color: var(--ink-soft);
+}
+[data-theme="dark"] .evidence-quote:hover {
+  border-color: #7dd3fc;
+  background: rgba(56, 189, 248, .16);
+}
+[data-theme="dark"] .answer-warnings,
+[data-theme="dark"] .stale-answer {
+  border-color: #92400e;
+  background: rgba(180, 83, 9, .15);
+  color: #fde68a;
+}
+
 @media (max-width: 1020px) {
   .audit-drawer, .evidence-drawer { inset: auto 14px 14px; top: calc(72vh + 76px); max-height: 580px; }
 }
