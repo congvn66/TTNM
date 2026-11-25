@@ -16,6 +16,7 @@ import ast
 import json
 import subprocess
 import sys
+import time
 from decimal import Decimal, InvalidOperation
 
 MAX_CODE_CHARS = 12_000
@@ -144,10 +145,16 @@ def validate_script(code, evidence=None):
 _RUNNER = r"""
 import json,sys,math,statistics,resource,decimal
 from decimal import Decimal
-resource.setrlimit(resource.RLIMIT_CPU,(2,2))
-resource.setrlimit(resource.RLIMIT_AS,(256*1024*1024,256*1024*1024))
-resource.setrlimit(resource.RLIMIT_FSIZE,(0,0))
-resource.setrlimit(resource.RLIMIT_NOFILE,(16,16))
+def limit(name, value):
+    # macOS rejects RLIMIT_AS (ValueError); a limit the OS refuses must not
+    # stop the calculation. CPU time and the parent's wall-clock timeout
+    # still bound every script, and on macOS the parent watches memory.
+    try: resource.setrlimit(getattr(resource, name), (value, value))
+    except (ValueError, OSError, AttributeError): pass
+limit('RLIMIT_CPU', 2)
+limit('RLIMIT_AS', 256*1024*1024)
+limit('RLIMIT_FSIZE', 0)
+limit('RLIMIT_NOFILE', 16)
 payload=json.load(sys.stdin)
 used=[]
 printed=[]
@@ -181,6 +188,50 @@ except Exception as exc:
 """
 
 
+TIME_LIMIT_SECONDS = 4
+MEMORY_LIMIT_BYTES = 256 * 1024 * 1024
+# macOS refuses every memory rlimit (RLIMIT_AS/DATA/RSS), so the script's
+# memory is watched from this process instead and the script is killed when
+# it grows past the limit. Elsewhere RLIMIT_AS in the runner enforces it.
+_WATCH_MEMORY = sys.platform == "darwin"
+_POLL_SECONDS = 0.05
+
+
+def _rss_bytes(pid):
+    """Resident memory of a child process, or 0 when it cannot be read."""
+    try:
+        out = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True, timeout=1, check=False).stdout
+        return int(out.strip() or 0) * 1024
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return 0
+
+
+def _run_runner(payload_json):
+    """(returncode, stdout) of the sandbox runner, or an error message."""
+    process = subprocess.Popen(
+        [sys.executable, "-I", "-c", _RUNNER],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env={},
+    )
+    deadline = time.monotonic() + TIME_LIMIT_SECONDS
+    pending_input = payload_json
+    while True:
+        wait = _POLL_SECONDS if _WATCH_MEMORY else max(0.01, deadline - time.monotonic())
+        try:
+            stdout, _ = process.communicate(pending_input, timeout=wait)
+            return process.returncode, stdout
+        except subprocess.TimeoutExpired:
+            pending_input = None  # already being written; must not be sent twice
+        if time.monotonic() >= deadline:
+            error = "Calculation exceeded time limit"
+        elif _WATCH_MEMORY and _rss_bytes(process.pid) > MEMORY_LIMIT_BYTES:
+            error = f"Calculation used more than {MEMORY_LIMIT_BYTES // (1024 * 1024)} MB of memory"
+        else:
+            continue
+        process.kill()
+        process.communicate()
+        return error
+
+
 def run_calculation(code, evidence):
     """Execute a validated script; evidence maps key -> current Data row."""
     try:
@@ -195,22 +246,14 @@ def run_calculation(code, evidence):
             for key, item in evidence.items()
         },
     }
-    try:
-        process = subprocess.run(
-            [sys.executable, "-I", "-c", _RUNNER],
-            input=json.dumps(payload),
-            capture_output=True,
-            text=True,
-            timeout=4,
-            env={},
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return {"status": "failed", "error": "Calculation exceeded time limit", "used_evidence_keys": []}
-    if process.returncode or not process.stdout.strip():
+    outcome = _run_runner(json.dumps(payload))
+    if isinstance(outcome, str):
+        return {"status": "failed", "error": outcome, "used_evidence_keys": []}
+    returncode, stdout = outcome
+    if returncode or not stdout.strip():
         return {"status": "failed", "error": "Calculation process stopped (CPU/memory limit)", "used_evidence_keys": []}
     try:
-        result = json.loads(process.stdout)
+        result = json.loads(stdout)
     except json.JSONDecodeError:
         return {"status": "failed", "error": "Calculation output was not JSON", "used_evidence_keys": []}
     result["manual_numbers"] = manual_numbers(code)

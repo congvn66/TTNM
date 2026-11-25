@@ -8,6 +8,21 @@ NUMBER = re.compile(
 )
 
 
+def canonical_decimal(value: str) -> str:
+    """Exact wire form accepted by the evidence contract.
+
+    No exponent, no leading zeros, no ``+`` sign and a single ``0`` for zero:
+    ``"+12"`` -> ``"12"``, ``".5"`` -> ``"0.5"``, ``"0.0"`` -> ``"0"``.
+    """
+    try:
+        number = Decimal(value)
+    except InvalidOperation as exc:
+        raise ValueError("Invalid decimal") from exc
+    if not number.is_finite():
+        raise ValueError("Non-finite number")
+    return format(number, "f") if number else "0"
+
+
 def decimal_text(raw: str, locale: str | None = None) -> str:
     value = raw.strip().replace(" ", "").removesuffix("%")
     negative = value.startswith("(") and value.endswith(")")

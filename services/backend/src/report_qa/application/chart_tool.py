@@ -37,6 +37,24 @@ như DePlot. confidence 0..1 là đánh giá của mô hình, không phải xác
 """
 
 
+# The visual checker's label box is approximate. A label at the chart edge
+# often comes back slightly past the crop (e.g. x1=1.036), which used to
+# discard a value the checker had confirmed. Clamp small overshoots; still
+# reject boxes that are clearly off the image.
+_LABEL_BOX_TOLERANCE = 0.1
+
+
+def _label_box(label):
+    if not (isinstance(label, list) and len(label) == 4) or not all(
+        isinstance(v, (int, float)) and not isinstance(v, bool) for v in label
+    ):
+        return None
+    if any(v < -_LABEL_BOX_TOLERANCE or v > 1 + _LABEL_BOX_TOLERANCE for v in label):
+        return None
+    clamped = [min(1.0, max(0.0, float(v))) for v in label]
+    return clamped if clamped[0] < clamped[2] and clamped[1] < clamped[3] else None
+
+
 def read_chart_region(path, region, version, question_id, *, complete, predictor=None):
     import pymupdf
     from PIL import Image
@@ -145,22 +163,17 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
                 agrees = False
             method = r.get("method")
             valid = False
+            label_box_unusable = False
             location = box
             assumptions = ["deplot_table", "model_visual_check_not_human_confirmation"]
             if agrees and method == "direct_label":
                 native = _native_label(page, box, category, value)
-                label = r.get("label_bbox")
+                label = _label_box(r.get("label_bbox"))
                 if native:
                     location = native
                     valid = True
                     assumptions.append("native_printed_label_match")
-                elif (
-                    isinstance(label, list)
-                    and len(label) == 4
-                    and all(isinstance(v, (int, float)) and 0 <= v <= 1 for v in label)
-                    and label[0] < label[2]
-                    and label[1] < label[3]
-                ):
+                elif label:
                     location = [
                         box[0] + label[0] * (box[2] - box[0]),
                         box[1] + label[1] * (box[3] - box[1]),
@@ -169,6 +182,15 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
                     ]
                     valid = True
                     assumptions.append("vlm_printed_label_bbox_approximate")
+                else:
+                    # DePlot and the checker agree on a printed label, but the
+                    # checker's box is unusable (seen offset fully past the
+                    # crop for the right-most bar). The box only places the
+                    # highlight: keep the value, point at the chart region,
+                    # and cap confidence below a located label.
+                    valid = True
+                    label_box_unusable = True
+                    assumptions.append("label_bbox_unusable_chart_region_used")
             lower = upper = None
             if agrees and method == "axis_estimation" and r.get("unit"):
                 try:
@@ -204,7 +226,7 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
             confidence = r.get("confidence", 0)
             if not isinstance(confidence, (int, float)):
                 confidence = 0
-            confidence = max(0, min(0.85, float(confidence))) if valid else 0
+            confidence = max(0, min(0.6 if label_box_unusable else 0.85, float(confidence))) if valid else 0
             if confidence < 0.5:
                 valid = False
             evidences.append(

@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from report_qa.api.ai_provider import ProviderError, planner_client
 from report_qa.api.session_storage import (
+    catalog_lock,
     document_path,
     extraction_path,
     save_catalog,
@@ -91,7 +92,8 @@ def answer_document(session, document, question, trace_id, trace, catalog, *, ov
     complete = complete or client.complete
     extraction = json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
     current = overlay(document, with_chart_batches(document, extraction))
-    read_regions = {r.get("chart_region_key") for r in document.get("chart_extractions", [])}
+    # A read whose visual check failed does not count: the AI may read it again.
+    read_regions = {r.get("chart_region_key") for r in document.get("chart_extractions", []) if not r.get("visual_check_error")}
     # Full text, current numeric values and readable chart regions.
     context = {
         "pages": current["pages"],
@@ -119,8 +121,15 @@ def answer_document(session, document, question, trace_id, trace, catalog, *, ov
     })
 
     def chart_tool(key):
+        # Reuse a completed read, but not one whose visual check failed (e.g.
+        # provider HTTP 503): caching that left every value of the chart
+        # unverified for good. DePlot's own output is cached on disk, so a
+        # retry only repeats the visual check.
         cached = next(
-            (r for r in reversed(document.get("chart_extractions", [])) if r.get("chart_region_key") == key),
+            (
+                r for r in reversed(document.get("chart_extractions", []))
+                if r.get("chart_region_key") == key and not r.get("visual_check_error")
+            ),
             None,
         )
         if cached is None:
@@ -129,10 +138,11 @@ def answer_document(session, document, question, trace_id, trace, catalog, *, ov
                 document_path(document["storage_name"]), region, document["id"], str(uuid4()), complete=complete,
             )
             validate_extraction_batch(result["evidence_batch"])
-            document.setdefault("chart_extractions", []).append({**result, "chart_region_key": key, "created_at": utc_now()})
-            # Persist chart values immediately so the Data drawer shows them,
-            # even if a later model request fails.
-            save_catalog(catalog)
+            with catalog_lock:
+                document.setdefault("chart_extractions", []).append({**result, "chart_region_key": key, "created_at": utc_now()})
+                # Persist chart values immediately so the Data drawer shows
+                # them, even if a later model request fails.
+                save_catalog(catalog)
         else:
             result = cached
         refreshed = overlay(document, with_chart_batches(document, extraction))
@@ -200,7 +210,8 @@ def answer_document(session, document, question, trace_id, trace, catalog, *, ov
     trace.append({"stage": "persistence", "status": "committed", "at": utc_now(), "assistant_message_id": assistant["id"]})
     assistant["trace"] = trace
     user = {"id": str(uuid4()), "role": "user", "body": question, "document_id": document["id"], "created_at": now}
-    session["messages"].extend([user, assistant])
-    session["updated_at"] = now
-    save_catalog(catalog)
+    with catalog_lock:
+        session["messages"].extend([user, assistant])
+        session["updated_at"] = now
+        save_catalog(catalog)
     return {"user_message": user, "assistant_message": assistant, "trace_id": trace_id, "limitations": []}

@@ -256,3 +256,17 @@ def test_school_year_rule_looks_only_at_the_asked_measure():
     catalog.append(CatalogEntry("hoc_phi", "Khoa Y", "Năm 2025", "VND_MILLION", "Học phí", "table"))
     reply = {"status": "ready", "operation": "lookup", "facts": [fact("value", "so_sinh_vien", "Năm học 2025-2026", "sinh viên", "Khoa Y")]}
     assert plan("Số sinh viên khoa Y năm 2025 là bao nhiêu?", reply, catalog=catalog).plan["status"] == "needs_clarification"
+
+
+def test_subject_named_in_the_question_is_kept_instead_of_asking():
+    # Docling table rows give the catalog subjects Q1..Q4; "vùng A" lives in a
+    # chart that is read later. The planner used to ask "which subject?" with
+    # Q1..Q4 as the choices, ignoring the subject the user named.
+    catalog = [CatalogEntry("doanh_thu", f"Q{n}", None, None, f"Doanh thu / Q{n}", "table") for n in range(1, 5)]
+    for question, subject in [("Theo biểu đồ, doanh thu vùng A là bao nhiêu?", "A"),
+                              ("Doanh thu khu vực B là bao nhiêu?", "B"),
+                              ("Doanh thu chi nhánh Hà Nội là bao nhiêu?", "Hà Nội")]:
+        plan = plan_question(question, "doc", catalog=catalog).plan
+        assert plan["status"] == "ready", question
+        assert plan["facts"][0]["subject"] == subject
+    assert plan_question("Doanh thu là bao nhiêu?", "doc", catalog=catalog).plan["status"] == "needs_clarification"

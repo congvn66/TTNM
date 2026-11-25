@@ -52,7 +52,7 @@ source ../.venv/bin/activate
 PERSISTENCE_BACKEND=json REPORT_QA_ASSISTANT_MODE=tools \
 REPORT_QA_PLANNER_MODE=gemini PDF_EXTRACTION_BACKEND=docling \
 PDF_NUMBER_LOCALE=en OMP_NUM_THREADS=4 \
-python -m uvicorn report_qa.api.main:app --app-dir services/backend/src --port 8001
+python -m uvicorn report_qa.api.main:app --app-dir services/backend/src --port 8000
 ```
 
 Put the provider key in the ignored `.env`. Try `synthetic_line.pdf`:
