@@ -30,3 +30,7 @@
 [data-theme="dark"] .evidence-index, [data-theme="dark"] .script-card .formula-verified { color: #6ee7b7; }
 [data-theme="dark"] .evidence-item.unverified { border-left-color: #f59e0b; }
 [data-theme="dark"] .message .evidence-body small.evidence-warning, [data-theme="dark"] .message small.script-manual { color: #fbbf24; }
+
+.reextract-button { display: inline-flex; align-items: center; gap: 6px; min-height: 29px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface); color: var(--ink-soft); font-size: 10px; font-weight: 700; white-space: nowrap; }
+.reextract-button:hover:not(:disabled) { border-color: var(--color-cta); color: var(--color-cta); }
+[data-theme="dark"] .reextract-button:hover:not(:disabled) { color: #7dd3fc; border-color: #7dd3fc; }

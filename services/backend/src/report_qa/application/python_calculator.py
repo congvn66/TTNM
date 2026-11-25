@@ -68,7 +68,7 @@ def _literal_number(node):
         return None
     try:
         number = Decimal(str(value).replace(",", ""))
-    except InvalidOperation:
+    except (InvalidOperation, ValueError):  # ValueError: an integer too long to print
         return None
     return number if number.is_finite() else None
 
@@ -276,7 +276,8 @@ def run_calculation(code, evidence):
     """Execute a validated script; evidence maps key -> current Data row."""
     try:
         validate_script(code, evidence)
-    except (ValueError, SyntaxError) as exc:
+    except (ValueError, SyntaxError, MemoryError, RecursionError) as exc:
+        # The parser itself gives up on extreme nesting (MemoryError).
         return {"status": "failed", "error": f"{type(exc).__name__}: {exc}"[:MAX_ERROR_CHARS], "used_evidence_keys": []}
     payload = {
         "max_stdout": MAX_STDOUT_CHARS,

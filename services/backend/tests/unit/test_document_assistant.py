@@ -332,3 +332,59 @@ def test_durable_storage_keeps_only_chart_reads_whose_check_passed(monkeypatch, 
     revision = result["assistant_message"]["answer_inputs"][0]["evidence_revision_id"]
     assert (revision is None) is (check_error is not None)
     assert save.call_count == 1
+
+
+@pytest.mark.parametrize("bad", [
+    {"action": ["answer"]},
+    {"action": "read_chart", "chart_region_key": ["r1"]},
+    {"action": "answer", "answer": "x", "evidence_keys": [{"key": "a"}]},
+    {"action": "answer", "answer": "x", "pages": [[1]]},
+    {"action": "answer", "answer": "x", "pages": [True]},
+    {"action": "answer", "answer": "x", "sources": [{"page": [1], "quote": "Doanh thu theo vùng"}]},
+])
+def test_badly_typed_model_output_is_retried_not_raised(bad):
+    good = {"action": "answer", "answer": "ok", "sources": [{"page": 1, "quote": "Doanh thu theo vùng"}]}
+    actions = iter([bad, good])
+    context = {"pages": [{"page": 1, "text": "Doanh thu theo vùng"}], "evidences": [], "chart_regions": []}
+    result = run_assistant("q", context, complete=lambda *args: json.dumps(next(actions)), read_chart=Mock())
+    assert result["answer"] == "ok"
+
+
+@pytest.mark.parametrize("options, expected", [(3, []), ("a", []), (["A", 1, " ", "B"], ["A", "B"])])
+def test_clarify_options_keep_only_text(options, expected):
+    context = {"pages": [], "evidences": [], "chart_regions": []}
+    action = {"action": "clarify", "answer": "Kỳ nào?", "options": options}
+    assert run_assistant("q", context, complete=lambda *args: json.dumps(action), read_chart=Mock())["options"] == expected
+
+
+def test_an_unexpected_chart_error_is_reported_to_the_model():
+    actions = iter([
+        {"action": "read_chart", "chart_region_key": "r1"},
+        {"action": "answer", "answer": "Chưa đọc được biểu đồ", "not_found": True},
+    ])
+    context = {"pages": [], "evidences": [], "chart_regions": [{"chart_region_key": "r1", "read": False}]}
+    result = run_assistant("q", context, complete=lambda *args: json.dumps(next(actions)), read_chart=Mock(side_effect=KeyError("x" * 900)))
+    assert result["tool_results"][0]["error"].startswith("KeyError") and len(result["tool_results"][0]["error"]) <= 300
+
+
+def test_a_quote_without_pymupdf_keeps_its_text_and_loses_only_the_highlight(monkeypatch):
+    import sys
+    from report_qa.api.document_assistant_flow import _quote_citation
+
+    monkeypatch.setitem(sys.modules, "pymupdf", None)
+    citation = _quote_citation("missing.pdf", {"page": 1, "quote": "abc", "match": "exact"})
+    assert citation["quote"] == "abc" and citation["bbox"] is None
+
+
+def test_a_database_error_while_saving_a_chart_shows_no_database_details(monkeypatch):
+    from report_qa.api import main
+
+    class Store:
+        def persist_on_demand_chart(self, **kwargs):
+            raise OSError("password=secret host=db")
+
+    monkeypatch.setattr(main, "_runtime_for_owner", lambda owner: Store())
+    identifier = "00000000-0000-0000-0000-0000000000aa"
+    with pytest.raises(RuntimeError) as error:
+        main._persist_chart_read({"id": identifier}, {"id": identifier}, {"evidence_batch": {"trigger": {"question_plan_id": "q"}}}, "r1")
+    assert str(error.value) == "CHART_EVIDENCE_PERSISTENCE_FAILED"

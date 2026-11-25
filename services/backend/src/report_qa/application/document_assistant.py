@@ -90,6 +90,10 @@ def data_rows(evidences: list[dict]) -> list[dict]:
     ]
 
 
+def _is_page(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 class _Turn:
     """State for one question: tool results, trace and validation feedback."""
 
@@ -124,7 +128,7 @@ class _Turn:
     def read_chart_action(self, action):
         key = action.get("chart_region_key")
         known = {r["chart_region_key"] for r in self.context.get("chart_regions", [])}
-        if key not in known:
+        if not isinstance(key, str) or key not in known:
             self.tools.append({"tool": "read_chart", "error": "Unknown chart region"})
             return
         if any(t.get("tool") == "read_chart" and t.get("chart_region_key") == key for t in self.tools):
@@ -133,9 +137,10 @@ class _Turn:
             return
         try:
             result = self.read_chart(key)
-        except (ValueError, RuntimeError) as exc:
-            self.tools.append({"tool": "read_chart", "chart_region_key": key, "error": str(exc)})
-            self.trace.append({"stage": "chart_read", "status": "failed", "chart_region_key": key, "error": str(exc)})
+        except Exception as exc:  # noqa: BLE001  a failed chart read must not lose the whole answer
+            error = f"{type(exc).__name__}: {exc}"[:300]
+            self.tools.append({"tool": "read_chart", "chart_region_key": key, "error": error})
+            self.trace.append({"stage": "chart_read", "status": "failed", "chart_region_key": key, "error": error})
             return
         self.context["evidences"] = result.get("all_evidences", self.context["evidences"])
         for region in self.context.get("chart_regions", []):
@@ -183,6 +188,7 @@ class _Turn:
         for source in sources:
             page = source.get("page") if isinstance(source, dict) else None
             quote = source.get("quote") if isinstance(source, dict) else None
+            page = page if _is_page(page) else None
             match = match_quote(texts[page], quote) if page in texts else None
             if match is None:
                 hint = suggest_quote(texts[page], quote) if page in texts else None
@@ -197,14 +203,16 @@ class _Turn:
         if not isinstance(answer, str) or not answer.strip():
             self.reject("answer must be a non-empty string")
             return None
+        options = action.get("options")
+        options = options if isinstance(options, list) else []
         by_key = self.evidence_by_key()
         keys = action.get("evidence_keys") or []
-        if not isinstance(keys, list) or any(k not in by_key for k in keys):
+        if not isinstance(keys, list) or any(not isinstance(k, str) or k not in by_key for k in keys):
             self.reject("evidence_keys must be keys from data; do not invent keys")
             return None
         known_pages = {p["page"] for p in self.context.get("pages", [])}
         pages = action.get("pages") or []
-        if not isinstance(pages, list) or any(p not in known_pages for p in pages):
+        if not isinstance(pages, list) or any(not _is_page(p) or p not in known_pages for p in pages):
             self.reject("pages must be page numbers that exist in pages")
             return None
         checked = self.checked_sources(action)
@@ -226,7 +234,7 @@ class _Turn:
             "answer": answer.strip(),
             "action": kind,
             "not_found": action.get("not_found") is True,
-            "options": [str(o) for o in action.get("options") or [] if o] if kind == "clarify" else [],
+            "options": [o.strip() for o in options if isinstance(o, str) and o.strip()] if kind == "clarify" else [],
             "evidence_keys": keys,
             "pages": pages,
             "sources": sources,
@@ -247,6 +255,7 @@ def run_assistant(question, context, *, complete, read_chart, max_steps=7):
             turn.reject("Return exactly one JSON object")
             continue
         kind = action.get("action")
+        kind = kind if isinstance(kind, str) else None
         turn.trace.append({"stage": "assistant_action", "status": str(kind), "step": step + 1})
         if kind == "read_chart":
             turn.read_chart_action(action)

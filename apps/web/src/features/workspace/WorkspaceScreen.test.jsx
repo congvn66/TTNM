@@ -156,3 +156,14 @@ it("shows tools-mode evidence and the executed script, without duplicate citatio
   expect(screen.getByText("Kết quả: 760.25")).toBeTruthy();
   expect(screen.queryByText(/vùng trích dẫn/)).toBeNull();
 });
+
+it.each([["json", true], ["postgres", false]])("offers re-extraction only where the backend supports it (%s)", async (backend, offered) => {
+  const doc = { id: "doc", file_name: "Broken.pdf", byte_size: 100, extraction_status: "failed" };
+  const session = { id: "chat", title: "My session", documents: [doc], messages: [{ id: "a", role: "assistant", document_id: "doc", body: "Ready" }] };
+  requestMock.mockImplementation(async (path) => path === "/health" ? { persistence_backend: backend } : path === "/api/v1/sessions" ? { sessions: [{ ...session, messages: [] }] } : path === "/api/v1/sessions/chat" ? { session } : path.endsWith("/extraction") ? { affected_message_ids: [] } : { jobs: [] });
+  render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  await screen.findByText("Ready");
+  if (!offered) { expect(screen.queryByText("Trích xuất lại")).toBeNull(); return; }
+  fireEvent.click(await screen.findByText("Trích xuất lại"));
+  await waitFor(() => expect(requestMock).toHaveBeenCalledWith("/api/v1/sessions/chat/documents/doc/extraction", { method: "POST" }));
+});

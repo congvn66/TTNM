@@ -167,3 +167,11 @@ def test_value_the_checker_disagrees_with_is_still_withheld():
     result = read_chart_region(PDF, REGION, "v", "q", complete=verify, predictor=lambda image: RAW)
     b = next(e for e in result["evidence_batch"]["evidences"] if e["chart_read"]["category_label"] == "B")
     assert (b["numeric_value"], b["data_status"]) == (None, "ambiguous")
+
+
+def test_checker_rows_with_wrong_types_are_cleaned():
+    from report_qa.application.chart_tool import _checked_row
+
+    row = _checked_row({"category": "A", "series": 3, "unit": {"x": 1}, "axis_label": ["y"], "value": 5, "confidence": 0.9})
+    assert row["category"] == "A" and row["series"] is None and row["unit"] is None and row["axis_label"] is None
+    assert row["value"] == 5 and row["confidence"] == 0.9

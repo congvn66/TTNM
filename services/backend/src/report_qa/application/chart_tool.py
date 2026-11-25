@@ -8,6 +8,7 @@ ambiguous. Stored raw outputs support later review and correction.
 import base64
 import hashlib
 import json
+import math
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from uuid import uuid4
@@ -53,6 +54,14 @@ def _label_box(label):
         return None
     clamped = [min(1.0, max(0.0, float(v))) for v in label]
     return clamped if clamped[0] < clamped[2] and clamped[1] < clamped[3] else None
+
+
+_ROW_TEXT_FIELDS = ("category", "series", "method", "measure", "unit", "period", "axis_label")
+
+
+def _checked_row(row):
+    """A verifier row whose text fields are text: the model may return any JSON type."""
+    return {**row, **{name: row.get(name) if isinstance(row.get(name), str) else None for name in _ROW_TEXT_FIELDS}}
 
 
 def read_chart_region(path, region, version, question_id, *, complete, predictor=None):
@@ -124,6 +133,7 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
             rows = checked.get("rows", [])
             if not isinstance(rows, list):
                 raise ValueError("Invalid chart verifier output")  # noqa: TRY004
+            rows = [_checked_row(row) for row in rows if isinstance(row, dict)]
         except (ValueError, RuntimeError) as exc:
             rows = []
             verification_error = str(exc)
@@ -141,7 +151,9 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
             digest = hashlib.sha256(
                 f"{version}:{key}:{category}:{series}".encode()
             ).hexdigest()[:20]
-            eid = "chart-" + digest
+            # Not "chart-": the planner flow reads the same chart under that
+            # prefix, and one key must never name two stored values.
+            eid = "chart-tools-" + digest
             matches = [
                 r
                 for r in rows
@@ -224,7 +236,7 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
                 )
                 assumptions.append("unverified_method_do_not_calculate")
             confidence = r.get("confidence", 0)
-            if not isinstance(confidence, (int, float)):
+            if not isinstance(confidence, (int, float)) or not math.isfinite(confidence):
                 confidence = 0
             confidence = max(0, min(0.6 if label_box_unusable else 0.85, float(confidence))) if valid else 0
             if confidence < 0.5:

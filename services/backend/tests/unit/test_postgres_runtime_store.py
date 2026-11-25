@@ -144,3 +144,36 @@ def test_chart_run_is_completed_only_after_its_values_are_inserted(monkeypatch):
     completed = next(i for i, sql in enumerate(statements) if sql.startswith("UPDATE extraction_runs SET status='completed'"))
     assert max(i for i, sql in enumerate(statements) if sql.startswith(("INSERT INTO source_regions", "INSERT INTO extracted_evidences"))) < completed
     assert [params[2] for sql, params in calls if sql.startswith("INSERT INTO source_regions")] == ["a", "b"]
+
+
+def test_a_chart_point_already_in_the_chat_is_reused_not_stored_twice(monkeypatch):
+    store = PostgresRuntimeStore("postgresql://unused", uuid4())
+    version, kept = uuid4(), uuid4()
+
+    class NoTransaction:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    execute = _Recorder([
+        ("SELECT dv.id", [{"id": version}]),
+        ("SELECT COALESCE(MAX(run_no)", [{"value": 3}]),
+        ("SELECT sr.meta", [{"evidence_key": "a", "current_revision_id": kept}]),
+        ("SELECT id FROM chat_sources", [{"id": uuid4()}]),
+    ])
+    monkeypatch.setattr(store, "_execute", execute)
+    monkeypatch.setattr(store, "transaction", NoTransaction)
+    fresh = uuid4()
+    monkeypatch.setattr(store, "initialize_chat_evidence", lambda *args: {"b": fresh})
+    evidences = [
+        {"evidence_key": key, "source_region_key": "r", "page_number": 1, "bbox": [0, 0, 1, 1], "raw_text": "1", "numeric_value": "1", "data_status": "valid", "extraction_method": "axis_estimation", "confidence": 0.8}
+        for key in ("a", "b")
+    ]
+    revisions = store.persist_on_demand_chart(
+        chat_id=uuid4(), document_version_id=version, question_plan_id="q2",
+        evidence_batch={"schema_version": 2, "document_version_id": str(version), "extraction_run_id": str(uuid4()), "scope": "on_demand_chart", "trigger": {"question_plan_id": "q2", "chart_region_keys": ["r"]}, "evidences": evidences},
+    )
+    assert [params[2] for _, params in execute.statements("INSERT INTO source_regions")] == ["b"]
+    assert revisions == {"a": kept, "b": fresh}

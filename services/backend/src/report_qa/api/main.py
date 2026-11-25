@@ -1196,14 +1196,20 @@ def _persist_chart_read(session: dict[str, Any], document: dict[str, Any], resul
     """Store a tools-mode chart read in PostgreSQL and adopt its revision ids."""
     store = _runtime_for_owner(session.get("owner_id", LOCAL_OWNER_ID))
     batch = result["evidence_batch"]
-    store.persist_on_demand_chart(
-        chat_id=UUID(session["id"]),
-        document_version_id=UUID(str(document.get("version_id") or document["id"])),
-        evidence_batch=batch,
-        question_plan_id=str(batch["trigger"]["question_plan_id"]),
-        chart_record={**result, "chart_region_key": region_key, "created_at": utc_now()},
-    )
-    document["evidence_state"] = store.load_evidence_state(session["id"], document["id"])
+    try:
+        store.persist_on_demand_chart(
+            chat_id=UUID(session["id"]),
+            document_version_id=UUID(str(document.get("version_id") or document["id"])),
+            evidence_batch=batch,
+            question_plan_id=str(batch["trigger"]["question_plan_id"]),
+            chart_record={**result, "chart_region_key": region_key, "created_at": utc_now()},
+        )
+        document["evidence_state"] = store.load_evidence_state(session["id"], document["id"])
+    except Exception as exc:
+        # The assistant gets a stable code, never database details, and can
+        # still answer from the other evidence.
+        flow_log("CHART_PERSISTENCE_FAILED", session_id=session["id"], document_id=document["id"], chart_region_key=region_key, error=type(exc).__name__)
+        raise RuntimeError("CHART_EVIDENCE_PERSISTENCE_FAILED") from exc
 
 
 def _base_extraction_or_none(document: dict[str, Any]) -> dict[str, Any] | None:

@@ -102,7 +102,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                  JOIN documents d ON d.id=dv.document_id
                  LEFT JOIN LATERAL (
                      SELECT status,error_code,id FROM extraction_runs
-                      WHERE document_version_id=dv.id
+                      WHERE document_version_id=dv.id AND scope='base_document'
                       ORDER BY run_no DESC LIMIT 1
                  ) er ON TRUE
                 WHERE cd.chat_id = ANY(%s) AND d.deleted_at IS NULL
@@ -168,7 +168,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                    JOIN documents d ON d.id=dv.document_id
                    LEFT JOIN LATERAL (
                        SELECT id,status,error_code FROM extraction_runs
-                        WHERE document_version_id=dv.id
+                        WHERE document_version_id=dv.id AND scope='base_document'
                         ORDER BY run_no DESC LIMIT 1
                    ) er ON TRUE
                   WHERE cd.chat_id=%s AND d.deleted_at IS NULL
@@ -709,6 +709,21 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                 if not source_rows:
                     raise RuntimeError("CHART_SOURCE_NOT_ATTACHED")
                 return self.initialize_chat_evidence(self.owner_id, chat_id, source_rows[0]["id"])
+            # A point read by an earlier question already has a working copy in
+            # this chat, perhaps corrected. Reuse it: a second copy under the
+            # same key would mix two histories.
+            known_revisions = {
+                str(row["evidence_key"]): row["current_revision_id"]
+                for row in self._execute(
+                    """SELECT sr.meta->>'evidence_key' AS evidence_key, ce.current_revision_id
+                         FROM chat_evidences ce
+                         JOIN chat_sources cs ON cs.id=ce.chat_source_id
+                         JOIN extracted_evidences ee ON ee.id=ce.extracted_evidence_id
+                         JOIN source_regions sr ON sr.id=ee.source_region_id
+                        WHERE ce.chat_id=%s AND cs.document_version_id=%s AND sr.meta->>'evidence_key' = ANY(%s)""",
+                    (chat_id, document_version_id, [str(item.get("evidence_key")) for item in evidences]),
+                )
+            }
             existing = self._execute(
                 "SELECT id FROM extraction_runs WHERE id=%s AND document_version_id=%s",
                 (run_id, document_version_id),
@@ -740,6 +755,8 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                     ),
                 )
                 for item in evidences:
+                    if str(item.get("evidence_key")) in known_revisions:
+                        continue
                     evidence_key = str(item.get("evidence_key") or "")
                     if not evidence_key:
                         raise ValueError("CHART_EVIDENCE_KEY_REQUIRED")
@@ -811,7 +828,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
             )
             if not source_rows:
                 raise RuntimeError("CHART_SOURCE_NOT_ATTACHED")
-            return self.initialize_chat_evidence(self.owner_id, chat_id, source_rows[0]["id"])
+            return {**known_revisions, **self.initialize_chat_evidence(self.owner_id, chat_id, source_rows[0]["id"])}
 
     def _sync_evidence_state(self, chat_id: UUID, document: dict[str, Any]) -> None:
         state = document.get("evidence_state") or {}

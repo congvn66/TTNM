@@ -51,7 +51,7 @@ def _citation(evidence):
 def _quote_citation(pdf_path, source):
     try:
         bbox = quote_bbox(pdf_path, source["page"], source["quote"])
-    except (OSError, RuntimeError, ValueError):
+    except (ImportError, OSError, RuntimeError, ValueError):
         bbox = None  # the viewer still highlights by matching the quote text
     return {"kind": "text", "page": source["page"], "bbox": bbox, "quote": source["quote"], "match": source["match"]}
 
@@ -157,7 +157,7 @@ def answer_document(
         if cached is None:
             region = next(r for r in context["chart_regions"] if r["chart_region_key"] == key)
             result = storable(read_chart_region(
-                resolve_pdf(document["storage_name"]), region, document.get("version_id") or document["id"], str(uuid4()), complete=complete,
+                resolve_pdf(document["storage_name"]), region, document.get("version_id") or document["id"], f"tools:{key}", complete=complete,
             ))
             validate_extraction_batch(result["evidence_batch"])
             # Persist chart values immediately so the Data drawer shows them,

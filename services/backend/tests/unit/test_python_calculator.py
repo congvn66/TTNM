@@ -150,3 +150,9 @@ def test_child_process_gets_no_parent_variables_except_what_windows_needs(monkey
     assert calculator._child_env() == {}
     monkeypatch.setenv("SYSTEMROOT", "C:\\Windows")
     assert calculator._child_env() == {"SYSTEMROOT": "C:\\Windows"}
+
+
+@pytest.mark.parametrize("code", ["result = " + "-" * 9000 + "1", "result = 0x" + "f" * 8000 + " * value('a')"])
+def test_extreme_scripts_fail_without_raising(code):
+    evidence = {"a": {"evidence_key": "a", "numeric_value": "1.5", "data_status": "valid"}}
+    assert run_calculation(code, evidence)["status"] in {"failed", "succeeded"}
