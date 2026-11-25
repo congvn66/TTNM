@@ -168,3 +168,79 @@ class AIProviderContractTests(unittest.TestCase):
         self.assertEqual(body["response_format"]["type"], "json_schema")
         self.assertFalse(body["response_format"]["json_schema"]["schema"]["additionalProperties"])
         self.assertEqual(result.provider, "openrouter")
+
+
+def _gemini_client(monkeypatch, **env):
+    from report_qa.api import ai_provider
+
+    monkeypatch.setattr(ai_provider, "_load_local_env", lambda: None)
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
+    monkeypatch.delenv("REPORT_QA_PLANNER_MODEL", raising=False)
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-test")
+    monkeypatch.setenv("REPORT_QA_AI_RETRIES", "0")
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    if "REPORT_QA_REASONING_EFFORT" not in env:
+        monkeypatch.delenv("REPORT_QA_REASONING_EFFORT", raising=False)
+    return ai_provider, ai_provider.PlannerChatClient("gemini")
+
+
+def _capture_request(monkeypatch, ai_provider, reply="{\"ok\": true}"):
+    sent = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return json.dumps({"choices": [{"message": {"content": reply}}]}).encode()
+
+    def fake_urlopen(request, timeout):
+        sent["body"] = json.loads(request.data)
+        return Response()
+
+    monkeypatch.setattr(ai_provider, "urlopen", fake_urlopen)
+    return sent
+
+
+def test_gemini_requests_use_a_thinking_level_newer_models_accept(monkeypatch):
+    # Gemini 3.x answers HTTP 400 "Thinking level MINIMAL is not supported".
+    ai_provider, client = _gemini_client(monkeypatch)
+    sent = _capture_request(monkeypatch, ai_provider)
+
+    client.complete("system", "user")
+
+    assert sent["body"]["reasoning_effort"] == "low"
+
+
+def test_reasoning_effort_can_be_omitted(monkeypatch):
+    ai_provider, client = _gemini_client(monkeypatch, REPORT_QA_REASONING_EFFORT="")
+    sent = _capture_request(monkeypatch, ai_provider)
+
+    client.complete("system", "user")
+
+    assert "reasoning_effort" not in sent["body"]
+
+
+def test_provider_rejection_reason_is_kept_without_the_key(monkeypatch):
+    from io import BytesIO
+    from urllib.error import HTTPError
+
+    ai_provider, client = _gemini_client(monkeypatch)
+    body = json.dumps([{"error": {"code": 400, "message": "Thinking level MINIMAL is not supported (key test-key-123)", "status": "INVALID_ARGUMENT"}}]).encode()
+
+    def rejecting_urlopen(request, timeout):
+        raise HTTPError(request.full_url, 400, "Bad Request", {}, BytesIO(body))
+
+    monkeypatch.setattr(ai_provider, "urlopen", rejecting_urlopen)
+    try:
+        client.complete("system", "user")
+    except ai_provider.ProviderError as exc:
+        assert exc.code == "AI_PROVIDER_HTTP_ERROR"
+        assert "Thinking level MINIMAL is not supported" in str(exc)
+        assert "test-key-123" not in str(exc)
+    else:
+        raise AssertionError("expected ProviderError")

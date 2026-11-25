@@ -133,3 +133,26 @@ it("keeps a failed question visible and lets the user retry it", async () => {
   expect(attempts).toBe(2);
   expect(screen.getAllByText("Summarize")).toHaveLength(1);
 });
+
+it("shows tools-mode evidence and the executed script, without duplicate citation buttons", async () => {
+  const doc = { id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: "ready" };
+  const bbox = [0.1, 0.1, 0.2, 0.2];
+  const session = { id: "chat", title: "My session", documents: [doc], messages: [
+    { id: "q", role: "user", document_id: "doc", body: "Mức tăng?" },
+    { id: "a", role: "assistant", document_id: "doc", reply_to_message_id: "q", mode: "ai:gemini", body: "760.25", citations: [{ page: 1, bbox }], structured_answer: {
+      presentation: "document_assistant", answer: "Mức tăng là 760.25", sections: [], tables: [], claims: [], warnings: [],
+      evidence: [
+        { kind: "text", page: 1, quote: "Q2 2,010.75", bbox },
+        { kind: "data", page: 1, evidence_key: "k2", label: "Q2 · Doanh thu", value: "2010.75", raw_text: "2,010.75", method_label: "đọc từ ô bảng", data_status: "valid", bbox },
+      ],
+      formulas: [{ name: "Python", expression: "result = value('k2') - value('k1')", substitution: "Q2 trừ Q1", result: "760.25", inputs: [{ evidence_key: "k2", label: "Q2 · Doanh thu", value: "2010.75", page: 1, bbox }] }],
+    } },
+  ] };
+  requestMock.mockImplementation(async (path) => path === "/api/v1/sessions" ? { sessions: [{ ...session, messages: [] }] } : path === "/api/v1/sessions/chat" ? { session } : { jobs: [] });
+  const view = render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  await screen.findByText("Mức tăng là 760.25");
+  expect(view.container.querySelectorAll(".evidence-item")).toHaveLength(2);
+  expect(screen.getByText("Script Python")).toBeTruthy();
+  expect(screen.getByText("Kết quả: 760.25")).toBeTruthy();
+  expect(screen.queryByText(/vùng trích dẫn/)).toBeNull();
+});

@@ -21,7 +21,8 @@ _LOCAL_ENV_KEYS = {
     "GEMINI_API_KEY", "GEMINI_MODEL", "GEMINI_API_BASE_URL",
     "OPENROUTER_API_KEY", "OPENROUTER_MODEL", "OPENROUTER_BASE_URL",
     "SAMBANOVA_API_KEY", "SAMBANOVA_MODEL", "SAMBANOVA_BASE_URL",
-    "REPORT_QA_PLANNER_MODE", "REPORT_QA_PLANNER_MODEL",
+    "REPORT_QA_PLANNER_MODE", "REPORT_QA_PLANNER_MODEL", "REPORT_QA_ASSISTANT_MODE",
+    "PDF_EXTRACTION_BACKEND", "PDF_NUMBER_LOCALE", "CHART_READER_BACKEND", "REPORT_QA_REASONING_EFFORT",
 }
 
 
@@ -58,6 +59,11 @@ class ProviderAnswer:
     model: str
     response_sha256: str
     structured: dict[str, Any] | None = None
+
+
+def assistant_mode() -> str:
+    _load_local_env()
+    return os.getenv("REPORT_QA_ASSISTANT_MODE", "legacy").strip().lower()
 
 
 def provider_mode() -> str:
@@ -449,6 +455,20 @@ def planner_mode() -> str:
     return next((name for name, spec in PLANNER_PROVIDERS.items() if os.getenv(spec[0])), "rules")
 
 
+def _provider_error_message(exc: HTTPError, secret: str) -> str:
+    """The provider's own error text (e.g. why a request was rejected), short and key-free."""
+    try:
+        payload = json.loads(exc.read().decode("utf-8", errors="replace") or "{}")
+    except (OSError, ValueError):
+        return ""
+    if isinstance(payload, list) and payload:
+        payload = payload[0]
+    error = payload.get("error") if isinstance(payload, dict) else None
+    message = error.get("message") if isinstance(error, dict) else error if isinstance(error, str) else ""
+    message = " ".join(str(message or "").split())[:200]
+    return message.replace(secret, "<redacted>") if secret else message
+
+
 class PlannerChatClient:
     """OpenAI-compatible chat completions for the question planner. OpenRouter, SambaNova and Gemini all speak it."""
 
@@ -464,11 +484,21 @@ class PlannerChatClient:
         self.model = os.getenv("REPORT_QA_PLANNER_MODEL") or os.getenv(model_name, model_default)
         self.timeout_seconds = float(os.getenv("REPORT_QA_AI_TIMEOUT_SECONDS", "20"))
         self.max_retries = min(2, max(0, int(os.getenv("REPORT_QA_AI_RETRIES", "1"))))
+        # Gemini 3.x rejects "minimal" ("Thinking level MINIMAL is not
+        # supported"), which failed every request; "low" is accepted widely.
+        # Set REPORT_QA_REASONING_EFFORT= (empty) to omit the field.
+        self.reasoning_effort = os.getenv("REPORT_QA_REASONING_EFFORT", "low").strip().lower()
         if not self.api_key:
             raise ProviderError("AI_NOT_CONFIGURED", f"{key_name} is not configured")
 
     def complete(self, system: str, user: str) -> str:
         body = {"model": self.model, "temperature": 0, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+        if self.mode == "gemini":
+            # Planner and document assistant both expect one JSON object; keep
+            # reasoning low and output bounded for interactive latency.
+            body.update({"max_tokens": 4096, "response_format": {"type": "json_object"}})
+            if self.reasoning_effort:
+                body["reasoning_effort"] = self.reasoning_effort
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         if self.mode == "openrouter":
             headers.update({"HTTP-Referer": "http://127.0.0.1:4173", "X-Title": "SourceLens"})
@@ -482,7 +512,8 @@ class PlannerChatClient:
                 retryable = exc.code in {408, 429, 500, 502, 503, 504}
                 if attempt >= self.max_retries or not retryable:
                     code = "AI_PROVIDER_UNAVAILABLE" if retryable else ("AI_MODEL_UNAVAILABLE" if exc.code == 404 else "AI_PROVIDER_HTTP_ERROR")
-                    raise ProviderError(code, f"{self.mode} planner request failed (HTTP {exc.code})") from exc
+                    detail = _provider_error_message(exc, self.api_key)
+                    raise ProviderError(code, f"{self.mode} planner request failed (HTTP {exc.code})" + (f": {detail}" if detail else "")) from exc
                 time.sleep(min(8.0, 2.0 * (attempt + 1)))
             except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
                 if attempt >= self.max_retries:

@@ -1,4 +1,5 @@
-const REQUEST_TIMEOUT_MS = 90_000;
+// Tools mode can make several AI calls and read a chart on CPU.
+const REQUEST_TIMEOUT_MS = 180_000;
 
 function emitRequestMetric(metric) {
   if (typeof window === "undefined") return;

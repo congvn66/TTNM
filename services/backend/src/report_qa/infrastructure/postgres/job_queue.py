@@ -223,7 +223,15 @@ class PostgresJobQueue:
                     message_id = UUID(row['payload']['assistant_message_id'])
                     message = connection.execute("UPDATE messages SET status='failed',content=%s,updated_at=now() WHERE id=%s AND chat_id=%s AND status='processing' RETURNING current_answer_revision_id", ('Đã dừng tạo câu trả lời.', message_id, row['chat_id'])).fetchone()
                     if message and message['current_answer_revision_id']:
-                        connection.execute("UPDATE answer_revisions SET answer_status='processing_error',answer_text=%s,result=jsonb_set(COALESCE(result,'{}'::jsonb),'{structured_answer}','null'::jsonb,true) WHERE id=%s", ('Đã dừng tạo câu trả lời.', message['current_answer_revision_id']))
+                        # Revisions are immutable, so the stopped answer is a new one.
+                        stopped = connection.execute(
+                            """INSERT INTO answer_revisions (chat_id,message_id,revision_no,answer_status,question_context,operation,result,answer_text,assessment,input_data_revision)
+                               SELECT chat_id,message_id,(SELECT MAX(revision_no)+1 FROM answer_revisions WHERE message_id=source.message_id),'processing_error',question_context,operation,
+                                      jsonb_set(COALESCE(result,'{}'::jsonb),'{structured_answer}','null'::jsonb,true),%s,assessment,input_data_revision
+                                 FROM answer_revisions AS source WHERE id=%s RETURNING id""",
+                            ('Đã dừng tạo câu trả lời.', message['current_answer_revision_id']),
+                        ).fetchone()
+                        connection.execute("UPDATE messages SET current_answer_revision_id=%s WHERE id=%s", (stopped['id'], message_id))
                 event_no = connection.execute("SELECT COALESCE(MAX(event_no),0)+1 AS next FROM job_events WHERE job_id=%s", (job_id,)).fetchone()["next"]
                 connection.execute("INSERT INTO job_events (job_id,event_no,event_type,payload) VALUES (%s,%s,'cancelled','{}'::jsonb)", (job_id, event_no))
             return bool(row)

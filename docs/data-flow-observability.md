@@ -5,7 +5,7 @@ Tai lieu nay la huong dan doc luong du lieu dang chay, khong chi doc danh sach e
 ## 1. Kiem tra server va adapter
 
 ```powershell
-$base = "http://127.0.0.1:8001"
+$base = "http://127.0.0.1:8000"
 Invoke-RestMethod "$base/" | ConvertTo-Json -Depth 6
 Invoke-RestMethod "$base/health" | ConvertTo-Json -Depth 6
 ```
@@ -66,7 +66,7 @@ persistence(committed)
 ## 5. Lenh audit mot request
 
 ```powershell
-$base = "http://127.0.0.1:8001"
+$base = "http://127.0.0.1:8000"
 $sessions = Invoke-RestMethod "$base/api/v1/sessions"
 $session = $sessions.sessions | Where-Object { $_.documents.Count -gt 0 -and $_.documents[0].extraction_status -eq "ready" } | Select-Object -First 1
 $doc = $session.documents[0]

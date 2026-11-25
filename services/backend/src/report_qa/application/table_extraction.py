@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from report_qa.application.numeric_extraction import canonical_decimal
+
 
 NUMBER_RE = re.compile(r"(?<![\w/])[-+]?(?:\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,]\d+)?%?")
 
@@ -27,7 +29,9 @@ def _decimal(raw: str) -> str:
         separator = "," if "," in value else "."
         parts = value.split(separator)
         value = "".join(parts) if len(parts) > 2 or (len(parts) == 2 and len(parts[1]) == 3) else ".".join(parts)
-    return value.lstrip("0") or "0"
+    # lstrip("0") turned "0.5" into ".5", which the evidence contract rejects
+    # and fails the whole document.
+    return canonical_decimal(value)
 
 
 @dataclass(frozen=True, slots=True)
