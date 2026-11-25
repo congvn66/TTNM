@@ -402,6 +402,25 @@ def _bind_names(plan: dict[str, Any], catalog: list[CatalogEntry]) -> list[str]:
     return applied
 
 
+# "vùng A", "khu vực B", "region C", "miền Bắc", "chi nhánh Hà Nội": the
+# question names its subject even when the base catalog does not have it yet
+# (chart categories only exist after the chart is read).
+_NAMED_SUBJECT = re.compile(r"(?<!\w)(?i:vùng|khu\s+vực|region|area|miền|chi\s+nhánh|branch)\s+([^\W_][\w\-]*(?:\s+[^\W_][\w\-]*){0,2})")
+
+
+def _named_subject(question: str) -> str | None:
+    match = _NAMED_SUBJECT.search(question)
+    if not match:
+        return None
+    first, *rest = match.group(1).split()
+    # Keep a multi-word proper name ("Hà Nội"), not the following verb ("là").
+    for word in rest:
+        if not word[0].isupper():
+            break
+        first += " " + word
+    return first
+
+
 def _subject_choice(plan: dict[str, Any], question: str, catalog: list[CatalogEntry]) -> tuple[str, list[str]] | None:
     """A blank subject where the document only has named subjects for that measure: take the one the question names, else ask."""
     text = _plain(question)
@@ -415,6 +434,12 @@ def _subject_choice(plan: dict[str, Any], question: str, catalog: list[CatalogEn
         named = [s for s in subjects if _plain(s) and re.search(rf"(?<!\w){re.escape(_plain(s))}(?!\w)", text)]
         if len(named) == 1:
             fact["subject"] = named[0]
+            continue
+        explicit = _named_subject(question)
+        if not named and explicit:
+            # Asking "which subject?" with the catalog's subjects ignored the
+            # one the user named; keep it so evidence (or a chart) resolves it.
+            fact["subject"] = explicit
             continue
         total = [s for s in subjects if _plain(s) in {"tong", "tong cong", "toan cong ty", "total", "hop nhat", "tap doan"}]
         if len(total) == 1 and not named:

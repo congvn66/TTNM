@@ -6,9 +6,12 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import unicodedata
+from contextlib import asynccontextmanager
 from copy import deepcopy
+from decimal import Decimal
 from hashlib import sha256
 from typing import Any
 from uuid import UUID, uuid4
@@ -16,7 +19,7 @@ from uuid import UUID, uuid4
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pypdf import PdfReader
 
 from report_qa.application.evidence_extraction import extract_pdf_artifact
@@ -24,9 +27,12 @@ from report_qa.application.chart_reading import ChartReadRequest, PdfVectorChart
 from report_qa.application.deplot_reading import DeplotChartReader
 from report_qa.application.p0_pipeline import calculation_answer, execute_calculation, resolve_evidence
 from report_qa.application.question_planner import build_catalog, plan_question
+from report_qa.application.text_safety import storable
+from report_qa.api.document_assistant_flow import answer_document, with_chart_batches
+from report_qa.application.document_assistant import AssistantError
 from report_qa.domain.contracts import validate_calculation_result_v1, validate_question_plan_v2
 from report_qa.domain.types import validate_decimal_text
-from .ai_provider import ProviderError, live_provider, planner_client, provider_mode
+from .ai_provider import ProviderError, _load_local_env, assistant_mode, live_provider, planner_client, provider_mode
 from .jobs import router as jobs_router
 from .library import router as library_router
 from .auth import DEMO_OWNER_ID, owner_id_for_request, router as auth_router, settings_router as auth_settings_router
@@ -37,7 +43,7 @@ from report_qa.infrastructure.integrations import readiness as integration_readi
 from report_qa.infrastructure.integrations import runtime_capabilities
 from report_qa.infrastructure.postgres.runtime_store import PostgresRuntimeStore
 from report_qa.infrastructure.postgres.job_queue import PostgresJobQueue
-from .session_storage import EXTRACTION_ROOT, UPLOAD_ROOT, document_path, extraction_path, load_catalog, save_catalog as disk_save_catalog, utc_now
+from .session_storage import EXTRACTION_ROOT, UPLOAD_ROOT, catalog_lock, document_path, extraction_path, load_catalog, save_catalog as disk_save_catalog, utc_now
 from .object_storage_runtime import (
     ObjectStorageError,
     cache_extraction,
@@ -125,10 +131,24 @@ class HealthResponse(BaseModel):
     ai_model: str
     persistence_backend: str
     database: dict[str, Any]
-
     storage: dict[str, Any]
     capabilities: dict[str, Any]
     readiness: dict[str, Any]
+    assistant_mode: str | None = None
+    assistant_provider: str | None = None
+    assistant_model: str | None = None
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Without the durable queue, extraction runs as an in-process background
+    # task; documents left "queued" by a restart would stay queued forever.
+    # With the queue, the worker owns unfinished jobs.
+    if durable_job_queue is None:
+        resume_interrupted_extractions()
+    yield
+
+
 app = FastAPI(
     title="Report QA API",
     version="0.1.0",
@@ -139,6 +159,7 @@ app = FastAPI(
         "Swagger mo ta mot luong chinh: session -> document -> question -> grounded answer."
     ),
     openapi_tags=OPENAPI_TAGS,
+    lifespan=lifespan,
 )
 app.include_router(jobs_router)
 app.include_router(library_router)
@@ -184,6 +205,8 @@ def favicon() -> Response:
     return Response(status_code=204)
 
 
+# Read extractor/chart-reader settings from .env too, before they are used.
+_load_local_env()
 MAX_PDF_BYTES = 100 * 1024 * 1024
 MAX_PDF_PAGES = 500
 # A stable owner keeps the current single-user demo compatible with the
@@ -225,33 +248,52 @@ def save_catalog(value: dict[str, Any], owner_id: str | UUID | None = None) -> N
             if sessions:
                 selected = max(sessions, key=lambda item: item.get("updated_at", ""))
                 selected_owner = selected.get("owner_id", LOCAL_OWNER_ID)
-        _runtime_for_owner(selected_owner or LOCAL_OWNER_ID).sync_catalog(value, extraction_loader=_load_extraction_for_persistence)
+        owner = str(selected_owner or LOCAL_OWNER_ID)
+        try:
+            _runtime_for_owner(owner).sync_catalog(value, extraction_loader=_load_extraction_for_persistence)
+        except Exception:
+            # The database refused this snapshot. Drop the owner's cached
+            # sessions, so the next request reloads good rows instead of
+            # failing on the same data again.
+            with catalog_lock:
+                for session_id in [key for key, item in value.get("sessions", {}).items() if str(item.get("owner_id")) == owner]:
+                    value["sessions"].pop(session_id, None)
+            raise
     else:
         disk_save_catalog(value)
 
 
-class SessionCreateRequest(BaseModel):
+class StorableRequest(BaseModel):
+    """A request whose text is saved as it is, so it must hold no unstorable character."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _remove_unstorable_characters(cls, data: Any) -> Any:
+        return storable(data)
+
+
+class SessionCreateRequest(StorableRequest):
     title: str = Field(default="Phiên phân tích mới", min_length=1, max_length=120)
 
 
-class SessionUpdateRequest(BaseModel):
+class SessionUpdateRequest(StorableRequest):
     """User-editable metadata only; server-owned fields stay immutable."""
 
     title: str = Field(min_length=1, max_length=120)
 
 
-class DocumentUpdateRequest(BaseModel):
+class DocumentUpdateRequest(StorableRequest):
     """Rename the display name of a stored PDF without replacing its bytes."""
 
     file_name: str = Field(min_length=1, max_length=255)
 
 
-class SessionQuestionRequest(BaseModel):
+class SessionQuestionRequest(StorableRequest):
     document_id: str = Field(min_length=1)
     question: str = Field(min_length=1, max_length=2000)
 
 
-class EvidenceRevisionCreateRequest(BaseModel):
+class EvidenceRevisionCreateRequest(StorableRequest):
     numeric_value: str = Field(min_length=1, max_length=80)
     reason: str = Field(min_length=3, max_length=1000)
     expected_revision_id: str = Field(min_length=1, max_length=80)
@@ -323,6 +365,7 @@ async def trace_headers(request: Request, call_next):
     "/health",
     tags=["runtime"],
     summary="Health va AI adapter status",
+    response_model_exclude_none=True,
     description="Read-only probe. Cho biet adapter persistence hien tai, AI mode/model dang chay; khong tao hoac sua du lieu.",
     response_model=HealthResponse,
     response_description="Trang thai runtime hien tai.",
@@ -332,17 +375,21 @@ def health() -> dict[str, Any]:
     storage = storage_health()
     capabilities = runtime_capabilities(database=database, storage=storage)
     readiness_status, blockers = integration_readiness(capabilities)
+    mode = assistant_mode()
+    client = planner_client() if mode == "tools" else None
     return {
         "status": "ok",
         "adapter": "postgres_catalog_cloudflare_r2" if postgres_runtime and uses_remote_object_storage() else "postgres_catalog_local_filesystem" if postgres_runtime else "local_json_filesystem",
         "durability": "postgres_metadata_cloudflare_r2" if postgres_runtime and uses_remote_object_storage() else "postgres_metadata_local_pdf_bytes" if postgres_runtime else "local_disk_logical_state",
-        "ai_mode": provider_mode(),
-        "ai_model": (os.getenv("GEMINI_MODEL", "gemini-2.5-flash") if provider_mode() == "gemini" else os.getenv("OPENROUTER_MODEL", "openai/gpt-6-luna") if provider_mode() == "openrouter" else "deterministic"),
+        "ai_mode": client.mode if client else provider_mode(),
+        "ai_model": client.model if client else (os.getenv("GEMINI_MODEL", "gemini-2.5-flash") if provider_mode() == "gemini" else os.getenv("OPENROUTER_MODEL", "openai/gpt-6-luna") if provider_mode() == "openrouter" else "deterministic"),
         "persistence_backend": settings.persistence_backend,
         "database": database,
         "storage": storage,
         "capabilities": capabilities,
         "readiness": {"status": readiness_status, "blockers": blockers},
+        **({"assistant_mode": "tools", "assistant_provider": client.mode if client else None,
+            "assistant_model": client.model if client else None} if mode == "tools" else {}),
     }
 
 
@@ -406,7 +453,7 @@ def get_session(session_id: str, owner_id: str | UUID | None = None) -> dict[str
 
 def extract_pdf_pages(path: Any, extraction_name: str, document_version_id: str) -> dict[str, Any]:
     try:
-        artifact = extract_pdf_artifact(path, document_version_id)
+        artifact = storable(extract_pdf_artifact(path, document_version_id))
         EXTRACTION_ROOT.mkdir(parents=True, exist_ok=True)
         target = extraction_path(extraction_name)
         temporary = target.with_suffix(".tmp")
@@ -419,12 +466,16 @@ def extract_pdf_pages(path: Any, extraction_name: str, document_version_id: str)
             "numeric_evidence_count": len(artifact["evidence_batch"]["evidences"]),
             "error": None,
         }
+    except ModuleNotFoundError as exc:
+        # e.g. the default Docling extractor is not installed; name the
+        # package instead of a bare "ModuleNotFoundError".
+        return {"status": "failed", "page_count": None, "numeric_evidence_count": 0, "error": f"MISSING_DEPENDENCY:{exc.name}"}
     except Exception as exc:
         return {"status": "failed", "page_count": None, "numeric_evidence_count": 0, "error": type(exc).__name__}
 
 
 async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str | None = None) -> dict[str, Any]:
-    name = file.filename or "unnamed.pdf"
+    name = storable(file.filename or "unnamed.pdf")
     if not name.lower().endswith(".pdf"):
         raise HTTPException(status_code=422, detail={"code": "PDF_REQUIRED", "message": "chỉ chấp nhận tệp .pdf"})
     document_id = str(uuid4())
@@ -480,8 +531,9 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
         "extraction_name": f"{document_id}.json",
     }
     record.update({"extraction_status": "queued", "page_count": page_count, "numeric_evidence_count": 0, "extraction_error": None})
-    session["documents"].append(record)
-    session["updated_at"] = now
+    with catalog_lock:
+        session["documents"].append(record)
+        session["updated_at"] = now
     save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
     flow_log(
         "DOCUMENT_STORED",
@@ -514,21 +566,25 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
         flow_log("EXTRACTION_SKIPPED", trace_id=trace_id, session_id=session_id, document_id=document_id, reason="document_not_found")
         raise RuntimeError("EXTRACTION_DOCUMENT_NOT_FOUND")
     flow_log("EXTRACTION_STARTED", trace_id=trace_id, session_id=session_id, document_id=document_id)
-    document.update(extraction_status="processing", extraction_error=None)
-    save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+    owner = session.get("owner_id", LOCAL_OWNER_ID)
+    with catalog_lock:
+        document.update(extraction_status="processing", extraction_error=None)
+    save_catalog(catalog, owner)
     extraction = extract_pdf_pages(cache_pdf(document["storage_name"]), document["extraction_name"], document_id)
-    document.update({"extraction_status": extraction["status"], "page_count": extraction["page_count"], "numeric_evidence_count": extraction["numeric_evidence_count"], "extraction_error": extraction["error"]})
-    if extraction["status"] == "ready":
-        artifact = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
-        ensure_document_evidence_state(document, artifact)
-    session["updated_at"] = utc_now()
+    artifact = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8")) if extraction["status"] == "ready" else None
+    with catalog_lock:
+        document.update({"extraction_status": extraction["status"], "page_count": extraction["page_count"], "numeric_evidence_count": extraction["numeric_evidence_count"], "extraction_error": extraction["error"]})
+        if artifact is not None:
+            ensure_document_evidence_state(document, artifact)
+        session["updated_at"] = utc_now()
     try:
-        save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+        save_catalog(catalog, owner)
     except Exception:
-        document.update(extraction_status="failed", extraction_error="EXTRACTION_PUBLISH_FAILED")
+        with catalog_lock:
+            document.update(extraction_status="failed", extraction_error="EXTRACTION_PUBLISH_FAILED")
         # Persist a terminal document state when the artifact cannot be saved
         # (e.g. schema validation); never leave the UI polling indefinitely.
-        save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+        save_catalog(catalog, owner)
         raise
     flow_log(
         "EXTRACTION_FINISHED",
@@ -545,6 +601,42 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
         raise RuntimeError(f"EXTRACTION_FAILED:{extraction['error']}")
 
 
+def _extract_in_background(session_id: str, document_id: str, trace_id: str | None = None, owner_id: str | UUID | None = None) -> None:
+    """Run extraction without the durable queue.
+
+    The failure is already stored on the document for the UI; only the worker
+    needs the exception, to retry the job.
+    """
+    try:
+        complete_document_extraction(session_id, document_id, trace_id, owner_id)
+    except RuntimeError as exc:
+        flow_log("EXTRACTION_BACKGROUND_FAILED", trace_id=trace_id, session_id=session_id, document_id=document_id, error=str(exc))
+
+
+def resume_interrupted_extractions(*, background: bool = True) -> list[str]:
+    """Re-run extraction for documents a previous process left "queued"."""
+    with catalog_lock:
+        pending = [
+            (session_id, document["id"])
+            for session_id, session in catalog["sessions"].items()
+            for document in session.get("documents", [])
+            if document.get("extraction_status") in {"queued", "processing"}
+        ]
+    if not pending:
+        return []
+    flow_log("EXTRACTION_RESUMED", document_count=len(pending))
+
+    def run() -> None:
+        for session_id, document_id in pending:
+            _extract_in_background(session_id, document_id)
+
+    if background:
+        threading.Thread(target=run, name="resume-extractions", daemon=True).start()
+    else:
+        run()
+    return [document_id for _, document_id in pending]
+
+
 @app.get(
     "/api/v1/sessions",
     tags=["sessions"],
@@ -555,8 +647,13 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
 )
 def list_sessions(request: Request) -> dict[str, Any]:
     owner_id = owner_id_for_request(request)
-    source = _runtime_for_owner(owner_id).load_catalog() if postgres_runtime else catalog
-    sessions = [public_session(item) for item in source["sessions"].values() if item.get("owner_id") == str(owner_id)]
+    if postgres_runtime:
+        sessions = [public_session(item) for item in _runtime_for_owner(owner_id).load_catalog()["sessions"].values() if item.get("owner_id") == str(owner_id)]
+    else:
+        with catalog_lock:
+            # Deep copy under the lock: the response is serialized after this
+            # returns, while other threads may still be appending to the catalog.
+            sessions = json.loads(json.dumps([public_session(item) for item in catalog["sessions"].values() if item.get("owner_id") == str(owner_id)]))
     sessions.sort(key=lambda item: item["updated_at"], reverse=True)
     return {"sessions": sessions, "persistence": {"metadata": "postgresql" if postgres_runtime else "runtime/sessions.json", "pdf_bytes": "cloudflare_r2" if uses_remote_object_storage() else "runtime/uploads"}}
 
@@ -574,7 +671,8 @@ def create_session(payload: SessionCreateRequest, request: Request) -> dict[str,
     session_id = str(uuid4())
     now = utc_now()
     session = {"id": session_id, "owner_id": str(owner_id), "title": payload.title.strip(), "created_at": now, "updated_at": now, "documents": [], "messages": []}
-    catalog["sessions"][session_id] = session
+    with catalog_lock:
+        catalog["sessions"][session_id] = session
     save_catalog(catalog, owner_id)
     return {"session": public_session(session)}
 
@@ -589,7 +687,11 @@ def create_session(payload: SessionCreateRequest, request: Request) -> dict[str,
     responses=OPENAPI_COMMON_ERRORS,
 )
 def read_session(session_id: str, request: Request) -> dict[str, Any]:
-    return {"session": public_session(get_session(session_id, owner_id_for_request(request)))}
+    # Load first: in PostgreSQL mode this is a network round trip, which must
+    # not happen while the catalog lock is held.
+    session = get_session(session_id, owner_id_for_request(request))
+    with catalog_lock:
+        return {"session": json.loads(json.dumps(public_session(session)))}
 
 
 @app.patch(
@@ -609,8 +711,9 @@ def update_session(session_id: str, payload: SessionUpdateRequest, request: Requ
         if not _runtime_for_owner(owner_id).rename_chat(session_id, title):
             raise HTTPException(status_code=404, detail={"code": "SESSION_NOT_FOUND", "message": "session not found"})
     else:
-        session["title"] = title
-        session["updated_at"] = utc_now()
+        with catalog_lock:
+            session["title"] = title
+            session["updated_at"] = utc_now()
         save_catalog(catalog, owner_id)
     session["title"] = title
     session["updated_at"] = utc_now()
@@ -631,9 +734,11 @@ def delete_session(session_id: str, request: Request) -> dict[str, Any]:
         if not _runtime_for_owner(owner_id).archive_chat(session_id):
             raise HTTPException(status_code=404, detail={"code": "SESSION_NOT_FOUND", "message": "session not found"})
     else:
-        catalog["sessions"].pop(session_id, None)
+        with catalog_lock:
+            catalog["sessions"].pop(session_id, None)
         save_catalog(catalog, owner_id)
-    catalog["sessions"].pop(session_id, None)
+    with catalog_lock:
+        catalog["sessions"].pop(session_id, None)
     flow_log("SESSION_ARCHIVED", trace_id=trace_id_for(request), session_id=session_id)
     return {"deleted": True, "session_id": session_id, "storage": "soft_deleted"}
 
@@ -667,7 +772,7 @@ async def upload_session_document(session_id: str, request: Request, background_
             payload={"session_id": session_id, "document_id": document["id"], "trace_id": trace_id, "owner_id": str(session.get("owner_id", owner_id))},
         )
     else:
-        background_tasks.add_task(complete_document_extraction, session_id, document["id"], trace_id)
+        background_tasks.add_task(_extract_in_background, session_id, document["id"], trace_id)
     persistence = {"binary_retained": True, "max_bytes": MAX_PDF_BYTES, "max_pages": MAX_PDF_PAGES}
     if durable_job_queue:
         persistence["execution"] = "postgres_queue"
@@ -725,6 +830,69 @@ def delete_session_document(session_id: str, document_id: str, request: Request)
     return {"deleted": True, "document_id": document_id, "storage": "soft_deleted"}
 
 
+def _archive_extraction(document: dict[str, Any]) -> dict[str, Any]:
+    """Move the current artifact aside under its run id; completed extraction stays immutable."""
+    entry = {
+        "status": document.get("extraction_status"), "error": document.get("extraction_error"),
+        "page_count": document.get("page_count"), "numeric_evidence_count": document.get("numeric_evidence_count"),
+        "archived_at": utc_now(), "extraction_run_id": None, "artifact": None,
+    }
+    current = extraction_path(document["extraction_name"])
+    if current.exists():
+        try:
+            run_id = json.loads(current.read_text(encoding="utf-8"))["evidence_batch"]["extraction_run_id"]
+        except (OSError, ValueError, KeyError, TypeError):
+            run_id = None
+        archived_name = f"{document['id']}.{run_id or uuid4()}.json"
+        os.replace(current, extraction_path(archived_name))
+        entry.update(extraction_run_id=run_id, artifact=archived_name)
+    document.setdefault("extraction_history", []).append(entry)
+    return entry
+
+
+@app.post(
+    "/api/v1/sessions/{session_id}/documents/{document_id}/extraction",
+    tags=["sessions"],
+    summary="Re-run extraction for an uploaded PDF",
+    description=(
+        "Chay lai extraction bang extractor hien tai, vi du sau khi sua loi trich xuat. Ket qua cu duoc luu tru "
+        "(khong ghi de); revision so lieu da sua giu nguyen theo evidence_key; cau tra loi cu giu snapshot va duoc "
+        "danh dau needs_update. Tra 409 neu tai lieu dang duoc trich xuat."
+    ),
+    responses=OPENAPI_COMMON_ERRORS,
+)
+def rerun_document_extraction(session_id: str, document_id: str, request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
+    owner_id = owner_id_for_request(request)
+    if postgres_runtime:
+        # Completed extraction rows are immutable in PostgreSQL and a document
+        # version has one base run; re-running needs a new version.
+        raise HTTPException(status_code=409, detail={"code": "REEXTRACTION_NOT_SUPPORTED", "message": "Chưa hỗ trợ trích xuất lại khi lưu bằng PostgreSQL; hãy tải lại PDF."})
+    session = get_session(session_id, owner_id)
+    trace_id = trace_id_for(request)
+    with catalog_lock:
+        document = next((item for item in session["documents"] if item["id"] == document_id), None)
+        if document is None:
+            raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+        if document.get("extraction_status") in {"queued", "processing"}:
+            raise HTTPException(status_code=409, detail={"code": "EXTRACTION_IN_PROGRESS", "message": "Tài liệu đang được trích xuất."})
+        previous = _archive_extraction(document)
+        affected = []
+        if previous["status"] == "ready":
+            # Their inputs came from the archived extraction; keep the
+            # snapshots and flag them for recalculation.
+            for message in session["messages"]:
+                if message.get("role") == "assistant" and message.get("document_id") == document_id and message.get("answer_inputs"):
+                    message["needs_update"] = True
+                    affected.append(message["id"])
+        document.update({"extraction_status": "queued", "page_count": None, "numeric_evidence_count": 0, "extraction_error": None})
+        session["updated_at"] = utc_now()
+        save_catalog(catalog)
+        public_document = json.loads(json.dumps({key: value for key, value in document.items() if key not in {"storage_name", "extraction_name"}}))
+    flow_log("EXTRACTION_RERUN_QUEUED", trace_id=trace_id, session_id=session_id, document_id=document_id, previous_status=previous["status"], affected_answer_count=len(affected))
+    background_tasks.add_task(_extract_in_background, session_id, document_id, trace_id)
+    return {"session_id": session_id, "document": public_document, "previous_extraction": previous, "affected_message_ids": affected, "trace_id": trace_id}
+
+
 @app.get(
     "/api/v1/sessions/{session_id}/documents/{document_id}/file",
     tags=["sessions"],
@@ -744,6 +912,17 @@ def read_session_document_file(session_id: str, document_id: str, request: Reque
     return FileResponse(path, media_type="application/pdf", filename=document["file_name"], content_disposition_type="inline")
 
 
+def _ready_document(session: dict[str, Any], document_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Document plus its extraction (with chart batches); 404/409 instead of a 500."""
+    document = next((item for item in session["documents"] if item["id"] == document_id), None)
+    if document is None:
+        raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+    if document.get("extraction_status") != "ready":
+        raise HTTPException(status_code=409, detail={"code": "EXTRACTION_NOT_READY", "message": "Tài liệu chưa sẵn sàng để sửa số liệu."})
+    extraction = with_chart_batches(document, _load_extraction_artifact(document["extraction_name"]))
+    return document, extraction
+
+
 @app.get(
     "/api/v1/sessions/{session_id}/documents/{document_id}/evidences",
     tags=["sessions"],
@@ -752,12 +931,12 @@ def read_session_document_file(session_id: str, document_id: str, request: Reque
 )
 def list_document_evidences(session_id: str, document_id: str, request: Request) -> dict[str, Any]:
     session = get_session(session_id, owner_id_for_request(request))
-    document = next((item for item in session["documents"] if item["id"] == document_id), None)
-    if document is None:
-        raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
-    if document.get("extraction_status") != "ready":
-        raise HTTPException(status_code=409, detail={"code": "EXTRACTION_NOT_READY", "message": "Tài liệu chưa sẵn sàng để sửa số liệu."})
-    extraction = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
+    document, extraction = _ready_document(session, document_id)
+    with catalog_lock:
+        return _evidence_records(document, document_id, extraction)
+
+
+def _evidence_records(document: dict[str, Any], document_id: str, extraction: dict[str, Any]) -> dict[str, Any]:
     state = ensure_document_evidence_state(document, extraction)
     records = []
     for evidence in (extraction.get("evidence_batch") or {}).get("evidences", []):
@@ -767,7 +946,7 @@ def list_document_evidences(session_id: str, document_id: str, request: Request)
             "evidence_key": evidence["evidence_key"], "page_number": evidence["page_number"], "bbox": evidence["bbox"],
             "raw_text": evidence.get("raw_text"), "method_label": evidence["method_label"], "semantic": evidence.get("semantic"),
             "source_type": evidence["source_type"], "source_region_key": evidence["source_region_key"],
-            "data_status": evidence["data_status"], "extraction_method": evidence["extraction_method"],
+            "data_status": "valid" if current.get("action") == "edit" else evidence["data_status"], "extraction_method": evidence["extraction_method"],
             "table_locator": evidence.get("table_locator"), "chart_read": evidence.get("chart_read"),
             "confidence": evidence["confidence"],
             "original_numeric_value": item["original_numeric_value"], "current_numeric_value": current["numeric_value"],
@@ -775,7 +954,7 @@ def list_document_evidences(session_id: str, document_id: str, request: Request)
         })
     if not postgres_runtime:
         save_catalog(catalog)
-    return {"document_id": document_id, "data_revision": state["data_revision"], "evidences": records}
+    return json.loads(json.dumps({"document_id": document_id, "data_revision": state["data_revision"], "evidences": records}))
 
 
 @app.get(
@@ -784,17 +963,15 @@ def list_document_evidences(session_id: str, document_id: str, request: Request)
 )
 def list_evidence_revisions(session_id: str, document_id: str, evidence_key: str, request: Request) -> dict[str, Any]:
     session = get_session(session_id, owner_id_for_request(request))
-    document = next((item for item in session["documents"] if item["id"] == document_id), None)
-    if document is None:
-        raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
-    extraction = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
-    state = ensure_document_evidence_state(document, extraction)
-    item = state["items"].get(evidence_key)
-    if item is None:
-        raise HTTPException(status_code=404, detail={"code": "EVIDENCE_NOT_FOUND", "message": "Không tìm thấy số liệu trong tài liệu."})
-    if not postgres_runtime:
-        save_catalog(catalog)
-    return {"document_id": document_id, "evidence_key": evidence_key, "original_numeric_value": item["original_numeric_value"], "current_revision_id": item["current_revision_id"], "revisions": item["revisions"]}
+    document, extraction = _ready_document(session, document_id)
+    with catalog_lock:
+        state = ensure_document_evidence_state(document, extraction)
+        item = state["items"].get(evidence_key)
+        if item is None:
+            raise HTTPException(status_code=404, detail={"code": "EVIDENCE_NOT_FOUND", "message": "Không tìm thấy số liệu trong tài liệu."})
+        if not postgres_runtime:
+            save_catalog(catalog)
+        return json.loads(json.dumps({"document_id": document_id, "evidence_key": evidence_key, "original_numeric_value": item["original_numeric_value"], "current_revision_id": item["current_revision_id"], "revisions": item["revisions"]}))
 
 
 @app.post(
@@ -802,37 +979,43 @@ def list_evidence_revisions(session_id: str, document_id: str, evidence_key: str
     tags=["sessions"], summary="Append a corrected value and preserve old value/history", responses={**OPENAPI_COMMON_ERRORS, 409: {"description": "Revision đã bị thay đổi bởi thao tác khác."}},
 )
 def create_evidence_revision(session_id: str, document_id: str, evidence_key: str, payload: EvidenceRevisionCreateRequest, request: Request) -> dict[str, Any]:
-    session = get_session(session_id, owner_id_for_request(request))
-    document = next((item for item in session["documents"] if item["id"] == document_id), None)
-    if document is None:
-        raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
-    extraction = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
-    state = ensure_document_evidence_state(document, extraction)
-    item = state["items"].get(evidence_key)
-    if item is None:
-        raise HTTPException(status_code=404, detail={"code": "EVIDENCE_NOT_FOUND", "message": "Không tìm thấy số liệu trong tài liệu."})
-    current = item["revisions"][-1]
-    if current["id"] != payload.expected_revision_id:
-        raise HTTPException(status_code=409, detail={"code": "EVIDENCE_REVISION_CONFLICT", "message": "Số liệu đã được sửa bởi thao tác khác; hãy tải lại lịch sử trước khi sửa tiếp."})
-    try:
-        numeric_value = validate_decimal_text(payload.numeric_value)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail={"code": "INVALID_DECIMAL", "message": "Giá trị phải là chuỗi thập phân chính xác, ví dụ 58 hoặc 58.25."}) from exc
-    if numeric_value == current["numeric_value"]:
-        raise HTTPException(status_code=422, detail={"code": "VALUE_UNCHANGED", "message": "Giá trị mới trùng giá trị hiện tại; không tạo lịch sử rỗng."})
-    revision = {
-        "id": str(uuid4()), "revision_no": len(item["revisions"]) + 1, "action": "edit", "created_at": utc_now(),
-        "numeric_value": numeric_value, "old_numeric_value": current["numeric_value"], "previous_revision_id": current["id"],
-        "reason": payload.reason.strip(),
-    }
-    item["revisions"].append(revision)
-    item["current_revision_id"] = revision["id"]
-    state["data_revision"] += 1
-    affected = mark_answers_needing_update(session, document_id, evidence_key, current["id"])
-    session["updated_at"] = utc_now()
-    if postgres_runtime:
+    owner_id = owner_id_for_request(request)
+    session = get_session(session_id, owner_id)
+    document, extraction = _ready_document(session, document_id)
+    # The conflict check and the append are one critical section so two
+    # concurrent edits cannot both pass expected_revision_id.
+    with catalog_lock:
+        state = ensure_document_evidence_state(document, extraction)
+        item = state["items"].get(evidence_key)
+        if item is None:
+            raise HTTPException(status_code=404, detail={"code": "EVIDENCE_NOT_FOUND", "message": "Không tìm thấy số liệu trong tài liệu."})
+        current = item["revisions"][-1]
+        if current["id"] != payload.expected_revision_id:
+            raise HTTPException(status_code=409, detail={"code": "EVIDENCE_REVISION_CONFLICT", "message": "Số liệu đã được sửa bởi thao tác khác; hãy tải lại lịch sử trước khi sửa tiếp."})
         try:
-            postgres_runtime.append_evidence_revision(
+            numeric_value = validate_decimal_text(payload.numeric_value)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail={"code": "INVALID_DECIMAL", "message": "Giá trị phải là chuỗi thập phân chính xác, ví dụ 58 hoặc 58.25."}) from exc
+        # Compare numbers, not spellings: "1300" -> "1300.0" is not a change.
+        if current["numeric_value"] is not None and Decimal(numeric_value) == Decimal(current["numeric_value"]):
+            raise HTTPException(status_code=422, detail={"code": "VALUE_UNCHANGED", "message": "Giá trị mới trùng giá trị hiện tại; không tạo lịch sử rỗng."})
+        revision = {
+            "id": str(uuid4()), "revision_no": len(item["revisions"]) + 1, "action": "edit", "created_at": utc_now(),
+            "numeric_value": numeric_value, "old_numeric_value": current["numeric_value"], "previous_revision_id": current["id"],
+            "reason": payload.reason.strip(),
+        }
+        item["revisions"].append(revision)
+        item["current_revision_id"] = revision["id"]
+        state["data_revision"] += 1
+        affected = mark_answers_needing_update(session, document_id, evidence_key, current["id"])
+        session["updated_at"] = utc_now()
+        if not postgres_runtime:
+            save_catalog(catalog)
+    if postgres_runtime:
+        # The database repeats the expected_revision_id check in its own
+        # transaction, so this network call stays outside the catalog lock.
+        try:
+            _runtime_for_owner(owner_id).append_evidence_revision(
                 chat_id=UUID(session_id),
                 document_id=UUID(document_id),
                 evidence_key=evidence_key,
@@ -843,8 +1026,6 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
             if str(exc) == "EVIDENCE_REVISION_CONFLICT":
                 raise HTTPException(status_code=409, detail={"code": "EVIDENCE_REVISION_CONFLICT", "message": "Số liệu đã được sửa bởi thao tác khác; hãy tải lại lịch sử trước khi sửa tiếp."}) from exc
             raise HTTPException(status_code=404, detail={"code": "EVIDENCE_NOT_FOUND", "message": "Không tìm thấy số liệu trong database."}) from exc
-    else:
-        save_catalog(catalog)
     trace_id = trace_id_for(request)
     flow_log("EVIDENCE_REVISION_APPENDED", trace_id=trace_id, session_id=session_id, document_id=document_id, evidence_key=evidence_key, old_value=current["numeric_value"], new_value=numeric_value, affected_answer_count=len(affected))
     return {"document_id": document_id, "evidence_key": evidence_key, "data_revision": state["data_revision"], "revision": revision, "affected_message_ids": affected, "recalculation_required": bool(affected), "trace_id": trace_id}
@@ -869,8 +1050,9 @@ def relevant_pages(document: dict[str, Any], question: str, limit: int = 3) -> l
         )
         if upgraded["status"] != "ready":
             raise HTTPException(status_code=409, detail={"code": "EXTRACTION_UPGRADE_FAILED", "message": "không thể nâng cấp artifact extraction cũ"})
-        document["numeric_evidence_count"] = upgraded["numeric_evidence_count"]
-        document["page_count"] = upgraded["page_count"]
+        with catalog_lock:
+            document["numeric_evidence_count"] = upgraded["numeric_evidence_count"]
+            document["page_count"] = upgraded["page_count"]
         save_catalog(catalog)
         payload = json.loads(artifact_path.read_text(encoding="utf-8"))
         flow_log("EXTRACTION_ARTIFACT_UPGRADED", document_id=document["id"], numeric_evidence_count=upgraded["numeric_evidence_count"])
@@ -909,6 +1091,7 @@ def ensure_document_evidence_state(document: dict[str, Any], extraction: dict[st
     for evidence in (extraction.get("evidence_batch") or {}).get("evidences", []):
         key = evidence["evidence_key"]
         if key in items:
+            _record_reread_value(state, items[key], evidence.get("numeric_value"))
             continue
         now = utc_now()
         initial = {
@@ -923,9 +1106,30 @@ def ensure_document_evidence_state(document: dict[str, Any], extraction: dict[st
     return state
 
 
+def _record_reread_value(state: dict[str, Any], item: dict[str, Any], value: str | None) -> None:
+    """Append the value a later read supplies when the first read withheld it.
+
+    E.g. a chart whose visual check failed (provider 503) is read again and
+    now verified under the same evidence key. Without this the key kept its
+    first, empty value forever. User edits always win; history stays append-only.
+    """
+    current = item["revisions"][-1]
+    if value is None or current.get("numeric_value") is not None or current.get("action") == "edit":
+        return
+    revision = {
+        "id": str(uuid4()), "revision_no": len(item["revisions"]) + 1, "action": "reread", "created_at": utc_now(),
+        "numeric_value": value, "old_numeric_value": None, "previous_revision_id": current["id"],
+        "reason": "Giá trị được đọc lại và xác minh.",
+    }
+    item["revisions"].append(revision)
+    item["current_revision_id"] = revision["id"]
+    state["data_revision"] = state.get("data_revision", 0) + 1
+
+
 def extraction_with_evidence_revisions(document: dict[str, Any], extraction: dict[str, Any]) -> dict[str, Any]:
     """Overlay a chat-local current revision onto immutable extraction output."""
-    state = ensure_document_evidence_state(document, extraction)
+    with catalog_lock:
+        state = json.loads(json.dumps(ensure_document_evidence_state(document, extraction)))
     result = json.loads(json.dumps(extraction))
     for evidence in (result.get("evidence_batch") or {}).get("evidences", []):
         item = state["items"].get(evidence["evidence_key"])
@@ -934,6 +1138,8 @@ def extraction_with_evidence_revisions(document: dict[str, Any], extraction: dic
         current = item["revisions"][-1]
         evidence["numeric_value"] = current["numeric_value"]
         evidence["current_revision_id"] = current["id"]
+        if current.get("action") == "edit":
+            evidence["data_status"] = "valid"
     return result
 
 
@@ -963,6 +1169,47 @@ def mark_answers_needing_update(session: dict[str, Any], document_id: str, evide
             message["needs_update"] = True
             affected.append(message["id"])
     return affected
+
+
+def _append_exchange(session: dict[str, Any], user_message: dict[str, Any], assistant_message: dict[str, Any], now: str) -> None:
+    for message in (user_message, assistant_message):
+        cleaned = storable(message)
+        message.clear()
+        message.update(cleaned)
+    with catalog_lock:
+        session["messages"].extend([user_message, assistant_message])
+        session["updated_at"] = now
+    try:
+        save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+    except Exception:
+        # Not stored: keep the refused pair out of every later save.
+        with catalog_lock:
+            session["messages"] = [item for item in session["messages"] if item is not user_message and item is not assistant_message]
+        raise
+
+
+def _load_extraction_artifact(extraction_name: str) -> dict[str, Any]:
+    return json.loads(cache_extraction(extraction_name).read_text(encoding="utf-8"))
+
+
+def _persist_chart_read(session: dict[str, Any], document: dict[str, Any], result: dict[str, Any], region_key: str) -> None:
+    """Store a tools-mode chart read in PostgreSQL and adopt its revision ids."""
+    store = _runtime_for_owner(session.get("owner_id", LOCAL_OWNER_ID))
+    batch = result["evidence_batch"]
+    try:
+        store.persist_on_demand_chart(
+            chat_id=UUID(session["id"]),
+            document_version_id=UUID(str(document.get("version_id") or document["id"])),
+            evidence_batch=batch,
+            question_plan_id=str(batch["trigger"]["question_plan_id"]),
+            chart_record={**result, "chart_region_key": region_key, "created_at": utc_now()},
+        )
+        document["evidence_state"] = store.load_evidence_state(session["id"], document["id"])
+    except Exception as exc:
+        # The assistant gets a stable code, never database details, and can
+        # still answer from the other evidence.
+        flow_log("CHART_PERSISTENCE_FAILED", session_id=session["id"], document_id=document["id"], chart_region_key=region_key, error=type(exc).__name__)
+        raise RuntimeError("CHART_EVIDENCE_PERSISTENCE_FAILED") from exc
 
 
 def _base_extraction_or_none(document: dict[str, Any]) -> dict[str, Any] | None:
@@ -1005,9 +1252,7 @@ def _persist_unsupported(session, session_id, document, question, question_plan,
     snapshot_answer_revision(assistant_message)
     trace.append(trace_event("persistence", "committed", artifact="runtime/sessions.json", assistant_message_id=assistant_message["id"], citation_pages=[]))
     assistant_message["trace"] = trace
-    session["messages"].extend([user_message, assistant_message])
-    session["updated_at"] = now
-    save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+    _append_exchange(session, user_message, assistant_message, now)
     flow_log("UNSUPPORTED_PERSISTED", trace_id=trace_id, session_id=session_id, document_id=document["id"], assistant_message_id=assistant_message["id"])
     return {"user_message": user_message, "assistant_message": assistant_message, "limitations": ["Câu hỏi ngoài phạm vi; không truy hồi hoặc tính toán"], "trace_id": trace_id}
 
@@ -1093,8 +1338,31 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         response.status_code = 202
         flow_log("ANSWER_JOB_QUEUED", trace_id=trace_id, session_id=session_id, document_id=document["id"], job_id=job.get("id"), assistant_message_id=assistant_message["id"])
         return finish({"user_message": user_message, "assistant_message": assistant_message, "limitations": [], "trace_id": trace_id, "status": "queued", "job": job})
+    if assistant_mode() == "tools":
+        if document.get("extraction_status") != "ready":
+            raise HTTPException(status_code=409, detail={"code": "EXTRACTION_NOT_READY", "message": "Tài liệu chưa trích xuất xong."})
+        owner = session.get("owner_id", LOCAL_OWNER_ID)
+        try:
+            return finish(answer_document(
+                session, document, payload.question, trace_id, trace, catalog,
+                overlay=extraction_with_evidence_revisions,
+                snapshot=snapshot_answer_revision,
+                load_extraction=_load_extraction_artifact,
+                resolve_pdf=cache_pdf,
+                save=lambda value: save_catalog(value, owner),
+                persist_chart=(lambda result, region_key: _persist_chart_read(session, document, result, region_key)) if postgres_runtime else None,
+            ))
+        except ProviderError as exc:
+            raise HTTPException(status_code=502, detail={"code": exc.code, "message": str(exc)}) from exc
+        except AssistantError as exc:
+            flow_log("ASSISTANT_INCOMPLETE", trace_id=trace_id, session_id=session_id, document_id=document["id"],
+                     tool_errors=[item.get("error") for item in getattr(exc, "tool_results", []) if item.get("error")])
+            raise HTTPException(status_code=502, detail={"code": "ASSISTANT_INCOMPLETE", "message": str(exc)}) from exc
+    # Only a clarification asked about *this* document can be answered here;
+    # a pending clarification on another PDF in the session must not be
+    # merged into this question.
     previous_assistant = next(
-        (item for item in reversed(session["messages"]) if item.get("role") == "assistant"),
+        (item for item in reversed(session["messages"]) if item.get("role") == "assistant" and item.get("document_id") == document["id"]),
         None,
     )
     prior_clarification_plan = (
@@ -1155,9 +1423,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         snapshot_answer_revision(assistant_message)
         trace.append(trace_event("persistence", "committed", artifact="runtime/sessions.json", assistant_message_id=assistant_message["id"], citation_pages=[]))
         assistant_message["trace"] = trace
-        session["messages"].extend([user_message, assistant_message])
-        session["updated_at"] = now
-        save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+        _append_exchange(session, user_message, assistant_message, now)
         flow_log("CLARIFICATION_PERSISTED", trace_id=trace_id, session_id=session_id, document_id=document["id"], assistant_message_id=assistant_message["id"], reason_code=clarification["reason_code"])
         return finish({"user_message": user_message, "assistant_message": assistant_message, "limitations": ["Đang chờ người dùng chọn cách hiểu trước khi truy hồi hoặc tính toán"], "trace_id": trace_id})
     retrieval_question = question_plan["original_question"]
@@ -1187,8 +1453,22 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     )
     selected_scores = {int(item[0]["page"]): item[1] for item in ranked_pages}
     operation = question_plan.get("operation") or {}
-    if operation.get("type") != "lookup" or any(fact.get("measure") != "unknown" and fact.get("period") for fact in question_plan.get("facts", [])):
-        base_extraction = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
+    facts = question_plan.get("facts", [])
+    structured = operation.get("type") != "lookup" or any(fact.get("measure") != "unknown" and fact.get("period") for fact in facts)
+    if not structured and any(fact.get("measure") != "unknown" and fact.get("subject") for fact in facts):
+        # A lookup naming only a subject ("doanh thu vùng A") used to skip
+        # evidence and charts entirely. Use them when they can answer: a
+        # matching number, or a chart on the retrieved pages; otherwise keep
+        # the text answer.
+        probe_extraction = extraction_with_evidence_revisions(document, with_chart_batches(document, _load_extraction_artifact(document["extraction_name"])))
+        context_page_numbers = {int(item["page"]) for item in context_pages}
+        probe = resolve_evidence(question_plan, probe_extraction, context_page_numbers)
+        structured = probe["status"] == "resolved" or (
+            probe["status"] == "chart_required"
+            and any(int(region["page_number"]) in context_page_numbers for region in probe_extraction.get("chart_regions", []))
+        )
+    if structured:
+        base_extraction = with_chart_batches(document, _load_extraction_artifact(document["extraction_name"]))
         extraction = extraction_with_evidence_revisions(document, base_extraction)
         resolution = resolve_evidence(question_plan, extraction, {int(item["page"]) for item in context_pages})
         trace.append(
@@ -1296,6 +1576,14 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
             )
         )
         answer, structured_answer = calculation_answer(question_plan, calculation, resolution["bindings"])
+        if resolution["status"] == "chart_required":
+            # The reason was only in the HTTP response's limitations, so the
+            # saved answer just said "Không đủ dữ liệu" with no explanation.
+            chart_attempted = any(event["stage"] == "chart_read" for event in trace)
+            structured_answer["warnings"].append(
+                "Đã đọc biểu đồ nhưng chưa xác minh được nhãn/trục, nên không dùng số đọc được; chế độ AI có bước kiểm tra trực quan."
+                if chart_attempted else "Số liệu cần lấy từ biểu đồ nhưng chưa xác định được biểu đồ nguồn."
+            )
         citations = [
             {
                 "page": int(item["page_number"]),
@@ -1332,9 +1620,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         trace.append(trace_event("answer_generation", "ok", provider="deterministic_calculator", format="structured_answer_v1"))
         trace.append(trace_event("persistence", "committed", artifact="runtime/sessions.json", assistant_message_id=assistant_message["id"], citation_pages=structured_answer["cited_pages"], input_revision_ids=[item["evidence_revision_id"] for item in calculation["operands"]]))
         assistant_message["trace"] = trace
-        session["messages"].extend([user_message, assistant_message])
-        session["updated_at"] = now
-        save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+        _append_exchange(session, user_message, assistant_message, now)
         flow_log("ANSWER_PERSISTED", trace_id=trace_id, session_id=session_id, document_id=document["id"], assistant_message_id=assistant_message["id"], citation_pages=structured_answer["cited_pages"], mode="deterministic_calculation", calculation_status=calculation["status"])
         return finish({
             "user_message": user_message,
@@ -1411,9 +1697,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     snapshot_answer_revision(assistant_message)
     trace.append(trace_event("persistence", "committed", artifact="runtime/sessions.json", assistant_message_id=assistant_message["id"], citation_pages=citation_pages))
     assistant_message["trace"] = trace
-    session["messages"].extend([user_message, assistant_message])
-    session["updated_at"] = now
-    save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+    _append_exchange(session, user_message, assistant_message, now)
     flow_log(
         "ANSWER_PERSISTED",
         trace_id=trace_id,
@@ -1456,9 +1740,10 @@ async def upload_document(request: Request, background_tasks: BackgroundTasks, f
     """Compatibility upload: persist the file in a server-owned local session."""
     owner_id = owner_id_for_request(request)
     default_id = f"legacy-upload-{owner_id}"
-    if default_id not in catalog["sessions"]:
-        now = utc_now()
-        catalog["sessions"][default_id] = {"id": default_id, "owner_id": str(owner_id), "title": "Uploads", "created_at": now, "updated_at": now, "documents": [], "messages": []}
+    with catalog_lock:
+        if default_id not in catalog["sessions"]:
+            now = utc_now()
+            catalog["sessions"][default_id] = {"id": default_id, "owner_id": str(owner_id), "title": "Uploads", "created_at": now, "updated_at": now, "documents": [], "messages": []}
     document = await persist_pdf(file, catalog["sessions"][default_id])
-    background_tasks.add_task(complete_document_extraction, default_id, document["id"], trace_id_for(request), owner_id)
+    background_tasks.add_task(_extract_in_background, default_id, document["id"], trace_id_for(request), owner_id)
     return {"upload": {**document, "persistence": {"adapter": "cloudflare_r2" if uses_remote_object_storage() else "local_filesystem", "binary_retained": True, "max_bytes": MAX_PDF_BYTES, "max_pages": MAX_PDF_PAGES}}, "next_action": "Open file_url with the PDF.js reader."}

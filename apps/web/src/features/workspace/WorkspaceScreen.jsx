@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { API, request } from "../../shared/api/client.js";
 import { useTheme } from "../theme/ThemeProvider.jsx";
+import { EvidenceList, ScriptCard } from "./ToolAnswer.jsx";
 
 const SESSION_KEY = "sourcelens-active-session";
 const DOCUMENT_KEY = "sourcelens-active-document";
@@ -185,6 +186,13 @@ function JobCenterDrawer({ jobs, busy, onClose, onAction }) {
   </section>;
 }
 
+// What the number is: table row and column, or chart category and series.
+function evidenceName(evidence) {
+  const { row_header: row, column_header: column } = evidence.table_locator ?? {};
+  const { category_label: category, series_label: series } = evidence.chart_read ?? {};
+  return [row, column, category, series].filter(Boolean).join(" · ");
+}
+
 function EvidenceDrawer({ data, busy, onClose, onFocus, onSave }) {
   const [editingKey, setEditingKey] = useState(null);
   const [value, setValue] = useState("");
@@ -194,7 +202,7 @@ function EvidenceDrawer({ data, busy, onClose, onFocus, onSave }) {
   return <section className="evidence-drawer" role="dialog" aria-label="Dữ liệu số và lịch sử sửa">
     <header className="audit-drawer-header"><div><span className="audit-kicker">DATA REVISION</span><h3>Dữ liệu đầu vào</h3><small>revision {data.data_revision ?? 0} · giá trị gốc không bị ghi đè</small></div><button aria-label="Đóng dữ liệu" onClick={onClose}><Icon name="close" size={15} /></button></header>
     <div className="evidence-drawer-body">{data.evidences?.length ? data.evidences.map((evidence) => <article className="evidence-record" key={evidence.evidence_key}>
-      <button className="evidence-record-main" onClick={() => onFocus(evidence)}><span>p.{evidence.page_number} · {evidence.method_label}</span><b>{evidence.current_numeric_value}</b><small>Gốc: {evidence.original_numeric_value} · {evidence.revision_count} revision</small><code>{evidence.evidence_key}</code></button>
+      <button className="evidence-record-main" onClick={() => onFocus(evidence)}><span>p.{evidence.page_number} · {evidence.method_label}</span><b>{evidence.current_numeric_value ?? evidence.raw_text ?? "Chưa đọc được"}</b>{evidenceName(evidence) && <small>{evidenceName(evidence)}</small>}<small>Gốc: {evidence.original_numeric_value ?? evidence.raw_text ?? "chưa xác định"} · {evidence.revision_count} revision{evidence.data_status && evidence.data_status !== "valid" ? " · Cần kiểm tra" : ""}</small><code>{evidence.evidence_key}</code></button>
       {editingKey === evidence.evidence_key ? <form className="evidence-edit-form" onSubmit={(event) => { event.preventDefault(); onSave(evidence, value, reason).then(() => setEditingKey(null)).catch(() => {}); }}><label>Giá trị mới<input autoFocus value={value} onChange={(event) => setValue(event.target.value)} required /></label><label>Lý do sửa<textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength="3" required placeholder="Ví dụ: Đối chiếu lại PDF gốc" /></label><div><button type="button" onClick={() => setEditingKey(null)}>Hủy</button><button type="submit" disabled={busy}>Lưu revision</button></div></form> : <button className="evidence-edit-button" onClick={() => beginEdit(evidence)} disabled={busy}>Sửa số</button>}
     </article>) : <p className="evidence-empty">Chưa có số liệu trích xuất để sửa.</p>}</div>
   </section>;
@@ -225,6 +233,7 @@ function StructuredAnswer({ answer, fallback, onCitation }) {
   const warnings = answer.warnings?.filter(Boolean) ?? [];
   return <div className="structured-answer">
     <p className="answer-lead">{answer.answer}</p>
+    {answer.evidence?.length > 0 && <EvidenceList items={answer.evidence} onCitation={onCitation} />}
     {answer.summary && <p className="answer-summary">{answer.summary}</p>}
     {answer.claims?.length > 0 && <section className="answer-section answer-claims"><h4>Claims và căn cứ</h4>{answer.claims.map((claim, index) => <div className="claim-card" key={`${claim.claim}-${index}`}>
       <p>{claim.claim}</p>
@@ -232,13 +241,13 @@ function StructuredAnswer({ answer, fallback, onCitation }) {
       {claim.evidence_pages?.length > 0 && <div className="evidence-pages">{claim.evidence_pages.map((page) => <button className="citation" key={page} onClick={() => onCitation?.(page, claim.evidence_quotes?.[0] ?? "")}><Icon name="link" size={12} /> Trang {page}</button>)}</div>}
     </div>)}</section>}
     {answer.sections?.map((section, index) => <section className="answer-section" key={`${section.heading}-${index}`}><h4>{section.heading}</h4>{section.points?.filter(Boolean).length > 0 && <ul>{section.points.filter(Boolean).map((point, pointIndex) => <li key={pointIndex}>{point}</li>)}</ul>}</section>)}
-    {answer.formulas?.length > 0 && <section className="answer-section"><h4>Công thức và tính toán</h4>{answer.formulas.map((formula, index) => <div className="formula-card" key={`${formula.name}-${index}`}><strong>{formula.name}</strong><code>{formula.expression}</code><span>Thay số: {formula.substitution || "Chưa đủ toán hạng"}</span><b>Kết quả: {formula.result ?? "Không xác định"}{formula.unit ? ` ${formula.unit}` : ""}</b>{["verified", "succeeded"].includes(formula.calculation?.status) ? <em className="formula-verified">✓ Calculator: {formula.calculation.computed_result} {formula.calculation.unit}</em> : <em className="formula-unverified">Calculator: {formula.calculation?.status ?? "chưa chạy"}</em>}</div>)}</section>}
+    {answer.formulas?.length > 0 && <section className="answer-section"><h4>Công thức và tính toán</h4>{answer.formulas.map((formula, index) => formula.inputs ? <ScriptCard formula={formula} onCitation={onCitation} key={`script-${index}`} /> : <div className="formula-card" key={`${formula.name}-${index}`}><strong>{formula.name}</strong><code>{formula.expression}</code><span>Thay số: {formula.substitution || "Chưa đủ toán hạng"}</span><b>Kết quả: {formula.result ?? "Không xác định"}{formula.unit ? ` ${formula.unit}` : ""}</b>{["verified", "succeeded"].includes(formula.calculation?.status) ? <em className="formula-verified">✓ Calculator: {formula.calculation.computed_result} {formula.calculation.unit}</em> : <em className="formula-unverified">Calculator: {formula.calculation?.status ?? "chưa chạy"}</em>}</div>)}</section>}
     {answer.tables?.map((table, index) => <section className="answer-section" key={`${table.title}-${index}`}><h4>{table.title}</h4><div className="answer-table-wrap"><table className="answer-table"><thead><tr>{table.columns?.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{table.rows?.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div></section>)}
     {warnings.length > 0 && <div className="answer-warnings"><strong>Lưu ý</strong><ul>{warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}
   </div>;
 }
 
-function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceBbox }) {
+function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceBbox, onReextract, reextractDisabled }) {
   const viewportRef = useRef(null);
   const canvasRef = useRef(null);
   const renderTaskRef = useRef(null);
@@ -349,6 +358,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
   return <section className="reader-shell">
     <header className="reader-toolbar">
       <div className="reader-file"><strong>{document.file_name}</strong><span>{formatBytes(document.byte_size)} · {processingLabel(document.extraction_status)}</span></div>
+      {onReextract && !["queued", "processing"].includes(document.extraction_status) && <button className="reextract-button" type="button" title="Đọc lại tài liệu; kết quả cũ được lưu trữ" disabled={reextractDisabled} onClick={() => onReextract(document)}><Icon name="refresh" size={13} /> Trích xuất lại</button>}
       <div className="page-control"><button aria-label="Trang trước" title="Trang trước" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}><Icon name="arrowLeft" /></button><span>{page} / {pdf?.numPages ?? document.page_count ?? "—"}</span><button aria-label="Trang sau" title="Trang sau" disabled={!pdf || page >= pdf.numPages} onClick={() => setPage((value) => value + 1)}><Icon name="arrowRight" /></button></div>
       <div className="zoom-control"><button aria-label="Thu nhỏ" title="Thu nhỏ" onClick={() => setScale((value) => Math.max(.35, value - .15))}><Icon name="minus" /></button><span>{Math.round(scale * 100)}%</span><button aria-label="Phóng to" title="Phóng to" onClick={() => setScale((value) => Math.min(2.5, value + .15))}><Icon name="plus" /></button><button aria-label="Vừa chiều rộng" title="Vừa chiều rộng" onClick={fitWidth}><Icon name="fit" /></button><button aria-label="Xoay tài liệu" title="Xoay tài liệu" onClick={() => setRotation((value) => (value + 90) % 360)}><Icon name="rotate" /></button></div>
     </header>
@@ -804,7 +814,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     const idempotencyKey = retryMetaRef.current?.question === question ? retryMetaRef.current.key : crypto.randomUUID();
     if (!question || requestInFlightRef.current || busy || !activeDocument || !activeSession) return;
     if (activeDocument.extraction_status === "failed") {
-      showNotice("Tài liệu chưa thể đọc nên chưa thể trả lời. Hãy thử xử lý lại tài liệu trong Trung tâm tác vụ.", "error");
+      showNotice(`Tài liệu chưa thể đọc nên chưa thể trả lời. ${canReextract ? "Bấm Trích xuất lại ở thanh trên PDF." : "Hãy thử xử lý lại tài liệu trong Trung tâm tác vụ."}`, "error");
       return;
     }
     requestInFlightRef.current = true;
@@ -826,7 +836,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
       setBusy(false);
       retryMetaRef.current = null;
       const firstCitation = result.assistant_message?.citations?.[0];
-      if (firstCitation?.page) { setCitationPage(firstCitation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(firstCitation.bbox)); }
+      if (firstCitation?.page) { setCitationPage(firstCitation.page); setCitationQuote(firstCitation.quote ?? ""); setCitationBbox(normalizedBbox(firstCitation.bbox)); }
       try { await refreshSessionDetail(activeSession.id); }
       catch (refreshError) {
         showNotice(`Đã nhận câu trả lời nhưng chưa tải lại lịch sử: ${refreshError.message}`, "error");
@@ -864,6 +874,24 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     try { setEvidenceData(await request(`/api/v1/sessions/${activeSession.id}/documents/${activeDocument.id}/evidences`)); }
     catch (error) { showNotice(error.message, "error"); }
     finally { setEvidenceBusy(false); }
+  }
+
+  // PostgreSQL keeps completed extractions immutable; there a failed document
+  // is retried from the job center instead.
+  const canReextract = runtimeHealth?.persistence_backend === "json";
+
+  async function reextractDocument(document) {
+    if (!activeSession || !document) return;
+    if (document.extraction_status === "ready" && !window.confirm("Trích xuất lại tài liệu này? Kết quả cũ được lưu trữ, số đã sửa được giữ, các câu trả lời cũ sẽ được đánh dấu cần tính lại.")) return;
+    setBusy(true);
+    try {
+      const result = await request(`/api/v1/sessions/${activeSession.id}/documents/${document.id}/extraction`, { method: "POST" });
+      await refreshSessionDetail(activeSession.id);
+      setEvidenceData(null);
+      const affected = result.affected_message_ids?.length ?? 0;
+      showNotice(`Đang trích xuất lại ${document.file_name}.${affected ? ` ${affected} câu trả lời cũ cần tính lại.` : ""}`);
+    } catch (error) { showNotice(error.message, "error"); }
+    finally { setBusy(false); }
   }
 
   async function saveEvidence(evidence, numeric_value, reason) {
@@ -920,14 +948,14 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     </header>
     <main className="workspace" id="main-content">
       <SessionBrowser sessions={sessions} filteredSessions={filteredSessions} activeSession={activeSession} activeDocument={activeDocument} booting={booting} search={search} onSearch={setSearch} busy={busy} onSelectSession={(session) => { setActiveSessionId(session.id); setActiveDocumentId(session.documents[0]?.id ?? null); }} onSelectDocument={setActiveDocumentId} onCreate={createSession} onUpload={() => uploadRef.current?.click()} onDialog={setResourceDialog} onNavigate={onNavigate} />
-      <section className="reader-column"><PdfViewer document={activeDocument} sessionId={activeSession?.id} citationPage={citationPage} evidenceQuote={citationQuote} evidenceBbox={citationBbox} />{notice && <div className={`toast ${noticeKind}`} role={noticeKind === "error" ? "alert" : "status"} aria-live="polite"><span>{notice}</span>{retryQuestion && <button onClick={() => submitQuestion(retryQuestion)} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}<button className="toast-close" aria-label="Đóng thông báo" onClick={clearNotice}><Icon name="close" size={13} /></button></div>}</section>
+      <section className="reader-column"><PdfViewer document={activeDocument} sessionId={activeSession?.id} citationPage={citationPage} evidenceQuote={citationQuote} evidenceBbox={citationBbox} onReextract={canReextract ? reextractDocument : undefined} reextractDisabled={busy} />{notice && <div className={`toast ${noticeKind}`} role={noticeKind === "error" ? "alert" : "status"} aria-live="polite"><span>{notice}</span>{retryQuestion && <button onClick={() => submitQuestion(retryQuestion)} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}<button className="toast-close" aria-label="Đóng thông báo" onClick={clearNotice}><Icon name="close" size={13} /></button></div>}</section>
       <aside className="chat-column">
         <header className="chat-header"><div className="ai-avatar">S</div><div><h2>Trợ lý tài liệu</h2><span>{activeDocument ? activeDocument.file_name : "Chưa chọn tài liệu"}</span></div><span className="mode-badge">{modeLabel}</span></header>
         <div className="chat-body">
           {!messages.length && <div className="welcome"><div className="welcome-mark"><Icon name="spark" size={18} /></div><h3>Bắt đầu với tài liệu của bạn</h3><p>Đặt câu hỏi để nhận câu trả lời có dẫn nguồn, trích dẫn theo trang và cấu trúc rõ ràng.</p>{activeDocument?.extraction_status === "ready" && <button onClick={() => setQuery("Tóm tắt nội dung chính của tài liệu")}>Tóm tắt tài liệu</button>}</div>}
-          {messages.map((message, index) => <article key={message.id} className={`message ${message.role} ${message.failed || message.status === "failed" ? "failed" : ""}`}><span className="message-avatar">{message.role === "user" ? "B" : "S"}</span><div><small>{message.role === "user" ? "Bạn" : "Trợ lý SourceLens"}</small><StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} onCitation={(page, quote, bbox) => { setCitationPage(page); setCitationQuote(quote); setCitationBbox(normalizedBbox(bbox)); }} />{message.role === "assistant" && message.status === "processing" && <button className="retry-answer-button" type="button" onClick={() => stopAnswer(message)}>Dừng trả lời</button>}{(message.failed || message.status === "failed") && message.role === "assistant" && <button className="retry-answer-button" type="button" onClick={() => { const previous = messages.find((item) => item.id === message.reply_to_message_id) ?? messages[index - 1]; if (previous?.role === "user") submitQuestion(previous.body); }} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}{message.role === "user" && !message.pending && <button className="message-icon-button" type="button" aria-label="Sửa câu hỏi" title="Sửa câu hỏi" onClick={() => { setQuery(message.body); document.querySelector('.chat-composer textarea')?.focus(); }}><Icon name="edit" size={14} /></button>}{message.role === "assistant" && message.body && !message.pending && !message.failed && message.status !== "failed" && message.status !== "processing" && <button className="message-icon-button" type="button" aria-label="Sao chép câu trả lời" title="Sao chép câu trả lời" onClick={async () => { try { await navigator.clipboard.writeText(message.body); showNotice("Đã sao chép."); } catch { showNotice("Không thể sao chép.", "error"); } }}><Icon name="copy" size={14} /></button>}{message.needs_update && <div className="answer-status-note stale-answer"><Icon name="refresh" size={13} /><span>Dữ liệu nguồn đã thay đổi; câu trả lời này cần được cập nhật.</span></div>}{message.citations?.map((citation, citationIndex) => <button className="citation" key={citationIndex} onClick={() => { setCitationPage(citation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(citation.bbox)); }}><Icon name="link" size={12} /> Trang {citation.page}{citation.bbox ? " · vùng trích dẫn" : ""}</button>)}</div></article>)}
+          {messages.map((message, index) => <article key={message.id} className={`message ${message.role} ${message.failed || message.status === "failed" ? "failed" : ""}`}><span className="message-avatar">{message.role === "user" ? "B" : "S"}</span><div><small>{message.role === "user" ? "Bạn" : "Trợ lý SourceLens"}</small><StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} onCitation={(page, quote, bbox) => { setCitationPage(page); setCitationQuote(quote); setCitationBbox(normalizedBbox(bbox)); }} />{message.role === "assistant" && message.status === "processing" && <button className="retry-answer-button" type="button" onClick={() => stopAnswer(message)}>Dừng trả lời</button>}{(message.failed || message.status === "failed") && message.role === "assistant" && <button className="retry-answer-button" type="button" onClick={() => { const previous = messages.find((item) => item.id === message.reply_to_message_id) ?? messages[index - 1]; if (previous?.role === "user") submitQuestion(previous.body); }} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}{message.role === "user" && !message.pending && <button className="message-icon-button" type="button" aria-label="Sửa câu hỏi" title="Sửa câu hỏi" onClick={() => { setQuery(message.body); document.querySelector('.chat-composer textarea')?.focus(); }}><Icon name="edit" size={14} /></button>}{message.role === "assistant" && message.body && !message.pending && !message.failed && message.status !== "failed" && message.status !== "processing" && <button className="message-icon-button" type="button" aria-label="Sao chép câu trả lời" title="Sao chép câu trả lời" onClick={async () => { try { await navigator.clipboard.writeText(message.body); showNotice("Đã sao chép."); } catch { showNotice("Không thể sao chép.", "error"); } }}><Icon name="copy" size={14} /></button>}{message.needs_update && <div className="answer-status-note stale-answer"><Icon name="refresh" size={13} /><span>Dữ liệu nguồn đã thay đổi; câu trả lời này cần được cập nhật.</span></div>}{!message.structured_answer?.evidence?.length && message.citations?.map((citation, citationIndex) => <button className="citation" key={citationIndex} onClick={() => { setCitationPage(citation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(citation.bbox)); }}><Icon name="link" size={12} /> Trang {citation.page}{citation.bbox ? " · vùng trích dẫn" : ""}</button>)}</div></article>)}
         </div>
-        <form className="chat-composer" onSubmit={ask}><textarea aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Thêm tài liệu để bắt đầu" : activeDocument.extraction_status === "ready" ? "Đặt câu hỏi về tài liệu…" : activeDocument.extraction_status === "failed" ? "Chưa thể đọc tài liệu — mở Trung tâm tác vụ để thử lại" : "Đặt câu hỏi — trợ lý sẽ trả lời khi tài liệu sẵn sàng…"} disabled={!activeDocument || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Trợ lý sẵn sàng" : activeDocument?.extraction_status === "failed" ? "Tài liệu chưa đọc được" : activeDocument?.extraction_status === "queued" || activeDocument?.extraction_status === "processing" ? "Câu hỏi sẽ được xử lý sau khi đọc tài liệu" : "Chưa sẵn sàng"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status === "failed" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form>
+        <form className="chat-composer" onSubmit={ask}><textarea aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Thêm tài liệu để bắt đầu" : activeDocument.extraction_status === "ready" ? "Đặt câu hỏi về tài liệu…" : activeDocument.extraction_status === "failed" ? canReextract ? "Chưa thể đọc tài liệu, bấm Trích xuất lại" : "Chưa thể đọc tài liệu — mở Trung tâm tác vụ để thử lại" : "Đặt câu hỏi — trợ lý sẽ trả lời khi tài liệu sẵn sàng…"} disabled={!activeDocument || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Trợ lý sẵn sàng" : activeDocument?.extraction_status === "failed" ? "Tài liệu chưa đọc được" : activeDocument?.extraction_status === "queued" || activeDocument?.extraction_status === "processing" ? "Câu hỏi sẽ được xử lý sau khi đọc tài liệu" : "Chưa sẵn sàng"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status === "failed" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form>
       </aside>
       <EvidenceDrawer data={evidenceData} busy={evidenceBusy} onClose={() => setEvidenceData(null)} onFocus={(evidence) => { setCitationPage(evidence.page_number); setCitationQuote(""); setCitationBbox(normalizedBbox(evidence.bbox)); }} onSave={saveEvidence} />
       <ResourceDialog dialog={resourceDialog} busy={busy} onClose={() => setResourceDialog(null)} onConfirm={confirmResourceAction} />

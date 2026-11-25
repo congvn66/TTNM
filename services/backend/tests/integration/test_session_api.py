@@ -86,6 +86,7 @@ def test_health_docs_and_openapi_expose_only_the_main_flow() -> None:
         "/api/v1/sessions/{session_id}/documents",
         "/api/v1/sessions/{session_id}/documents/{document_id}",
         "/api/v1/sessions/{session_id}/documents/{document_id}/file",
+        "/api/v1/sessions/{session_id}/documents/{document_id}/extraction",
         "/api/v1/sessions/{session_id}/documents/{document_id}/evidences",
         "/api/v1/sessions/{session_id}/documents/{document_id}/evidences/{evidence_key}/revisions",
         "/api/v1/sessions/{session_id}/messages",
@@ -570,6 +571,8 @@ def test_ready_missing_fact_calls_only_selected_chart(monkeypatch):
         assert calls[0].fact_keys == ('baseline',)
         assert calls[0].chart_region_keys == ('revenue-chart',)
         assert len(calls[0].fact_requirements) == 1
+        # The reason is saved with the answer, not only in the HTTP response.
+        assert any('biểu đồ' in warning for warning in response.json()['assistant_message']['structured_answer']['warnings'])
     finally:
         cleanup_session(created['id'])
 
@@ -632,5 +635,207 @@ def test_planner_provider_failure_falls_back_to_rules(monkeypatch):
         assert assistant["calculation_result"]["value"] == "20"
         plan_event = next(event for event in assistant["trace"] if event["stage"] == "question_plan")
         assert plan_event["planner"] == "rules" and plan_event["planner_fallback"] == "PLANNER_PROVIDER_FAILED"
+    finally:
+        cleanup_session(created["id"])
+
+
+def _upload(session_id: str, text: str, name: str = "doc.pdf") -> str:
+    uploaded = client.post(
+        f"/api/v1/sessions/{session_id}/documents",
+        files={"file": (name, pdf_with_text(text), "application/pdf")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    return uploaded.json()["document"]["id"]
+
+
+def test_clarification_on_one_document_is_not_applied_to_another() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Two documents"}).json()["session"]
+    try:
+        text = "Revenue Q1/2025 was 100. Revenue Q1/2026 was 120."
+        first_doc = _upload(created["id"], text, "a.pdf")
+        second_doc = _upload(created["id"], text, "b.pdf")
+        asked = client.post(
+            f"/api/v1/sessions/{created['id']}/messages",
+            json={"document_id": first_doc, "question": "How much did revenue increase from Q1/2025 to Q1/2026?"},
+        )
+        assert asked.json()["assistant_message"]["mode"] == "question_clarification"
+
+        elsewhere = client.post(
+            f"/api/v1/sessions/{created['id']}/messages",
+            json={"document_id": second_doc, "question": "Percentage change"},
+        )
+        assert elsewhere.status_code in {200, 422}, elsewhere.text
+        if elsewhere.status_code == 200:
+            plan = elsewhere.json()["assistant_message"]["question_plan"]
+            assert plan["original_question"] == "Percentage change"
+            assert (plan.get("operation") or {}).get("type") != "growth_rate"
+
+        # The clarification is still pending on the document it was asked about.
+        answered = client.post(
+            f"/api/v1/sessions/{created['id']}/messages",
+            json={"document_id": first_doc, "question": "Percentage change"},
+        )
+        assert answered.status_code == 200, answered.text
+        assert answered.json()["assistant_message"]["calculation_result"]["value"] == "20"
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_revision_endpoints_return_409_while_extraction_is_not_ready(monkeypatch) -> None:
+    def broken_extractor(path, document_version_id):
+        raise RuntimeError("extractor failed")
+
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", broken_extractor)
+    created = client.post("/api/v1/sessions", json={"title": "Failed extraction"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2025 was 100.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}/evidences/ev-any/revisions"
+        history = client.get(base)
+        edit = client.post(base, json={"numeric_value": "1", "reason": "test", "expected_revision_id": "x"})
+        assert (history.status_code, edit.status_code) == (409, 409)
+        assert history.json()["detail"]["code"] == edit.json()["detail"]["code"] == "EXTRACTION_NOT_READY"
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_same_number_with_a_different_spelling_is_not_a_new_revision() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Same value"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2025 was 100.")
+        evidences = client.get(f"/api/v1/sessions/{created['id']}/documents/{document_id}/evidences").json()["evidences"]
+        item = next(row for row in evidences if row["current_numeric_value"] == "100")
+        response = client.post(
+            f"/api/v1/sessions/{created['id']}/documents/{document_id}/evidences/{item['evidence_key']}/revisions",
+            json={"numeric_value": "100.00", "reason": "same number", "expected_revision_id": item["current_revision_id"]},
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"]["code"] == "VALUE_UNCHANGED"
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_queued_documents_are_extracted_again_after_a_restart() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Interrupted extraction"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2025 was 100.")
+        document = api_main.catalog["sessions"][created["id"]]["documents"][0]
+        # Simulate a process that stopped before the background task ran.
+        document.update({"extraction_status": "queued", "page_count": None, "numeric_evidence_count": 0})
+        api_main.extraction_path(document["extraction_name"]).unlink()
+
+        resumed = api_main.resume_interrupted_extractions(background=False)
+
+        assert document_id in resumed
+        session = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]
+        assert session["documents"][0]["extraction_status"] == "ready"
+        assert session["documents"][0]["page_count"] == 1
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_calculation_answer_separates_value_and_unit() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Unit spacing"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120 VND.")
+        response = client.post(
+            f"/api/v1/sessions/{created['id']}/messages",
+            json={"document_id": document_id, "question": "What was revenue in Q1/2026?"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["assistant_message"]["body"] == "Kết quả: 120 VND."
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_failed_upload_can_be_extracted_again_without_reupload(monkeypatch) -> None:
+    from report_qa.application.evidence_extraction import extract_legacy_pdf_artifact
+
+    def broken_extractor(path, document_version_id):
+        raise RuntimeError("old extractor bug")
+
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", broken_extractor)
+    created = client.post("/api/v1/sessions", json={"title": "Re-extract failed"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2025 was 100.")
+        assert client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_status"] == "failed"
+
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", extract_legacy_pdf_artifact)
+        rerun = client.post(f"/api/v1/sessions/{created['id']}/documents/{document_id}/extraction")
+
+        assert rerun.status_code == 200, rerun.text
+        assert rerun.json()["previous_extraction"]["status"] == "failed"
+        document = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]
+        assert (document["extraction_status"], document["page_count"]) == ("ready", 1)
+        assert [entry["status"] for entry in document["extraction_history"]] == ["failed"]
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_reextracting_a_ready_document_archives_the_old_result_and_keeps_edits() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Re-extract ready"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2025 was 100. Revenue Q1/2026 was 120.")
+        answer = client.post(
+            f"/api/v1/sessions/{created['id']}/messages",
+            json={"document_id": document_id, "question": "By what percent did revenue change from Q1/2025 to Q1/2026?"},
+        ).json()["assistant_message"]
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        item = next(row for row in client.get(f"{base}/evidences").json()["evidences"] if row["current_numeric_value"] == "100")
+        client.post(f"{base}/evidences/{item['evidence_key']}/revisions", json={"numeric_value": "110", "reason": "Đối chiếu PDF", "expected_revision_id": item["current_revision_id"]})
+        stored = api_main.catalog["sessions"][created["id"]]["documents"][0]
+        old_run_id = json.loads(api_main.extraction_path(stored["extraction_name"]).read_text(encoding="utf-8"))["evidence_batch"]["extraction_run_id"]
+
+        rerun = client.post(f"{base}/extraction")
+
+        assert rerun.status_code == 200, rerun.text
+        previous = rerun.json()["previous_extraction"]
+        assert (previous["status"], previous["extraction_run_id"]) == ("ready", old_run_id)
+        assert api_main.extraction_path(previous["artifact"]).exists()  # archived, not overwritten
+        assert answer["id"] in rerun.json()["affected_message_ids"]
+        after = next(row for row in client.get(f"{base}/evidences").json()["evidences"] if row["evidence_key"] == item["evidence_key"])
+        assert (after["original_numeric_value"], after["current_numeric_value"]) == ("100", "110")
+    finally:
+        api_main.extraction_path(f"{document_id}.{old_run_id}.json").unlink(missing_ok=True)
+        cleanup_session(created["id"])
+
+
+def test_reextraction_is_refused_while_extraction_is_running() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Re-extract busy"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2025 was 100.")
+        api_main.catalog["sessions"][created["id"]]["documents"][0]["extraction_status"] = "queued"
+        busy = client.post(f"/api/v1/sessions/{created['id']}/documents/{document_id}/extraction")
+        assert busy.status_code == 409
+        assert busy.json()["detail"]["code"] == "EXTRACTION_IN_PROGRESS"
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_subject_only_lookup_uses_table_evidence_when_it_exists(monkeypatch) -> None:
+    # Recorded Docling output: table cells carry the row header (Q1..Q4) as
+    # subject and no period. "Doanh thu Q1" used to skip evidence entirely.
+    from pathlib import Path
+
+    recorded = json.loads((Path(__file__).parents[4] / "examples/tien-extraction/output/document.json").read_text(encoding="utf-8"))
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", lambda path, version: {**recorded, "evidence_batch": {**recorded["evidence_batch"], "document_version_id": version}})
+    created = client.post("/api/v1/sessions", json={"title": "Subject lookup"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu theo quy.")
+        answer = client.post(f"/api/v1/sessions/{created['id']}/messages", json={"document_id": document_id, "question": "Doanh thu Q1 là bao nhiêu?"})
+        assert answer.status_code == 200, answer.text
+        assistant = answer.json()["assistant_message"]
+        assert assistant["mode"] == "deterministic_calculation"
+        assert assistant["answer_inputs"][0]["value"] == "1250.50"
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_subject_only_lookup_without_matching_evidence_keeps_the_text_answer() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Subject fallback"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue in region North grew strongly this year.")
+        answer = client.post(f"/api/v1/sessions/{created['id']}/messages", json={"document_id": document_id, "question": "Revenue region North?"})
+        assert answer.status_code == 200, answer.text
+        assert answer.json()["assistant_message"]["mode"] == "deterministic_text_retrieval"
     finally:
         cleanup_session(created["id"])

@@ -301,7 +301,8 @@ def calculation_answer(plan: dict[str, Any], result: dict[str, Any], bindings: l
         }
         answer = reason_messages[result["status"]]
     else:
-        unit_label = "%" if result.get("unit") == "PERCENT" else (result.get("unit") or "")
+        unit = result.get("unit")
+        unit_label = "%" if unit == "PERCENT" else (f" {unit}" if unit else "")
         answer = f"Kết quả: {result['value']}{unit_label}."
     cited_pages = sorted({int(item["page_number"]) for item in bindings})
     structured = {

@@ -64,18 +64,6 @@ class PostgresRuntimeStore(PostgresRevisionStore):
     def _run_id(version_id: UUID) -> UUID:
         return uuid5(version_id, "extraction-run-1")
 
-    @staticmethod
-    def _source_region_key(item: dict[str, Any]) -> str:
-        """Return the stable region identity shared by evidence from one span.
-
-        A single OCR/text span can yield more than one evidence (for example a
-        text claim and a numeric operand).  ``source_regions`` deliberately
-        has a unique ``(extraction_run_id, region_key)`` constraint, so the
-        evidence rows must point at the same region instead of inserting a
-        second region with the same key.
-        """
-        return str(item.get("source_region_key") or item["evidence_key"])
-
     def load_catalog(self) -> dict[str, Any]:
         rows = self._execute(
             """SELECT id,project_id,title,created_at,updated_at,data_revision
@@ -114,7 +102,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                  JOIN documents d ON d.id=dv.document_id
                  LEFT JOIN LATERAL (
                      SELECT status,error_code,id FROM extraction_runs
-                      WHERE document_version_id=dv.id
+                      WHERE document_version_id=dv.id AND scope='base_document'
                       ORDER BY run_no DESC LIMIT 1
                  ) er ON TRUE
                 WHERE cd.chat_id = ANY(%s) AND d.deleted_at IS NULL
@@ -180,7 +168,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                    JOIN documents d ON d.id=dv.document_id
                    LEFT JOIN LATERAL (
                        SELECT id,status,error_code FROM extraction_runs
-                        WHERE document_version_id=dv.id
+                        WHERE document_version_id=dv.id AND scope='base_document'
                         ORDER BY run_no DESC LIMIT 1
                    ) er ON TRUE
                   WHERE cd.chat_id=%s AND d.deleted_at IS NULL
@@ -213,6 +201,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                 "extraction_error": item["extraction_error"],
             }
             document["evidence_state"] = self._load_evidence_state(chat_uuid, document_id)
+            document["chart_extractions"] = self._load_chart_extractions(chat_uuid, version_id)
             session["documents"].append(document)
 
         message_rows = self._execute(
@@ -297,6 +286,23 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                 "route": item["route"],
             }
         return session
+
+    def _load_chart_extractions(self, chat_id: UUID, version_id: UUID) -> list[dict[str, Any]]:
+        """Chart reads made by the tools assistant, oldest first."""
+        rows = self._execute(
+            """SELECT er.config->'chart_record' AS chart_record
+                 FROM extraction_runs er
+                 JOIN chat_sources cs ON cs.extraction_run_id=er.id
+                WHERE cs.chat_id=%s AND er.document_version_id=%s
+                  AND er.scope='on_demand_chart' AND er.status='completed'
+                  AND er.config ? 'chart_record'
+                ORDER BY er.run_no""",
+            (chat_id, version_id),
+        )
+        return [dict(row["chart_record"]) for row in rows]
+
+    def load_evidence_state(self, chat_id: UUID | str, document_id: UUID | str) -> dict[str, Any]:
+        return self._load_evidence_state(self._uuid(chat_id), self._uuid(document_id))
 
     def _load_evidence_state(self, chat_id: UUID, document_id: UUID) -> dict[str, Any]:
         rows = self._execute(
@@ -455,6 +461,9 @@ class PostgresRuntimeStore(PostgresRevisionStore):
             )
         return bool(rows)
 
+    # A save can replay a snapshot loaded minutes ago (a slow answer job), so it
+    # must not write what has its own endpoint: title, project and deletion of a
+    # chat, name and deletion of a document.
     def _sync_session(self, session: dict[str, Any], *, extraction_loader: Callable[[dict[str, Any]], dict[str, Any] | None] | None) -> None:
         chat_id = self._uuid(session["id"])
         project_id = self._uuid(session["project_id"]) if session.get("project_id") else None
@@ -479,10 +488,10 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         self._execute(
             """INSERT INTO chats (id,owner_id,project_id,title,data_revision,created_at,updated_at)
                VALUES (%s,%s,%s,%s,%s,%s,%s)
-               ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title,
-                 project_id=EXCLUDED.project_id,
+               ON CONFLICT (id) DO UPDATE SET
+                 project_id=COALESCE(chats.project_id, EXCLUDED.project_id),
                  data_revision=GREATEST(chats.data_revision, EXCLUDED.data_revision),
-                 updated_at=EXCLUDED.updated_at, deleted_at=NULL""",
+                 updated_at=EXCLUDED.updated_at""",
             (chat_id, self.owner_id, project_id, str(session.get("title") or "Phiên phân tích mới"), int(session.get("data_revision") or 0), session.get("created_at") or datetime.now(timezone.utc), session.get("updated_at") or datetime.now(timezone.utc)),
         )
         for document in session.get("documents", []):
@@ -537,13 +546,13 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         self._execute(
             """INSERT INTO documents (id,owner_id,title,created_at,updated_at,deleted_at)
                VALUES (%s,%s,%s,%s,%s,NULL)
-               ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title,updated_at=EXCLUDED.updated_at,deleted_at=NULL""",
+               ON CONFLICT (id) DO UPDATE SET updated_at=EXCLUDED.updated_at""",
             (document_id, self.owner_id, str(document.get("file_name") or "document.pdf"), document.get("created_at") or datetime.now(timezone.utc), datetime.now(timezone.utc)),
         )
         self._execute(
             """INSERT INTO document_versions (id,document_id,version_no,file_name,storage_key,file_hash,byte_size,content_type,page_count,status)
                VALUES (%s,%s,1,%s,%s,%s,%s,'application/pdf',%s,%s)
-               ON CONFLICT (id) DO UPDATE SET file_name=EXCLUDED.file_name,storage_key=EXCLUDED.storage_key,
+               ON CONFLICT (id) DO UPDATE SET storage_key=EXCLUDED.storage_key,
                  file_hash=EXCLUDED.file_hash,byte_size=EXCLUDED.byte_size,page_count=EXCLUDED.page_count,status=EXCLUDED.status""",
             (version_id, document_id, str(document.get("file_name") or "document.pdf"), str(document.get("storage_name") or f"{document_id}.pdf"), str(document.get("sha256") or "unknown"), int(document.get("byte_size") or 1), persisted_page_count, version_status),
         )
@@ -584,14 +593,17 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         existing = self._execute("SELECT 1 FROM extracted_evidences WHERE extraction_run_id=%s LIMIT 1", (run_id,))
         if not existing:
             for item in (artifact.get("evidence_batch") or {}).get("evidences", []):
-                region_key = self._source_region_key(item)
+                # One region per value. Two numbers in one text span used to
+                # share a region, which names a single evidence_key: the second
+                # number was loaded under the first one's key.
+                region_key = item["evidence_key"]
                 region_id, evidence_id = uuid5(run_id, f"region:{region_key}"), uuid5(run_id, f"evidence:{item['evidence_key']}")
                 region_type = "table_cell" if item.get("source_type") == "table" else "chart_element" if item.get("source_type") == "chart" else "paragraph"
                 self._execute(
                     """INSERT INTO source_regions (id,extraction_run_id,region_key,page_number,bbox,region_type,extracted_text,meta)
                        VALUES (%s,%s,%s,%s,%s::jsonb,%s,%s,%s::jsonb)
                        ON CONFLICT (extraction_run_id,region_key) DO NOTHING""",
-                    (region_id, run_id, region_key, int(item["page_number"]), self._json(item.get("bbox")), region_type, item.get("raw_text"), self._json({"evidence_key": item["evidence_key"], "method_label": item.get("method_label"), "table_locator": item.get("table_locator"), "chart_read": item.get("chart_read")})),
+                    (region_id, run_id, region_key, int(item["page_number"]), self._json(item.get("bbox")), region_type, item.get("raw_text"), self._json({"evidence_key": item["evidence_key"], "source_region_key": item.get("source_region_key"), "method_label": item.get("method_label"), "table_locator": item.get("table_locator"), "chart_read": item.get("chart_read")})),
                 )
                 numeric = item.get("numeric_value")
                 method = str(item.get("extraction_method") or "text")
@@ -634,6 +646,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         document_version_id: UUID,
         evidence_batch: dict[str, Any],
         question_plan_id: str,
+        chart_record: dict[str, Any] | None = None,
     ) -> dict[str, UUID]:
         """Persist chart evidence as an immutable, chat-visible extraction run.
 
@@ -696,6 +709,21 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                 if not source_rows:
                     raise RuntimeError("CHART_SOURCE_NOT_ATTACHED")
                 return self.initialize_chat_evidence(self.owner_id, chat_id, source_rows[0]["id"])
+            # A point read by an earlier question already has a working copy in
+            # this chat, perhaps corrected. Reuse it: a second copy under the
+            # same key would mix two histories.
+            known_revisions = {
+                str(row["evidence_key"]): row["current_revision_id"]
+                for row in self._execute(
+                    """SELECT sr.meta->>'evidence_key' AS evidence_key, ce.current_revision_id
+                         FROM chat_evidences ce
+                         JOIN chat_sources cs ON cs.id=ce.chat_source_id
+                         JOIN extracted_evidences ee ON ee.id=ce.extracted_evidence_id
+                         JOIN source_regions sr ON sr.id=ee.source_region_id
+                        WHERE ce.chat_id=%s AND cs.document_version_id=%s AND sr.meta->>'evidence_key' = ANY(%s)""",
+                    (chat_id, document_version_id, [str(item.get("evidence_key")) for item in evidences]),
+                )
+            }
             existing = self._execute(
                 "SELECT id FROM extraction_runs WHERE id=%s AND document_version_id=%s",
                 (run_id, document_version_id),
@@ -712,9 +740,9 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                            (id,document_version_id,run_no,status,extractor_name,extractor_version,
                             contract_name,contract_version,scope,trigger,input_sha256,tool_meta,
                             config,started_at,completed_at)
-                       VALUES (%s,%s,%s,'completed','chart_reader','v1',
+                       VALUES (%s,%s,%s,'running','chart_reader','v1',
                                'document-evidence','2',%s,%s::jsonb,%s,%s::jsonb,
-                               %s::jsonb,now(),now())""",
+                               %s::jsonb,now(),NULL)""",
                     (
                         run_id,
                         document_version_id,
@@ -723,10 +751,12 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                         self._json(trigger),
                         input_sha256,
                         self._json({"reader": "vector_or_deplot", "question_plan_id": question_plan_id}),
-                        self._json({"scope": scope, "question_plan_id": question_plan_id}),
+                        self._json({"scope": scope, "question_plan_id": question_plan_id, **({"chart_record": chart_record} if chart_record else {})}),
                     ),
                 )
                 for item in evidences:
+                    if str(item.get("evidence_key")) in known_revisions:
+                        continue
                     evidence_key = str(item.get("evidence_key") or "")
                     if not evidence_key:
                         raise ValueError("CHART_EVIDENCE_KEY_REQUIRED")
@@ -740,13 +770,16 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                         (
                             region_id,
                             run_id,
-                            item.get("source_region_key") or evidence_key,
+                            # One chart yields several points that share a
+                            # source_region_key; (run, region_key) is unique.
+                            evidence_key,
                             int(item["page_number"]),
                             self._json(item.get("bbox")),
                             item.get("raw_text"),
                             self._json(
                                 {
                                     "evidence_key": evidence_key,
+                                    "source_region_key": item.get("source_region_key"),
                                     "method_label": item.get("method_label"),
                                     "chart_read": item.get("chart_read"),
                                     "question_plan_id": question_plan_id,
@@ -778,6 +811,12 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                             item.get("confidence"),
                         ),
                     )
+                # Payload rows are immutable once the run is completed, so
+                # complete it only after every region and value is inserted.
+                self._execute(
+                    "UPDATE extraction_runs SET status='completed',completed_at=now() WHERE id=%s",
+                    (run_id,),
+                )
                 self._ensure_chat_source(chat_id, document_version_id, run_id)
             else:
                 # A retry may arrive after a client timeout.  It must not create
@@ -789,7 +828,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
             )
             if not source_rows:
                 raise RuntimeError("CHART_SOURCE_NOT_ATTACHED")
-            return self.initialize_chat_evidence(self.owner_id, chat_id, source_rows[0]["id"])
+            return {**known_revisions, **self.initialize_chat_evidence(self.owner_id, chat_id, source_rows[0]["id"])}
 
     def _sync_evidence_state(self, chat_id: UUID, document: dict[str, Any]) -> None:
         state = document.get("evidence_state") or {}
@@ -890,11 +929,19 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                             continue
                         self._execute("INSERT INTO answer_inputs (answer_revision_id,evidence_revision_id,chat_id,role,param_key) VALUES (%s,%s,%s,'operand',%s) ON CONFLICT DO NOTHING", (incoming_id, evidence_revision_id, chat_id, f"operand_{operand_index + 1}"))
                 elif status == "processing_error":
-                    self._execute(
-                        """UPDATE answer_revisions SET answer_status='processing_error',answer_text=%s,result=%s::jsonb,assessment=%s::jsonb
-                           WHERE id=%s AND message_id=%s""",
-                        (assistant.get("body", ""), self._json(result), self._json(metadata), incoming_id, assistant_id),
-                    )
+                    # Revisions are immutable: record the failure as a new one,
+                    # once, and keep it when this snapshot is saved again.
+                    current = self._execute("SELECT answer_status FROM answer_revisions WHERE id=%s", (current_revision,)) if current_revision else []
+                    if current and current[0]["answer_status"] == "processing_error":
+                        incoming_id = current_revision
+                    else:
+                        incoming_id = uuid4()
+                        max_revision = self._execute("SELECT COALESCE(MAX(revision_no),0) AS value FROM answer_revisions WHERE message_id=%s", (assistant_id,))[0]["value"]
+                        self._execute(
+                            """INSERT INTO answer_revisions (id,chat_id,message_id,revision_no,answer_status,question_context,operation,result,answer_text,assessment,input_data_revision)
+                               VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s,%s::jsonb,%s)""",
+                            (incoming_id, chat_id, assistant_id, int(max_revision) + 1, status, self._json({"document_id": assistant.get("document_id"), "question_plan": question_plan}), self._json(question_plan.get("operation") or {}), self._json(result), assistant.get("body", ""), self._json(metadata), 0),
+                        )
                 self._execute("UPDATE messages SET content=%s,status=%s,needs_update=%s,current_answer_revision_id=%s,updated_at=now() WHERE id=%s", (assistant.get("body", ""), "failed" if status == "processing_error" else "completed", bool(assistant.get("needs_update")), incoming_id, assistant_id))
                 continue
             max_sequence_rows = self._execute("SELECT COALESCE(MAX(sequence_no),0) AS value FROM messages WHERE chat_id=%s", (chat_id,))
