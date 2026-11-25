@@ -180,6 +180,68 @@ def _measure(text: str) -> str:
     return "unknown"
 
 
+def _bbox_in_box(box: list[float], length: int, start: int, end: int, page_width: float, page_height: float) -> list[float]:
+    """The part of a known text box that holds characters start..end."""
+
+    left, top, right, bottom = box
+    step = (right - left) / max(1, length)
+    bbox = [
+        _clamp((left + start * step) / page_width),
+        _clamp(top / page_height),
+        _clamp((left + end * step) / page_width),
+        _clamp(bottom / page_height),
+    ]
+    if bbox[2] <= bbox[0]:
+        bbox[2] = _clamp(bbox[0] + 0.001)
+    if bbox[3] <= bbox[1]:
+        bbox[3] = _clamp(bbox[1] + 0.001)
+    return bbox
+
+
+def _private_use_share(text: str) -> float:
+    visible = [char for char in text if not char.isspace()]
+    if not visible:
+        return 0.0
+    return sum(1 for char in visible if "\ue000" <= char <= "\uf8ff") / len(visible)
+
+
+# Word bullets and icons are private-use characters too, so a few are normal.
+UNREADABLE_TEXT_SHARE = 0.05
+
+
+def _readable_page(path: Path, page_number: int) -> tuple[str, list[dict[str, Any]], float, float] | None:
+    """Page text and spans from PyMuPDF, or None when it reads no better.
+
+    Some fonts (Type 3, as Chrome prints them) give pypdf private-use glyph
+    codes instead of digits, so the page had no numbers at all.
+    """
+
+    import pymupdf
+
+    with pymupdf.open(path) as pdf:
+        page = pdf[page_number - 1]
+        text = page.get_text(sort=True)
+        if not text.strip() or _private_use_share(text) >= UNREADABLE_TEXT_SHARE:
+            return None
+        # Layout padding is up to 200 spaces a line here and would only spend
+        # the AI's page budget.
+        text = re.sub(r"\n\s*\n+", "\n", re.sub(r"[ \t]{2,}", "  ", text)).strip()
+        width, height = float(page.rect.width) or 1.0, float(page.rect.height) or 1.0
+        spans: list[dict[str, Any]] = []
+        for x0, top, x1, bottom, word, *_ in sorted(page.get_text("words"), key=lambda item: (round(item[3]), item[0])):
+            size = bottom - top
+            previous = spans[-1] if spans else None
+            # Words closer than a wide space belong to one run ("Kylian
+            # MBAPPE"); a wider gap is the next table cell.
+            if previous and abs(previous["box"][3] - bottom) <= size * 0.35 and 0 <= x0 - previous["box"][2] <= size * 0.6:
+                previous["text"] += f" {word}"
+                previous["box"][2] = x1
+                previous["box"][1] = min(previous["box"][1], top)
+                continue
+            spans.append({"text": word, "x": x0, "y": height - bottom, "font_size": size, "box": [x0, top, x1, bottom]})
+        return text, spans, width, height
+
+
 def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[str, Any]:
     """Return page text plus a strict v2 evidence batch and local contexts."""
 
@@ -229,6 +291,10 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
             spans.append(last_span)
 
         page_text = page.extract_text(visitor_text=visitor) or ""
+        if _private_use_share(page_text) >= UNREADABLE_TEXT_SHARE:
+            readable = _readable_page(path, page_number)
+            if readable is not None:
+                page_text, spans, width, height = readable
         pages.append({"page": page_number, "text": page_text})
         page_year = _single_year(page_text)
 
@@ -312,6 +378,8 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
                     page_width=width,
                     page_height=height,
                 )
+                if "box" in span:
+                    bbox = _bbox_in_box(span["box"], len(text), match.start(), match.end(), width, height)
                 digest = hashlib.sha256(f"{page_number}:{span_index}:{number_index}:{raw}".encode("utf-8")).hexdigest()[:16]
                 evidence_key = f"ev-{digest}"
                 region_key = f"page-{page_number}-span-{span_index}"

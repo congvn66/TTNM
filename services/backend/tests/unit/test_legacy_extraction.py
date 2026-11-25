@@ -11,10 +11,11 @@ from report_qa.application.evidence_extraction import (
     _decimal_text,
     _measure,
     _period_near,
+    _private_use_share,
     _unit_near,
     extract_legacy_pdf_artifact,
 )
-from report_qa.application.table_extraction import _decimal
+from report_qa.application.table_extraction import _decimal, _header_count, _page_bbox, _row_header
 from report_qa.domain.types import validate_decimal_text
 
 
@@ -147,3 +148,111 @@ def test_bare_quarter_takes_the_only_year_on_the_page():
     assert _period_for("Q3 Doanh thu 980.00", "980.00", "2024")["label"] == "Q3/2024"
     assert _period_for("Q3 Doanh thu 980.00", "980.00", None) is None
     assert _period_for("Doanh thu Q3/2023 980.00", "980.00", "2024")["label"] == "Q3/2023"
+
+
+def _player_table_pdf(path: Path) -> None:
+    """Header bar with column borders, data rows with horizontal rules only."""
+
+    doc = pymupdf.open()
+    page = doc.new_page(width=960, height=540)
+    # Clipped background drawn far outside the page, as Chrome prints it.
+    page.draw_rect(pymupdf.Rect(0, -540, 960, 1080), color=(1, 1, 1), fill=(0.98, 0.98, 0.98))
+    columns = [12, 60, 260, 420, 580, 948]
+    for left, right, title in zip(columns, columns[1:], ["#", "Player", "Total Distance (m)", "Zone 1 0-7 km/h (m)", "Top Speed (km/h)"]):
+        page.draw_rect(pymupdf.Rect(left, 80, right, 104), color=(0, 0, 0.8), fill=(0.2, 0.3, 1))
+        page.insert_text((left + 6, 96), title, fontsize=9, color=(1, 1, 1))
+    players = [("16", "Mike Alpha", "4962.4", "3790.7", "23.9"), ("2", "Malo Beta", "9555.2", "3483.0", "33.5"), ("10", "Kylian Gamma", "8287.4", "4398.7", "36.0")]
+    for index, cells in enumerate(players):
+        top = 104 + index * 24
+        page.draw_line((12, top + 24), (948, top + 24), color=(0.8, 0.8, 0.9))
+        for left, text in zip(columns, cells):
+            page.insert_text((left + 6, top + 16), text, fontsize=9)
+    doc.save(path)
+
+
+def test_player_table_without_row_borders_keeps_names_and_headers(tmp_path):
+    path = tmp_path / "players.pdf"
+    _player_table_pdf(path)
+
+    artifact = extract_legacy_pdf_artifact(path, "doc-players")
+
+    cells = {
+        (item["table_locator"]["row_header"], item["table_locator"]["column_header"]): item["numeric_value"]
+        for item in artifact["evidence_batch"]["evidences"]
+        if item["table_locator"]
+    }
+    assert cells[("Kylian Gamma", "Total Distance (m)")] == "8287.4"
+    assert cells[("Malo Beta", "Top Speed (km/h)")] == "33.5"
+
+
+def test_box_overshooting_the_page_by_rounding_is_clamped():
+    assert _page_bbox((0, -2e-13, 959.99996, 540.0000001), 960, 540) == [0.0, 0.0, 1.0, 1.0]
+    # A background clipped from a 54-page print is not a table on this page.
+    assert _page_bbox((0, -1620, 960, 27000), 960, 540) is None
+
+
+def test_single_column_frame_does_not_hide_the_numbers_inside(tmp_path):
+    path = tmp_path / "frame.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page()
+    for top in (60, 120):
+        page.draw_rect(pymupdf.Rect(60, top, 400, top + 60))
+    page.insert_text((72, 90), "Possession 41.5", fontsize=11)
+    page.insert_text((250, 90), "Shots 19", fontsize=11)
+    page.insert_text((72, 150), "Passes 453", fontsize=11)
+    doc.save(path)
+
+    artifact = extract_legacy_pdf_artifact(path, "doc-frame")
+
+    raw = {item["raw_text"] for item in artifact["evidence_batch"]["evidences"]}
+    assert {"41.5", "19", "453"} <= raw
+
+
+@pytest.mark.parametrize(
+    ("cells", "expected"),
+    [
+        (["16", "Mike Alpha", "15"], "Mike Alpha"),
+        (["1", "Doanh thu"], "Doanh thu"),
+        (["2024"], "2024"),
+        ([None, None, "0", "0 1 0"], None),
+        ([], None),
+    ],
+)
+def test_row_header_is_a_name_not_an_index_or_a_value(cells, expected):
+    assert _row_header(cells) == expected
+
+
+def test_header_rows_below_a_numbered_group_title_are_not_data():
+    assert _header_count([["", "4 Units", None], ["#", "Player", "Passes"], ["16", "Mike", "7"]]) == 2
+    assert _header_count([["Chỉ tiêu", "2023", "2024"], ["Doanh thu", "10", "12"]]) == 1
+    assert _header_count([["Chỉ tiêu", "2023"], ["Kinh doanh", None], ["Doanh thu", "10"]]) == 1
+
+
+def test_unreadable_glyph_codes_are_read_with_pymupdf(tmp_path, monkeypatch):
+    path = tmp_path / "glyphs.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page(width=600, height=400)
+    page.insert_text((72, 100), "Kylian Gamma", fontsize=11)
+    page.insert_text((300, 100), "8287.4", fontsize=11)
+    doc.save(path)
+    from pypdf import PageObject
+
+    def garbled(self, visitor_text=None, **_):
+        text = "Kylian Gamma "
+        if visitor_text:
+            visitor_text(text, [1, 0, 0, 1, 0, 0], [1, 0, 0, 1, 72, 300], None, 11)
+        return text
+
+    monkeypatch.setattr(PageObject, "extract_text", garbled)
+
+    artifact = extract_legacy_pdf_artifact(path, "doc-glyphs")
+
+    assert "8287.4" in artifact["pages"][0]["text"]
+    [item] = artifact["evidence_batch"]["evidences"]
+    assert item["raw_text"] == "8287.4"
+    assert item["table_locator"]["row_header"] == "Kylian Gamma"
+    assert 0.49 < item["bbox"][0] < 0.51
+
+
+def test_a_few_icon_characters_do_not_switch_the_reader():
+    assert _private_use_share(" Doanh thu quý 2 tăng mạnh so với cùng kỳ") < 0.05
