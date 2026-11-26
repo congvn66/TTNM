@@ -850,36 +850,44 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   }, [activeSession?.id, answerProcessing, refreshSessionDetail, showNotice]);
   const requestInFlightRef = useRef(false);
   const chatBodyRef = useRef(null);
-  const chatViewRef = useRef({ scope: null, count: 0, answer: null });
+  const chatViewRef = useRef({ scope: null, hadHistory: false, answer: null });
   const [chatAnnouncement, setChatAnnouncement] = useState("");
   const chatScope = `${activeSession?.id}:${activeDocument?.id}`;
   const lastMessage = messages.at(-1);
   const lastAnswer = [...messages].reverse().find((message) => message.role === "assistant");
   const lastAnswerState = lastAnswer && !lastAnswer.pending && lastAnswer.status !== "processing" ? `${lastAnswer.id}:${lastAnswer.failed || lastAnswer.status === "failed" ? "failed" : "done"}` : null;
+  const savedCount = persistedMessages.length;
 
   // A conversation opens at its newest turn; a new question scrolls to the
   // bottom; a finished answer scrolls to its own first line.
-  // Opening pins the view to the bottom while the turns finish laying out
-  // (fonts, evidence rows, narrow screens wrapping later), until the user
-  // scrolls or another rule moves the view.
+  // A conversation arrives in parts (this tab's unsent questions, then the
+  // saved history), so it is opened again when its saved history first
+  // arrives. Opening pins the view to the bottom while the turns finish
+  // laying out (fonts, evidence rows, narrow screens wrapping later), until
+  // the user scrolls or another rule moves the view.
   const pinnedRef = useRef(false);
   useLayoutEffect(() => {
     const node = chatBodyRef.current;
     const view = chatViewRef.current;
     if (!node) return;
-    const opened = view.scope !== chatScope || (view.count === 0 && messages.length > 0);
+    const opened = view.scope !== chatScope || (!view.hadHistory && savedCount > 0);
     const previousAnswer = view.answer;
-    Object.assign(view, { scope: chatScope, count: messages.length, answer: lastAnswerState });
-    pinnedRef.current = opened;
-    if (opened) { node.scrollTo({ top: node.scrollHeight, behavior: "instant" }); return; }
-    if (lastAnswerState && lastAnswerState !== previousAnswer) {
+    Object.assign(view, { scope: chatScope, hadHistory: savedCount > 0, answer: lastAnswerState });
+    if (opened) {
+      pinnedRef.current = true;
+      node.scrollTo({ top: node.scrollHeight, behavior: "instant" });
+    } else if (lastAnswerState && lastAnswerState !== previousAnswer) {
+      pinnedRef.current = false;
       const article = node.querySelector(`[data-message-id="${CSS.escape(lastAnswer.id)}"]`);
       node.scrollTo({ top: Math.max(0, (article?.offsetTop ?? node.scrollHeight) - 12), behavior: "smooth" });
       setChatAnnouncement(lastAnswerState.endsWith("failed") ? "Chưa tạo được câu trả lời." : `Câu trả lời mới: ${presentationAnswer(lastAnswer)?.answer ?? lastAnswer.body ?? ""}`);
     } else if (lastMessage?.role === "user" || lastMessage?.pending) {
+      pinnedRef.current = false;
       node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+    } else if (pinnedRef.current) {
+      node.scrollTo({ top: node.scrollHeight, behavior: "instant" });
     }
-  }, [chatScope, messages.length, lastMessage?.id, lastAnswerState]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chatScope, savedCount, messages.length, lastMessage?.id, lastAnswerState]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const node = chatBodyRef.current;
     if (!node || typeof ResizeObserver !== "function") return undefined;

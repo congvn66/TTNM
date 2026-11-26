@@ -472,3 +472,27 @@ it("offers a clarifying question's answers and asks the chosen one next", async 
   fireEvent.click(within(group).getByRole("button", { name: "2024" }));
   await waitFor(() => expect(requestMock).toHaveBeenCalledWith("/api/v1/sessions/chat/messages", expect.objectContaining({ body: JSON.stringify({ document_id: "doc", question: "2024" }) })));
 });
+
+it("opens at the newest turn when the saved history arrives after this tab's failed question", async () => {
+  const doc = { id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: "ready" };
+  const history = [
+    { id: "q", role: "user", document_id: "doc", body: "Old question" },
+    { id: "a", role: "assistant", document_id: "doc", reply_to_message_id: "q", body: "Old answer" },
+  ];
+  sessionStorage.setItem("sourcelens-session-snapshot-v1", JSON.stringify({ savedAt: Date.now(), sessions: [{ id: "chat", title: "My session", documents: [doc], messages: [] }] }));
+  sessionStorage.setItem("sourcelens-unsaved-questions-v1", JSON.stringify([{ id: "u1", answer_id: "u1-a", session_id: "chat", document_id: "doc", question: "Failed question", key: "k", sent_at: Date.now(), after: "q", error: "Máy chủ bận." }]));
+  localStorage.setItem("sourcelens-active-session", "chat");
+  let releaseHistory;
+  const historyReady = new Promise((resolve) => { releaseHistory = resolve; });
+  requestMock.mockImplementation(async (path) => {
+    if (path === "/api/v1/sessions") return { sessions: [{ id: "chat", title: "My session", documents: [doc], messages: [] }] };
+    if (path === "/api/v1/sessions/chat") { await historyReady; return { session: { id: "chat", title: "My session", documents: [doc], messages: history } }; }
+    return { jobs: [] };
+  });
+  render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  await screen.findByText("Máy chủ bận.");
+  Element.prototype.scrollTo.mockClear();
+  await act(async () => releaseHistory());
+  await screen.findByText("Old answer");
+  expect(Element.prototype.scrollTo.mock.calls.at(-1)[0]).toEqual({ top: 0, behavior: "instant" });
+});
