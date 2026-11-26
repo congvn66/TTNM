@@ -10,6 +10,15 @@ def test_document_format_is_detected_only_from_numbers_one_format_can_read():
     assert detected_locale(["1.234.567", "1,234,567"]) is None
 
 
+def test_a_decimal_number_proves_the_format_whose_grammar_alone_reads_it():
+    # "6,5" cannot be English (a "," there must be followed by three digits); "21.7" cannot be Vietnamese.
+    assert detected_locale(["6,5%", "128,4", "1.234"]) == "vi"
+    assert detected_locale(["Doanh thu tăng 128,4."]) == "vi"
+    assert detected_locale(["21.7%", "26,200"]) == "en"
+    assert detected_locale(["19,0%", "21.7%"]) is None
+    assert detected_locale(["Quý 2/2026", "31.12.2023"]) is None
+
+
 def test_typed_number_uses_the_format_and_reports_ambiguity():
     assert read_typed_number("21.500", "vi") == "21500"
     assert read_typed_number("21.500", "en") == "21.500"

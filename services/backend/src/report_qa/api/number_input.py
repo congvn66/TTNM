@@ -2,7 +2,7 @@
 
 A document's number format is PDF_NUMBER_LOCALE when it is set, as for
 extraction; otherwise it is the format the document's own printed numbers
-show without doubt; otherwise it is unknown.
+show without doubt (detected_locale); otherwise it is unknown.
 
 A typed number must be a well-formed number in that format: digits, then
 optionally thousands separators each followed by exactly three digits, then
@@ -19,7 +19,7 @@ import os
 import re
 from typing import Any, Iterable
 
-from report_qa.application.numeric_extraction import NUMBER
+from report_qa.application.numeric_extraction import quantities
 from report_qa.domain.types import validate_decimal_text
 
 from .user_messages import NUMBER_INPUT_MESSAGES
@@ -29,12 +29,6 @@ LOCALES = ("vi", "en")
 # Above this the Decimal arithmetic of the answers (28 digits) starts to round.
 MAX_SIGNIFICANT_DIGITS = 18
 SEPARATORS = {"vi": (".", ","), "en": (",", ".")}  # (thousands, decimal)
-# Printed numbers that only one format can read: "1.234.567" or "1.234,5"
-# is Vietnamese, "1,234,567" or "1,234.5" is English. "1.234" proves nothing.
-_PROOF = {
-    "vi": re.compile(r"\d{1,3}(?:\.\d{3}){2,}|\d{1,3}(?:\.\d{3})+,\d+"),
-    "en": re.compile(r"\d{1,3}(?:,\d{3}){2,}|\d{1,3}(?:,\d{3})+\.\d+"),
-}
 _GRAMMAR = {
     locale: re.compile(rf"(?P<whole>[0-9]{{1,3}}(?:{re.escape(thousands)}[0-9]{{3}})+|[0-9]+)(?:{re.escape(decimal)}(?P<fraction>[0-9]+))?")
     for locale, (thousands, decimal) in SEPARATORS.items()
@@ -66,11 +60,20 @@ def document_number_locale(extraction: dict[str, Any]) -> str | None:
 
 
 def detected_locale(raw_texts: Iterable[str | None]) -> str | None:
+    """The format that printed quantities prove, when they prove exactly one.
+
+    A printed number proves a format when that format's grammar reads it and
+    the other's does not: "1.234.567", "1.234,5" and "6,5" are Vietnamese,
+    "1,234,567", "1,234.5" and "6.5" are English. "1.234" and "2026" prove
+    nothing. A document that proves both formats has no one format.
+    """
     found = set()
     for text in raw_texts:
-        for match in NUMBER.finditer(text or ""):
-            token = match.group().strip("()+-% ")
-            found.update(locale for locale, proof in _PROOF.items() if proof.fullmatch(token))
+        for match in quantities(text or ""):
+            token = match.group().strip("()+-%., ")
+            readers = {locale for locale, grammar in _GRAMMAR.items() if grammar.fullmatch(token)}
+            if len(readers) == 1:
+                found |= readers
     return found.pop() if len(found) == 1 else None
 
 
