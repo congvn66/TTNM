@@ -186,3 +186,13 @@ def test_repeated_deplot_category_gets_distinct_keys():
     keys = [e["evidence_key"] for e in first["evidence_batch"]["evidences"]]
     assert len(keys) == 3 and len(set(keys)) == 3
     assert keys == [e["evidence_key"] for e in second["evidence_batch"]["evidences"]]
+
+
+def test_deplot_cache_lives_under_the_configured_runtime_root(tmp_path, monkeypatch):
+    from report_qa.api import session_storage
+    from report_qa.application import chart_tool
+
+    monkeypatch.setattr(session_storage, "RUNTIME_ROOT", tmp_path)
+    monkeypatch.setattr(chart_tool, "predict_chart", lambda image: RAW)
+    read_chart_region(PDF, REGION, "v", "q", complete=lambda *args: json.dumps({"rows": []}))
+    assert len(list((tmp_path / "chart-cache").glob("*.json"))) == 1

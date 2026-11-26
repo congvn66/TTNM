@@ -10,9 +10,9 @@ import hashlib
 import json
 import math
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
 from uuid import uuid4
 
+from report_qa.api import session_storage
 from report_qa.api.ai_provider import _json_from_content
 from report_qa.application.deplot_reading import (
     _native_label,
@@ -97,7 +97,7 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
         from report_qa.application.deplot_reading import MODEL_ID, REVISION
 
         cache_key = hashlib.sha256(png + REVISION.encode()).hexdigest()
-        cache_root = Path(__file__).resolve().parents[5] / "runtime" / "chart-cache"
+        cache_root = session_storage.RUNTIME_ROOT / "chart-cache"
         cache_path = cache_root / (cache_key + ".json")
         raw = None
         if predictor is None and cache_path.is_file():

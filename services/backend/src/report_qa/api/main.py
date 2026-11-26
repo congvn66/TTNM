@@ -1125,10 +1125,6 @@ def relevant_pages(document: dict[str, Any], question: str, limit: int = 3) -> l
     return ranked[: max(1, limit)]
 
 
-def relevant_page(document: dict[str, Any], question: str) -> tuple[dict[str, Any], int]:
-    return relevant_pages(document, question, limit=1)[0]
-
-
 def ensure_document_evidence_state(document: dict[str, Any], extraction: dict[str, Any]) -> dict[str, Any]:
     """Initialize chat-local working copies without mutating base extraction."""
     state = document.setdefault("evidence_state", {"data_revision": 0, "items": {}})
