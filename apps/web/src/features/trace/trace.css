@@ -92,7 +92,7 @@
 .audit-drawer-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 15px 17px 13px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .audit-kicker { display: block; color: var(--gold-dark); font-size: var(--text-xs); font-weight: 850; letter-spacing: .14em; }
 .audit-drawer-header h3 { margin: 4px 0 2px; color: var(--ink); font-size: var(--text-lg); letter-spacing: -.025em; }
-.audit-drawer-header small { color: var(--muted); font: var(--text-xs) ui-monospace, SFMono-Regular, Consolas, monospace; }
+.audit-drawer-header small { color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 .audit-drawer-header button { display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--muted); }
 .audit-drawer-header button:hover { border-color: #b7aa8c; background: var(--gold-soft); color: var(--gold-dark); }
 .audit-scope-grid, .audit-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; padding: 10px 13px; }
