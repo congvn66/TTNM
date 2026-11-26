@@ -1160,15 +1160,14 @@ def read_session_document_file(session_id: str, document_id: str, request: Reque
     return FileResponse(path, media_type="application/pdf", filename=document["file_name"], content_disposition_type="inline")
 
 
-def _ready_document(session: dict[str, Any], document_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    """Document, its extraction artifact and the artifact with its chart reads; 404/409 instead of a 500."""
+def _ready_document(session: dict[str, Any], document_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Document and its extraction artifact; 404/409 instead of a 500."""
     document = next((item for item in session["documents"] if item["id"] == document_id), None)
     if document is None:
         raise user_error(404, "DOCUMENT_NOT_FOUND")
     if document.get("extraction_status") != "ready":
         raise user_error(409, "EXTRACTION_NOT_READY")
-    artifact = _load_extraction_artifact(document["extraction_name"])
-    return document, artifact, with_chart_batches(document, artifact)
+    return document, _load_extraction_artifact(document["extraction_name"])
 
 
 @app.get(
@@ -1179,9 +1178,9 @@ def _ready_document(session: dict[str, Any], document_id: str) -> tuple[dict[str
 )
 def list_document_evidences(session_id: str, document_id: str, request: Request) -> dict[str, Any]:
     session = get_session(session_id, owner_id_for_request(request))
-    document, artifact, extraction = _ready_document(session, document_id)
+    document, artifact = _ready_document(session, document_id)
     with catalog_lock:
-        return _evidence_records(document, document_id, artifact, extraction)
+        return _evidence_records(document, document_id, artifact, with_chart_batches(document, artifact))
 
 
 def _evidence_records(document: dict[str, Any], document_id: str, artifact: dict[str, Any], extraction: dict[str, Any]) -> dict[str, Any]:
@@ -1209,7 +1208,7 @@ def _evidence_records(document: dict[str, Any], document_id: str, artifact: dict
 )
 def list_evidence_revisions(session_id: str, document_id: str, evidence_key: str, request: Request) -> dict[str, Any]:
     session = get_session(session_id, owner_id_for_request(request))
-    document, artifact, _ = _ready_document(session, document_id)
+    document, artifact = _ready_document(session, document_id)
     with catalog_lock:
         state = ensure_document_evidence_state(document, artifact)
         item = state["items"].get(evidence_key)
@@ -1225,8 +1224,8 @@ def list_evidence_revisions(session_id: str, document_id: str, evidence_key: str
 def create_evidence_revision(session_id: str, document_id: str, evidence_key: str, payload: EvidenceRevisionCreateRequest, request: Request, dry_run: bool = False) -> dict[str, Any]:
     owner_id = owner_id_for_request(request)
     session = get_session(session_id, owner_id)
-    document, artifact, extraction = _ready_document(session, document_id)
-    locale = document_number_locale(extraction)
+    document, artifact = _ready_document(session, document_id)
+    locale = document_number_locale(artifact)
     # The conflict check and the append are one critical section so two
     # concurrent edits cannot both pass expected_revision_id.
     with catalog_lock:
@@ -1237,7 +1236,7 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
         current = item["revisions"][-1]
         if current["id"] != payload.expected_revision_id:
             raise user_error(409, "EVIDENCE_REVISION_CONFLICT")
-        evidence = next((item for item in extraction["evidence_batch"]["evidences"] if item["evidence_key"] == evidence_key), None)
+        evidence = _reading_evidence(document, artifact, evidence_key)
         numeric_value = _requested_value(payload, locale, evidence)
         # Compare numbers, not spellings: "1300" -> "1300.0" is not a change.
         if current["numeric_value"] is not None and Decimal(numeric_value) == Decimal(current["numeric_value"]):
@@ -1273,6 +1272,12 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
     trace_id = trace_id_for(request)
     flow_log("EVIDENCE_REVISION_APPENDED", trace_id=trace_id, session_id=session_id, document_id=document_id, evidence_key=evidence_key, old_value=current["numeric_value"], new_value=numeric_value, affected_answer_count=len(affected))
     return {"document_id": document_id, "evidence_key": evidence_key, "data_revision": state["data_revision"], "revision": revision, "display": display_number(numeric_value, locale), "affected_message_ids": affected, "recalculation_required": bool(affected), "trace_id": trace_id}
+
+
+def _reading_evidence(document: dict[str, Any], artifact: dict[str, Any], evidence_key: str) -> dict[str, Any] | None:
+    """One number of the reading as with_chart_batches shows it (the artifact first, then the newest chart read), without copying the reading."""
+    batches = [artifact["evidence_batch"], *(record["evidence_batch"] for record in reversed(document.get("chart_extractions") or []))]
+    return next((evidence for batch in batches for evidence in batch["evidences"] if evidence["evidence_key"] == evidence_key), None)
 
 
 def _requested_value(payload: EvidenceRevisionCreateRequest, locale: str | None, evidence: dict[str, Any] | None) -> str:

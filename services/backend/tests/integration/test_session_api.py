@@ -1419,6 +1419,18 @@ def test_typed_number_must_be_well_formed_in_the_documents_format(monkeypatch) -
         cleanup_session(session_id)
 
 
+def test_an_edit_reads_its_number_without_copying_the_whole_reading(monkeypatch) -> None:
+    session_id, base, rows = _document_with_numbers(monkeypatch, ("target", "21.5", "21.5", 1))
+    try:
+        copies = []
+        real = api_main.with_chart_batches
+        monkeypatch.setattr(api_main, "with_chart_batches", lambda *args: (copies.append(1), real(*args))[1])
+        saved = client.post(f"{base}/evidences/target/revisions", json={"input_text": "22", "reason": "Đối chiếu PDF", "expected_revision_id": rows["target"]["current_revision_id"]})
+        assert saved.status_code == 200 and copies == []
+    finally:
+        cleanup_session(session_id)
+
+
 def test_a_percent_sign_is_accepted_only_for_a_percentage(monkeypatch) -> None:
     def reading(path, version):
         artifact = _reading(("share", "12,5%", "12.5", 1), ("count", "1.234.567", "1234567", 1))(path, version)
