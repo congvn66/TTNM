@@ -927,3 +927,39 @@ def test_a_trimmed_long_document_keeps_the_last_exchange_for_a_follow_up():
     assert fitted["history"] == history[-2:]
     assert 7 in [p["page"] for p in fitted["pages"]] and fitted["omitted_pages"]
     assert _size({**_model_view(fitted), "omitted_pages": fitted["omitted_pages"]}) <= 100_000
+
+
+def test_a_chart_read_is_not_started_after_the_budget_is_spent_and_its_time_counts(monkeypatch):
+    # DePlot ran outside the budget: a read could start with no time left and its time was not checked.
+    from report_qa.api import document_assistant_flow as flow
+    from report_qa.api.ai_provider import ProviderError
+    from report_qa.application import document_assistant
+
+    clock = [100.0]
+    monkeypatch.setattr(document_assistant.time, "monotonic", lambda: clock[0])
+    monkeypatch.setenv("REPORT_QA_ANSWER_TIMEOUT_SECONDS", "60")
+    started, timeouts = [], []
+
+    def deplot(*args, **kwargs):
+        started.append(clock[0])
+        clock[0] += 50  # DePlot takes 50 s
+        raise RuntimeError("no image")
+
+    monkeypatch.setattr(flow, "read_chart_region", deplot)
+    actions = iter([{"action": "read_chart", "chart_region_key": "chart-1"},
+                    {"action": "read_chart", "chart_region_key": "chart-2"}])
+
+    def complete(system, user, timeout):
+        timeouts.append(timeout)
+        clock[0] += 5
+        return json.dumps(next(actions))
+
+    regions = [{"chart_region_key": f"chart-{n}", "page_number": 1, "bbox": [0, 0, 1, 1], "text": ""} for n in (1, 2)]
+    extraction = {"pages": [{"page": 1, "text": "x"}], "evidence_batch": {"evidences": []}, "chart_regions": regions}
+    with pytest.raises(ProviderError) as error:
+        flow.answer_document({"messages": []}, {"id": "d", "extraction_name": "x", "storage_name": "x"}, "q", "t", [],
+                             {"sessions": {}}, overlay=lambda d, e: e, snapshot=lambda m: None, complete=complete,
+                             load_extraction=lambda n: extraction, resolve_pdf=lambda n: n, save=lambda c: None)
+    assert error.value.code == "AI_ANSWER_TIMEOUT"
+    assert timeouts == [60, 5]  # the second model call got what the first DePlot read left
+    assert started == [105]  # the second read was never started: 60 s were spent

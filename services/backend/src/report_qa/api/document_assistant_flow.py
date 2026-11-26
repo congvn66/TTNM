@@ -238,7 +238,7 @@ def answer_document(
     client = planner_client() if complete is None else None
     if complete is None and client is None:
         raise ProviderError("AI_NOT_CONFIGURED", "Document assistant requires an AI provider")
-    # One time budget covers every model call of this answer, chart checks included.
+    # One time budget covers the whole answer: model calls, chart checks and DePlot reads (with_time_budget).
     complete = with_time_budget(complete or client.complete, answer_timeout_seconds())
     extraction = load_extraction(document["extraction_name"])
     unstored_keys = set()
@@ -282,6 +282,7 @@ def answer_document(
             None,
         )
         if cached is None:
+            complete.check()  # DePlot cannot be stopped once started: start it only while time is left
             region = next(r for r in context["chart_regions"] if r["chart_region_key"] == key)
             result = storable(read_chart_region(
                 resolve_pdf(document["storage_name"]), region, document.get("version_id") or document["id"], f"tools:{key}", complete=complete,

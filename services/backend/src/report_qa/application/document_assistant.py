@@ -71,23 +71,31 @@ Kỳ, ngày, năm, số trang không cần nguồn. "tăng"/"giảm" phải kh�
 
 
 def answer_timeout_seconds() -> float:
-    """Total time one tools answer may take, every model call and tool included."""
+    """Total time one tools answer may take (see with_time_budget for what it covers)."""
     return float(os.getenv("REPORT_QA_ANSWER_TIMEOUT_SECONDS", "60"))
 
 
 def with_time_budget(complete, seconds: float):
-    """complete(system, user) for one answer: each provider call gets the time left as its timeout.
+    """complete(system, user) for one answer, with one wall-clock budget from now.
 
-    Once the budget is used up, the call fails with AI_ANSWER_TIMEOUT instead
-    of reaching the provider, and a provider failure that ends past the
-    deadline is reported as AI_ANSWER_TIMEOUT too, since the budget cut it.
+    Each provider call (the model's steps and the chart visual checks) gets
+    the time left as its timeout. Everything between calls spends the same
+    budget: calculations and DePlot chart reads. A DePlot read is started
+    only while time is left (timed.check() before it) but is not interrupted
+    once running; its duration is taken from the time later calls get. Once
+    the budget is used up, a call or check fails with AI_ANSWER_TIMEOUT
+    instead of starting, and a provider failure that ends past the deadline
+    is reported as AI_ANSWER_TIMEOUT too, since the budget cut it.
     """
     deadline = time.monotonic() + seconds
 
-    def timed(system, user):
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
+    def check():
+        if deadline - time.monotonic() <= 0:
             raise ProviderError("AI_ANSWER_TIMEOUT", f"Answer exceeded its {seconds:g}s time budget")
+
+    def timed(system, user):
+        check()
+        remaining = deadline - time.monotonic()
         try:
             return complete(system, user, timeout=remaining)
         except ProviderError as exc:
@@ -95,6 +103,7 @@ def with_time_budget(complete, seconds: float):
                 raise ProviderError("AI_ANSWER_TIMEOUT", f"Answer exceeded its {seconds:g}s time budget") from exc
             raise
 
+    timed.check = check
     return timed
 
 
@@ -431,6 +440,8 @@ class _Turn:
         try:
             result = self.read_chart(key)
         except Exception as exc:  # noqa: BLE001  a failed chart read must not lose the whole answer
+            if isinstance(exc, ProviderError) and exc.code == "AI_ANSWER_TIMEOUT":  # out of time, not a chart problem
+                raise
             error = f"{type(exc).__name__}: {exc}"[:300]
             # The error alone read to the model like "no such data" and it told users the report lacked the figure.
             self.tools.append({"tool": "read_chart", "chart_region_key": key, "status": "failed", "error": error,
