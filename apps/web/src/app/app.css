@@ -112,6 +112,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .session-search { width: 100%; height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 0 11px; background: var(--surface); color: var(--ink); font-size: 11px; box-shadow: var(--shadow-1); }
 .session-search::placeholder { color: var(--subtle); }
 .session-search:focus { border-color: #bd9e5f; box-shadow: 0 0 0 3px rgba(167, 123, 32, .10); outline: none; }
+/* Only the list gives up height; the controls above and below keep theirs. */
+.session-sidebar > :not(.session-list) { flex-shrink: 0; }
 .session-list { flex: 1 1 auto; min-height: 0; display: grid; align-content: start; gap: 6px; margin-top: 14px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
 .session-loading { padding: 18px 10px; color: var(--muted); font-size: 10px; line-height: 1.5; text-align: center; }
 .session-item { overflow: hidden; border: 1px solid transparent; border-radius: 10px; }
@@ -330,7 +332,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
   .brand small, .connection-pill, .audit-button, .storage-pill, .topbar-context, .profile-copy, .profile-chip > .ui-icon { display: none; }
   .top-actions { margin-left: auto; }
   .workspace { display: block; }
-  .session-sidebar { max-height: 290px; border-right: 0; border-bottom: 1px solid var(--border); }
+  /* Stacked on a phone: the sidebar takes the height of its content, the top
+     bar already has the Workspace/Tài liệu links, and long lists scroll. */
+  .session-sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
+  .sidebar-nav, .sidebar-divider { display: none; }
+  .session-list { flex: none; max-height: 50vh; }
   .reader-column { height: 66vh; min-height: 470px; }
   .chat-column { height: 650px; }
   .reader-toolbar { flex-wrap: wrap; align-content: center; gap: 6px; height: auto; min-height: 76px; padding: 8px 10px; }
