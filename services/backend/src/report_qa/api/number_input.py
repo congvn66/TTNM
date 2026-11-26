@@ -22,12 +22,13 @@ from typing import Any, Iterable
 from report_qa.application.numeric_extraction import NUMBER
 from report_qa.domain.types import validate_decimal_text
 
+from .user_messages import NUMBER_INPUT_MESSAGES
+
 
 LOCALES = ("vi", "en")
 # Above this the Decimal arithmetic of the answers (28 digits) starts to round.
 MAX_SIGNIFICANT_DIGITS = 18
 SEPARATORS = {"vi": (".", ","), "en": (",", ".")}  # (thousands, decimal)
-EXAMPLES = {"vi": "21.500 hoặc 21,5", "en": "21,500 hoặc 21.5", None: "21500 hoặc 21,5"}
 # Printed numbers that only one format can read: "1.234.567" or "1.234,5"
 # is Vietnamese, "1,234,567" or "1,234.5" is English. "1.234" proves nothing.
 _PROOF = {
@@ -105,7 +106,7 @@ def exact_number(value: str) -> str:
     try:
         validate_decimal_text(value)
     except Exception as exc:
-        raise TypedNumberError("Giá trị phải là chuỗi thập phân chính xác, ví dụ 58 hoặc 58.25.") from exc
+        raise TypedNumberError(NUMBER_INPUT_MESSAGES["not_exact"]) from exc
     _check_digits(value)
     return value
 
@@ -123,9 +124,9 @@ def display_number(value: str, locale: str | None) -> str:
 
 def _split_sign(text: str, percent: bool) -> tuple[str, bool]:
     if not text:
-        raise TypedNumberError("Hãy nhập một số.")
+        raise TypedNumberError(NUMBER_INPUT_MESSAGES["empty"])
     if _EXPONENT.search(text):
-        raise TypedNumberError("Không dùng dạng số mũ (ví dụ 1e5); hãy nhập đủ các chữ số.")
+        raise TypedNumberError(NUMBER_INPUT_MESSAGES["exponent"])
     negative = False
     if text.startswith("(") and text.endswith(")"):
         negative, text = True, text[1:-1].strip()
@@ -133,7 +134,7 @@ def _split_sign(text: str, percent: bool) -> tuple[str, bool]:
         negative, text = text[0] == "-", text[1:].strip()
     if text.endswith("%"):
         if not percent:
-            raise TypedNumberError("Số liệu này không phải tỷ lệ phần trăm; hãy nhập số không có dấu %.")
+            raise TypedNumberError(NUMBER_INPUT_MESSAGES["percent"])
         text = text[:-1].rstrip()
     return text, negative
 
@@ -151,7 +152,7 @@ def _read(body: str, locale: str) -> str | None:
 
 def _check_digits(value: str) -> None:
     if len(value.lstrip("-").replace(".", "").lstrip("0")) > MAX_SIGNIFICANT_DIGITS:
-        raise TypedNumberError(f"Số có quá nhiều chữ số; tối đa {MAX_SIGNIFICANT_DIGITS} chữ số có nghĩa.")
+        raise TypedNumberError(NUMBER_INPUT_MESSAGES["too_many_digits"].format(limit=MAX_SIGNIFICANT_DIGITS))
 
 
 def _signed(value: str, negative: bool) -> str:
@@ -159,9 +160,4 @@ def _signed(value: str, negative: bool) -> str:
 
 
 def _format_message(text: str, locale: str | None) -> str:
-    rule = {
-        "vi": "tài liệu này dùng dấu chấm ngăn hàng nghìn và dấu phẩy thập phân",
-        "en": "tài liệu này dùng dấu phẩy ngăn hàng nghìn và dấu chấm thập phân",
-        None: "mỗi nhóm sau dấu ngăn hàng nghìn phải có đúng 3 chữ số và chỉ có một dấu thập phân",
-    }[locale]
-    return f"Không đọc được \"{text}\" thành một số: {rule}. Ví dụ hợp lệ: {EXAMPLES[locale]}."
+    return NUMBER_INPUT_MESSAGES[f"format_{locale or 'unknown'}"].format(text=text)

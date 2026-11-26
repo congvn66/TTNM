@@ -22,6 +22,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 from report_qa.config import settings
+from .user_messages import error_detail, user_error
 
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -72,13 +73,13 @@ def _dsn() -> str:
 
 def _require_postgres() -> None:
     if settings.persistence_backend != "postgres":
-        raise HTTPException(status_code=503, detail={"code": "AUTH_REQUIRES_POSTGRES", "message": "Authentication cần PostgreSQL để lưu session bền vững."})
+        raise user_error(503, "AUTH_REQUIRES_POSTGRES")
 
 
 def _normalize_email(value: str) -> str:
     email = value.strip().casefold()
     if not EMAIL_RE.fullmatch(email):
-        raise HTTPException(status_code=422, detail={"code": "INVALID_EMAIL", "message": "Email không hợp lệ."})
+        raise user_error(422, "INVALID_EMAIL")
     return email
 
 
@@ -131,7 +132,7 @@ def _csrf_guard(request: Request) -> None:
     configured = os.getenv("WEB_ORIGINS", "")
     allowed.update(item.strip().rstrip("/") for item in configured.split(",") if item.strip())
     if origin.rstrip("/") not in allowed:
-        raise HTTPException(status_code=403, detail={"code": "CSRF_ORIGIN_REJECTED", "message": "Origin không được phép."})
+        raise user_error(403, "CSRF_ORIGIN_REJECTED")
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -193,7 +194,7 @@ def _user_from_request(request: Request) -> dict[str, Any] | None:
     except Exception as exc:
         # A stale token is a normal 401; a database outage must remain
         # observable as 503 rather than silently looking like a logout.
-        raise HTTPException(status_code=503, detail={"code": "AUTH_DATABASE_UNAVAILABLE", "message": "Không thể kiểm tra phiên đăng nhập lúc này."}) from exc
+        raise user_error(503, "AUTH_DATABASE_UNAVAILABLE") from exc
     return None
 
 
@@ -202,7 +203,7 @@ def current_user(request: Request, *, required: bool = True) -> dict[str, Any] |
     if user:
         return user
     if required or settings.auth_required:
-        raise HTTPException(status_code=401, detail={"code": "AUTH_REQUIRED", "message": "Vui lòng đăng nhập."}, headers={"WWW-Authenticate": "Cookie"})
+        raise HTTPException(status_code=401, detail=error_detail("AUTH_REQUIRED"), headers={"WWW-Authenticate": "Cookie"})
     return None
 
 
@@ -233,7 +234,7 @@ def register(payload: RegisterRequest, request: Request, response: Response) -> 
         with _connection() as connection:
             with connection.transaction():
                 if connection.execute("SELECT 1 FROM users WHERE normalized_email=%s AND deleted_at IS NULL", (email,)).fetchone():
-                    raise HTTPException(status_code=409, detail={"code": "EMAIL_ALREADY_REGISTERED", "message": "Không thể tạo tài khoản với thông tin này."})
+                    raise user_error(409, "EMAIL_ALREADY_REGISTERED")
                 user_id = uuid4()
                 row = connection.execute("INSERT INTO users (id,email,normalized_email,password_hash,display_name) VALUES (%s,%s,%s,%s,%s) RETURNING id,email,display_name", (user_id, email, email, password_hash, payload.display_name.strip())).fetchone()
                 token, _ = _create_session(connection, user_id, request=request)
@@ -242,7 +243,7 @@ def register(payload: RegisterRequest, request: Request, response: Response) -> 
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=503, detail={"code": "AUTH_DATABASE_UNAVAILABLE", "message": "Không thể tạo tài khoản lúc này."}) from exc
+        raise user_error(503, "AUTH_DATABASE_UNAVAILABLE") from exc
 
 
 @router.post("/login")
@@ -254,7 +255,7 @@ def login(payload: LoginRequest, request: Request, response: Response) -> dict[s
         with _connection() as connection:
             row = connection.execute("SELECT id,email,display_name,password_hash FROM users WHERE normalized_email=%s AND deleted_at IS NULL", (email,)).fetchone()
             if not row or not _verify_password(payload.password, row["password_hash"]):
-                raise HTTPException(status_code=401, detail={"code": "INVALID_CREDENTIALS", "message": "Email hoặc mật khẩu không đúng."})
+                raise user_error(401, "INVALID_CREDENTIALS")
             with connection.transaction():
                 token, _ = _create_session(connection, row["id"], revoke_token=request.cookies.get(SESSION_COOKIE), request=request)
         _set_session_cookie(response, token)
@@ -262,7 +263,7 @@ def login(payload: LoginRequest, request: Request, response: Response) -> dict[s
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=503, detail={"code": "AUTH_DATABASE_UNAVAILABLE", "message": "Không thể đăng nhập lúc này."}) from exc
+        raise user_error(503, "AUTH_DATABASE_UNAVAILABLE") from exc
 
 
 @router.post("/logout")
@@ -275,7 +276,7 @@ def logout(request: Request, response: Response) -> dict[str, Any]:
             with _connection() as connection:
                 connection.execute("UPDATE auth_sessions SET revoked_at=now() WHERE token_hash=%s AND revoked_at IS NULL", (_token_hash(token),))
         except Exception as exc:
-            raise HTTPException(status_code=503, detail={"code": "AUTH_DATABASE_UNAVAILABLE", "message": "Không thể đăng xuất lúc này."}) from exc
+            raise user_error(503, "AUTH_DATABASE_UNAVAILABLE") from exc
     _clear_session_cookie(response)
     return {"authenticated": False}
 
@@ -317,7 +318,7 @@ def reset_password(payload: ResetPasswordRequest, request: Request, response: Re
                 row = connection.execute("""SELECT u.id,u.email,u.display_name FROM account_tokens t JOIN users u ON u.id=t.user_id
                     WHERE t.token_hash=%s AND t.purpose='reset_password' AND t.used_at IS NULL AND t.expires_at>now() AND u.deleted_at IS NULL""", (_token_hash(payload.token),)).fetchone()
                 if not row:
-                    raise HTTPException(status_code=400, detail={"code": "RESET_TOKEN_INVALID", "message": "Liên kết đặt lại không hợp lệ hoặc đã hết hạn."})
+                    raise user_error(400, "RESET_TOKEN_INVALID")
                 connection.execute("UPDATE users SET password_hash=%s,updated_at=now() WHERE id=%s", (password_hash, row["id"]))
                 connection.execute("UPDATE account_tokens SET used_at=now() WHERE token_hash=%s", (_token_hash(payload.token),))
                 connection.execute("UPDATE auth_sessions SET revoked_at=now() WHERE user_id=%s AND revoked_at IS NULL", (row["id"],))
@@ -327,7 +328,7 @@ def reset_password(payload: ResetPasswordRequest, request: Request, response: Re
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=503, detail={"code": "AUTH_DATABASE_UNAVAILABLE", "message": "Không thể đặt lại mật khẩu lúc này."}) from exc
+        raise user_error(503, "AUTH_DATABASE_UNAVAILABLE") from exc
 
 
 @router.post("/change-password")
@@ -338,7 +339,7 @@ def change_password(payload: ChangePasswordRequest, request: Request, response: 
     _csrf_guard(request)
     user = current_user(request, required=True)
     if payload.current_password == payload.new_password:
-        raise HTTPException(status_code=422, detail={"code": "PASSWORD_UNCHANGED", "message": "Mật khẩu mới phải khác mật khẩu hiện tại."})
+        raise user_error(422, "PASSWORD_UNCHANGED")
     token = request.cookies.get(SESSION_COOKIE)
     password_hash = _hash_password(payload.new_password)
     try:
@@ -346,7 +347,7 @@ def change_password(payload: ChangePasswordRequest, request: Request, response: 
             with connection.transaction():
                 row = connection.execute("SELECT password_hash FROM users WHERE id=%s AND deleted_at IS NULL", (user["id"],)).fetchone()
                 if not row or not _verify_password(payload.current_password, row["password_hash"]):
-                    raise HTTPException(status_code=401, detail={"code": "CURRENT_PASSWORD_INVALID", "message": "Mật khẩu hiện tại không đúng."})
+                    raise user_error(401, "CURRENT_PASSWORD_INVALID")
                 connection.execute("UPDATE users SET password_hash=%s,updated_at=now() WHERE id=%s", (password_hash, user["id"]))
                 if token:
                     connection.execute("UPDATE auth_sessions SET revoked_at=now() WHERE user_id=%s AND token_hash<>%s AND revoked_at IS NULL", (user["id"], _token_hash(token)))
@@ -356,7 +357,7 @@ def change_password(payload: ChangePasswordRequest, request: Request, response: 
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=503, detail={"code": "AUTH_DATABASE_UNAVAILABLE", "message": "Không thể đổi mật khẩu lúc này."}) from exc
+        raise user_error(503, "AUTH_DATABASE_UNAVAILABLE") from exc
 
 
 @settings_router.get("/profile")

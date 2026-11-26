@@ -6,11 +6,12 @@ import hashlib
 import os
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Request, Response
 from psycopg.rows import dict_row
 
 from report_qa.config import settings
 from .auth import SESSION_COOKIE, _connection, _csrf_guard, _token_hash, current_user
+from .user_messages import user_error
 
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth-sessions"])
@@ -51,7 +52,7 @@ def list_auth_sessions(request: Request):
                 (UUID(str(user["id"])),),
             ).fetchall()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail={"code": "AUTH_DATABASE_UNAVAILABLE", "message": "Không thể tải danh sách thiết bị lúc này."}) from exc
+        raise user_error(503, "AUTH_DATABASE_UNAVAILABLE") from exc
     return {"sessions": [_public_session(dict(row), bool(current_hash and row["token_hash"] == current_hash)) for row in rows]}
 
 
@@ -70,9 +71,9 @@ def revoke_auth_session(session_id: UUID, request: Request, response: Response):
                 (session_id, UUID(str(user["id"]))),
             ).fetchone()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail={"code": "AUTH_DATABASE_UNAVAILABLE", "message": "Không thể thu hồi thiết bị lúc này."}) from exc
+        raise user_error(503, "AUTH_DATABASE_UNAVAILABLE") from exc
     if row is None:
-        raise HTTPException(status_code=404, detail={"code": "AUTH_SESSION_NOT_FOUND", "message": "Không tìm thấy phiên đăng nhập."})
+        raise user_error(404, "AUTH_SESSION_NOT_FOUND")
     if current_hash and row["token_hash"] == current_hash:
         response.delete_cookie(SESSION_COOKIE, path="/")
     return {"session_id": str(session_id), "revoked": True, "current": bool(current_hash and row["token_hash"] == current_hash)}
@@ -84,7 +85,7 @@ def revoke_other_auth_sessions(request: Request):
     user = current_user(request, required=True)
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
-        raise HTTPException(status_code=401, detail={"code": "AUTH_REQUIRED", "message": "Vui lòng đăng nhập."})
+        raise user_error(401, "AUTH_REQUIRED")
     try:
         with _connection() as connection:
             result = connection.execute(
@@ -93,7 +94,7 @@ def revoke_other_auth_sessions(request: Request):
                 (UUID(str(user["id"])), _token_hash(token)),
             )
     except Exception as exc:
-        raise HTTPException(status_code=503, detail={"code": "AUTH_DATABASE_UNAVAILABLE", "message": "Không thể thu hồi các thiết bị khác lúc này."}) from exc
+        raise user_error(503, "AUTH_DATABASE_UNAVAILABLE") from exc
     return {"revoked_count": result.rowcount}
 
 

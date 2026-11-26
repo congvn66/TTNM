@@ -18,7 +18,9 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.encoders import jsonable_encoder
 from fastapi.exception_handlers import http_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, model_validator
@@ -42,6 +44,7 @@ from .library import router as library_router
 from .auth import DEMO_OWNER_ID, owner_id_for_request, router as auth_router, settings_router as auth_settings_router
 from .devices import router as auth_sessions_router
 from .extraction_slots import ExtractionSlots
+from .user_messages import MESSAGES, error_detail, user_error
 from .number_input import AmbiguousNumberError, TypedNumberError, decimal_separator, display_number, document_number_locale, exact_number, read_typed_number
 from report_qa.config import settings
 from report_qa.infrastructure.postgres import postgres_health
@@ -90,27 +93,10 @@ def flow_log(event: str, **fields: Any) -> None:
     logger.info("FLOW %s %s", event, payload)
 
 
-# The web client shows the same text for these codes (apps/web/src/shared/api/client.js).
-AI_ERROR_MESSAGES = {
-    "AI_PROVIDER_UNAVAILABLE": "Không kết nối được tới dịch vụ AI. Kiểm tra mạng hoặc thử lại sau.",
-    "AI_PROVIDER_TIMEOUT": "Dịch vụ AI phản hồi quá lâu. Bạn có thể thử lại câu hỏi.",
-    "AI_MODEL_UNAVAILABLE": "Mô hình AI hiện không khả dụng. Kiểm tra lại cấu hình model.",
-    "AI_PROVIDER_HTTP_ERROR": "Dịch vụ AI từ chối yêu cầu. Kiểm tra API key và giới hạn sử dụng.",
-    "AI_NOT_CONFIGURED": "Chưa cấu hình nhà cung cấp AI cho môi trường này.",
-    "AI_INVALID_OUTPUT": "AI trả về dữ liệu không đúng định dạng. Hãy thử lại câu hỏi.",
-    "AI_UNGROUNDED_CITATION": "AI trả về trích dẫn không nằm trong tài liệu. Hãy thử lại câu hỏi.",
-    "AI_UNSUPPORTED_EVIDENCE": "AI chưa xác minh được evidence trong tài liệu. Hãy thử lại câu hỏi.",
-    "DOCUMENT_CONTEXT_TOO_LARGE": "Tài liệu quá dài để trợ lý đọc hết trong một lần hỏi.",
-    "ASSISTANT_INCOMPLETE": "Trợ lý chưa hoàn tất câu trả lời trong số bước cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",
-    "AI_PROVIDER_BAD_RESPONSE": "Dịch vụ AI trả về phản hồi không hợp lệ. Hãy thử lại sau.",
-    "AI_ANSWER_TIMEOUT": "Trợ lý chưa trả lời xong trong thời gian cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",
-}
-
-
 def ai_failure(code: str, internal: str, trace_id: str, http_status: int | None = None) -> HTTPException:
     """A 502 with a user message; the internal reason goes only to the server log."""
     flow_log("AI_FAILURE", trace_id=trace_id, code=code, http_status=http_status, reason=internal)
-    detail: dict[str, Any] = {"code": code, "message": AI_ERROR_MESSAGES.get(code, "Không thể tạo câu trả lời. Hãy thử lại."), "trace_id": trace_id}
+    detail: dict[str, Any] = {**error_detail(code if code in MESSAGES else "AI_FAILED"), "code": code, "trace_id": trace_id}
     if http_status is not None:
         detail["provider_http_status"] = http_status
     return HTTPException(status_code=502, detail=detail)
@@ -221,10 +207,10 @@ app.add_middleware(
 
 @app.exception_handler(ObjectStorageError)
 def object_storage_error_handler(_: Request, __: ObjectStorageError) -> JSONResponse:
-    return JSONResponse(status_code=503, content={"detail": {"code": "OBJECT_STORAGE_UNAVAILABLE", "message": "Cloudflare R2 tạm thời không sẵn sàng; hãy thử lại sau."}})
+    return JSONResponse(status_code=503, content={"detail": error_detail("OBJECT_STORAGE_UNAVAILABLE")})
 
 
-UPLOAD_FORM_INVALID_MESSAGE = "Không đọc được tệp tải lên. Tên tệp có thể quá dài; hãy đổi tên tệp ngắn hơn (tối đa 255 ký tự) rồi tải lên lại."
+_HTTP_CODES = {404: "NOT_FOUND", 405: "METHOD_NOT_ALLOWED"}
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -233,8 +219,23 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException) -> R
     # longer than python-multipart's 4 KB limit, which a long file name makes)
     # before any endpoint runs. Give it the same JSON shape as other upload errors.
     if isinstance(exc.__context__, MultiPartException):
-        return JSONResponse(status_code=exc.status_code, content={"detail": {"code": "UPLOAD_FORM_INVALID", "message": UPLOAD_FORM_INVALID_MESSAGE}})
+        return JSONResponse(status_code=exc.status_code, content={"detail": error_detail("UPLOAD_FORM_INVALID")})
+    if not isinstance(exc.detail, dict):
+        # Raised by the framework (unknown path, wrong method): no code of ours yet.
+        exc = StarletteHTTPException(exc.status_code, error_detail(_HTTP_CODES.get(exc.status_code, "HTTP_ERROR")), exc.headers)
     return await http_exception_handler(request, exc)
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": {**error_detail("REQUEST_INVALID"), "errors": jsonable_encoder(exc.errors())}})
+
+
+@app.exception_handler(Exception)
+async def internal_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    trace_id = getattr(request.state, "trace_id", None)
+    logger.error("Unhandled %s on %s %s (trace %s)", type(exc).__name__, request.method, request.url.path, trace_id, exc_info=exc)
+    return JSONResponse(status_code=500, content={"detail": {**error_detail("INTERNAL_ERROR"), "trace_id": trace_id}})
 
 
 @app.get(
@@ -268,7 +269,6 @@ _load_local_env()
 MAX_PDF_BYTES = 100 * 1024 * 1024
 MAX_PDF_PAGES = 500
 MAX_FILE_NAME_CHARS = 255
-PDF_ENCRYPTED_MESSAGE = "PDF này được đặt mật khẩu nên không đọc được. Hãy gỡ mật khẩu rồi tải lên lại."
 # Control and text-direction characters: U+202E alone can show "fdp.exe" as
 # "exe.pdf" in the document list.
 _HIDDEN_NAME_CHARACTERS = re.compile("[\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
@@ -526,7 +526,7 @@ def get_session(session_id: str, owner_id: str | UUID | None = None) -> dict[str
             return loaded
     session = catalog["sessions"].get(session_id)
     if session is None or session.get("owner_id") != str(owner_id or LOCAL_OWNER_ID):
-        raise HTTPException(status_code=404, detail={"code": "SESSION_NOT_FOUND", "message": "session not found"})
+        raise user_error(404, "SESSION_NOT_FOUND")
     session.setdefault("documents", [])
     session.setdefault("messages", [])
     return session
@@ -571,7 +571,7 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
     # Browsers may send a client path; only its last part is the name.
     name = clean_file_name(re.split(r"[\\/]", file.filename or "unnamed.pdf")[-1])
     if not name.lower().endswith(".pdf"):
-        raise HTTPException(status_code=422, detail={"code": "PDF_REQUIRED", "message": "chỉ chấp nhận tệp .pdf"})
+        raise user_error(422, "PDF_REQUIRED")
     document_id = str(uuid4())
     storage_name = pdf_storage_key(document_id) if uses_remote_object_storage() else f"{document_id}.pdf"
     UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
@@ -585,15 +585,15 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
         with temporary_path.open("wb") as output:
             while chunk := await file.read(1024 * 1024):
                 if first_chunk and not chunk.startswith(b"%PDF-"):
-                    raise HTTPException(status_code=422, detail={"code": "INVALID_PDF", "message": "tệp không có PDF header hợp lệ"})
+                    raise user_error(422, "INVALID_PDF")
                 first_chunk = False
                 byte_size += len(chunk)
                 if byte_size > MAX_PDF_BYTES:
-                    raise HTTPException(status_code=413, detail={"code": "PDF_TOO_LARGE", "message": "kích thước PDF tối đa là 100 MiB"})
+                    raise user_error(413, "PDF_TOO_LARGE", max_mib=MAX_PDF_BYTES // (1024 * 1024))
                 digest.update(chunk)
                 output.write(chunk)
         if first_chunk:
-            raise HTTPException(status_code=422, detail={"code": "EMPTY_PDF", "message": "tệp PDF rỗng"})
+            raise user_error(422, "EMPTY_PDF")
         os.replace(temporary_path, final_path)
     except Exception:
         temporary_path.unlink(missing_ok=True)
@@ -602,19 +602,19 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
         page_count = len(PdfReader(str(final_path), strict=False).pages)
     except FileNotDecryptedError as exc:
         final_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=422, detail={"code": "PDF_ENCRYPTED", "message": PDF_ENCRYPTED_MESSAGE}) from exc
+        raise user_error(422, "PDF_ENCRYPTED") from exc
     except Exception as exc:
         final_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=422, detail={"code": "INVALID_PDF", "message": "Không thể đọc cấu trúc PDF"}) from exc
+        raise user_error(422, "INVALID_PDF") from exc
     if page_count > MAX_PDF_PAGES:
         final_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=413, detail={"code": "PDF_TOO_MANY_PAGES", "message": f"PDF vượt quá giới hạn {MAX_PDF_PAGES} trang"})
+        raise user_error(413, "PDF_TOO_MANY_PAGES", max_pages=MAX_PDF_PAGES)
     now = utc_now()
     try:
         persist_pdf_cache(storage_name, final_path)
     except ObjectStorageError as exc:
         final_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=503, detail={"code": "OBJECT_STORAGE_UNAVAILABLE", "message": "Không thể lưu PDF vào Cloudflare R2; hãy thử lại sau."}) from exc
+        raise user_error(503, "OBJECT_STORAGE_UNAVAILABLE") from exc
 
     record = {
         "id": document_id,
@@ -810,10 +810,10 @@ def update_session(session_id: str, payload: SessionUpdateRequest, request: Requ
     session = get_session(session_id, owner_id)
     title = payload.title.strip()
     if not title:
-        raise HTTPException(status_code=422, detail={"code": "SESSION_TITLE_REQUIRED", "message": "Session title is required"})
+        raise user_error(422, "SESSION_TITLE_REQUIRED")
     if postgres_runtime:
         if not _runtime_for_owner(owner_id).rename_chat(session_id, title):
-            raise HTTPException(status_code=404, detail={"code": "SESSION_NOT_FOUND", "message": "session not found"})
+            raise user_error(404, "SESSION_NOT_FOUND")
     else:
         with catalog_lock:
             session["title"] = title
@@ -836,7 +836,7 @@ def delete_session(session_id: str, request: Request) -> dict[str, Any]:
     get_session(session_id, owner_id)
     if postgres_runtime:
         if not _runtime_for_owner(owner_id).archive_chat(session_id):
-            raise HTTPException(status_code=404, detail={"code": "SESSION_NOT_FOUND", "message": "session not found"})
+            raise user_error(404, "SESSION_NOT_FOUND")
     else:
         with catalog_lock:
             catalog["sessions"].pop(session_id, None)
@@ -894,15 +894,15 @@ def update_session_document(session_id: str, document_id: str, payload: Document
     session = get_session(session_id, owner_id)
     document = next((item for item in session["documents"] if item["id"] == document_id), None)
     if document is None:
-        raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+        raise user_error(404, "DOCUMENT_NOT_FOUND")
     file_name = clean_file_name(payload.file_name)
     if not file_name or any(part in file_name for part in ("/", "\\")):
-        raise HTTPException(status_code=422, detail={"code": "DOCUMENT_NAME_INVALID", "message": "document name is invalid"})
+        raise user_error(422, "DOCUMENT_NAME_INVALID")
     if not file_name.lower().endswith(".pdf"):
         file_name = clean_file_name(f"{file_name}.pdf")
     if postgres_runtime:
         if not _runtime_for_owner(owner_id).rename_document(session_id, document_id, file_name):
-            raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+            raise user_error(404, "DOCUMENT_NOT_FOUND")
     document["file_name"] = file_name
     session["updated_at"] = utc_now()
     if not postgres_runtime:
@@ -922,10 +922,10 @@ def delete_session_document(session_id: str, document_id: str, request: Request)
     session = get_session(session_id, owner_id)
     document = next((item for item in session["documents"] if item["id"] == document_id), None)
     if document is None:
-        raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+        raise user_error(404, "DOCUMENT_NOT_FOUND")
     if postgres_runtime:
         if not _runtime_for_owner(owner_id).archive_document(session_id, document_id):
-            raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+            raise user_error(404, "DOCUMENT_NOT_FOUND")
     session["documents"] = [item for item in session["documents"] if item["id"] != document_id]
     session["updated_at"] = utc_now()
     if not postgres_runtime:
@@ -1058,15 +1058,15 @@ def rerun_document_extraction(session_id: str, document_id: str, request: Reques
     owner_id = owner_id_for_request(request)
     # /health capabilities.reextraction reports the same decision to the UI.
     if reextraction_status()["status"] != "available":
-        raise HTTPException(status_code=409, detail={"code": "REEXTRACTION_NOT_SUPPORTED", "message": "Chưa hỗ trợ trích xuất lại khi lưu bằng PostgreSQL; hãy tải lại PDF."})
+        raise user_error(409, "REEXTRACTION_NOT_SUPPORTED")
     session = get_session(session_id, owner_id)
     trace_id = trace_id_for(request)
     with catalog_lock:
         document = next((item for item in session["documents"] if item["id"] == document_id), None)
         if document is None:
-            raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+            raise user_error(404, "DOCUMENT_NOT_FOUND")
         if document.get("extraction_status") in {"queued", "processing"}:
-            raise HTTPException(status_code=409, detail={"code": "EXTRACTION_IN_PROGRESS", "message": "Tài liệu đang được trích xuất."})
+            raise user_error(409, "EXTRACTION_IN_PROGRESS")
         previous = _archive_extraction(document)
         affected = []
         if previous["status"] == "ready":
@@ -1097,10 +1097,10 @@ def read_session_document_file(session_id: str, document_id: str, request: Reque
     session = get_session(session_id, owner_id_for_request(request))
     document = next((item for item in session["documents"] if item["id"] == document_id), None)
     if document is None:
-        raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+        raise user_error(404, "DOCUMENT_NOT_FOUND")
     path = cache_pdf(document["storage_name"])
     if not path.exists():
-        raise HTTPException(status_code=404, detail={"code": "DOCUMENT_FILE_MISSING", "message": "stored PDF is missing"})
+        raise user_error(404, "DOCUMENT_FILE_MISSING")
     return FileResponse(path, media_type="application/pdf", filename=document["file_name"], content_disposition_type="inline")
 
 
@@ -1108,9 +1108,9 @@ def _ready_document(session: dict[str, Any], document_id: str) -> tuple[dict[str
     """Document plus its extraction (with chart batches); 404/409 instead of a 500."""
     document = next((item for item in session["documents"] if item["id"] == document_id), None)
     if document is None:
-        raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+        raise user_error(404, "DOCUMENT_NOT_FOUND")
     if document.get("extraction_status") != "ready":
-        raise HTTPException(status_code=409, detail={"code": "EXTRACTION_NOT_READY", "message": "Tài liệu chưa sẵn sàng để sửa số liệu."})
+        raise user_error(409, "EXTRACTION_NOT_READY")
     extraction = with_chart_batches(document, _load_extraction_artifact(document["extraction_name"]))
     return document, extraction
 
@@ -1160,7 +1160,7 @@ def list_evidence_revisions(session_id: str, document_id: str, evidence_key: str
         state, changed = _ensure_evidence_state_reporting_change(document, extraction)
         item = state["items"].get(evidence_key)
         if item is None:
-            raise HTTPException(status_code=404, detail={"code": "EVIDENCE_NOT_FOUND", "message": "Không tìm thấy số liệu trong tài liệu."})
+            raise user_error(404, "EVIDENCE_NOT_FOUND")
         if changed and not postgres_runtime:
             save_catalog(catalog)
         return json.loads(json.dumps({"document_id": document_id, "evidence_key": evidence_key, "original_numeric_value": item["original_numeric_value"], "current_revision_id": item["current_revision_id"], "revisions": item["revisions"]}))
@@ -1181,15 +1181,15 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
         state = ensure_document_evidence_state(document, extraction)
         item = state["items"].get(evidence_key)
         if item is None:
-            raise HTTPException(status_code=404, detail={"code": "EVIDENCE_NOT_FOUND", "message": "Không tìm thấy số liệu trong tài liệu."})
+            raise user_error(404, "EVIDENCE_NOT_FOUND")
         current = item["revisions"][-1]
         if current["id"] != payload.expected_revision_id:
-            raise HTTPException(status_code=409, detail={"code": "EVIDENCE_REVISION_CONFLICT", "message": "Số liệu đã được sửa bởi thao tác khác; hãy tải lại lịch sử trước khi sửa tiếp."})
+            raise user_error(409, "EVIDENCE_REVISION_CONFLICT")
         evidence = next((item for item in extraction["evidence_batch"]["evidences"] if item["evidence_key"] == evidence_key), None)
         numeric_value = _requested_value(payload, locale, evidence)
         # Compare numbers, not spellings: "1300" -> "1300.0" is not a change.
         if current["numeric_value"] is not None and Decimal(numeric_value) == Decimal(current["numeric_value"]):
-            raise HTTPException(status_code=422, detail={"code": "VALUE_UNCHANGED", "message": "Giá trị mới trùng giá trị hiện tại; không tạo lịch sử rỗng."})
+            raise user_error(422, "VALUE_UNCHANGED")
         if dry_run:
             return {"parsed_value": numeric_value, "plain_value": numeric_value, "display": display_number(numeric_value, locale),
                     "decimal_separator": decimal_separator(locale), "locale": locale}
@@ -1218,8 +1218,8 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
             )
         except ValueError as exc:
             if str(exc) == "EVIDENCE_REVISION_CONFLICT":
-                raise HTTPException(status_code=409, detail={"code": "EVIDENCE_REVISION_CONFLICT", "message": "Số liệu đã được sửa bởi thao tác khác; hãy tải lại lịch sử trước khi sửa tiếp."}) from exc
-            raise HTTPException(status_code=404, detail={"code": "EVIDENCE_NOT_FOUND", "message": "Không tìm thấy số liệu trong database."}) from exc
+                raise user_error(409, "EVIDENCE_REVISION_CONFLICT") from exc
+            raise user_error(404, "EVIDENCE_NOT_FOUND") from exc
     trace_id = trace_id_for(request)
     flow_log("EVIDENCE_REVISION_APPENDED", trace_id=trace_id, session_id=session_id, document_id=document_id, evidence_key=evidence_key, old_value=current["numeric_value"], new_value=numeric_value, affected_answer_count=len(affected))
     return {"document_id": document_id, "evidence_key": evidence_key, "data_revision": state["data_revision"], "revision": revision, "display": display_number(numeric_value, locale), "affected_message_ids": affected, "recalculation_required": bool(affected), "trace_id": trace_id}
@@ -1233,13 +1233,9 @@ def _requested_value(payload: EvidenceRevisionCreateRequest, locale: str | None,
         percent = ((evidence or {}).get("semantic") or {}).get("unit") == "PERCENT"
         return read_typed_number(payload.input_text, locale, percent=percent)
     except AmbiguousNumberError as exc:
-        raise HTTPException(status_code=422, detail={
-            "code": "NUMBER_FORMAT_AMBIGUOUS",
-            "message": f"Không rõ dấu phân cách trong \"{payload.input_text}\" là hàng nghìn hay thập phân. Hãy nhập số không có dấu phân cách hàng nghìn, ví dụ 21500 hoặc 21,5.",
-            "readings": exc.readings,
-        }) from exc
+        raise user_error(422, "NUMBER_FORMAT_AMBIGUOUS", text=payload.input_text, extra={"readings": exc.readings}) from exc
     except TypedNumberError as exc:
-        raise HTTPException(status_code=422, detail={"code": "INVALID_DECIMAL", "message": exc.message}) from exc
+        raise user_error(422, "INVALID_DECIMAL", message=exc.message) from exc
 
 
 def normalize_search_text(value: str) -> str:
@@ -1250,7 +1246,7 @@ def normalize_search_text(value: str) -> str:
 
 def relevant_pages(document: dict[str, Any], question: str, limit: int = 3) -> list[tuple[dict[str, Any], int]]:
     if document.get("extraction_status") != "ready":
-        raise HTTPException(status_code=409, detail={"code": "EXTRACTION_NOT_READY", "message": "tài liệu chưa trích xuất text thành công"})
+        raise user_error(409, "EXTRACTION_NOT_READY")
     artifact_path = cache_extraction(document["extraction_name"])
     payload = json.loads(artifact_path.read_text(encoding="utf-8"))
     if "evidence_batch" not in payload:
@@ -1260,7 +1256,7 @@ def relevant_pages(document: dict[str, Any], question: str, limit: int = 3) -> l
             document["id"],
         )
         if upgraded["status"] != "ready":
-            raise HTTPException(status_code=409, detail={"code": "EXTRACTION_UPGRADE_FAILED", "message": "không thể nâng cấp artifact extraction cũ"})
+            raise user_error(409, "EXTRACTION_UPGRADE_FAILED")
         with catalog_lock:
             document["numeric_evidence_count"] = upgraded["numeric_evidence_count"]
             document["page_count"] = upgraded["page_count"]
@@ -1286,7 +1282,7 @@ def relevant_pages(document: dict[str, Any], question: str, limit: int = 3) -> l
         ranked.append((page, score))
     ranked.sort(key=lambda item: (-item[1], int(item[0]["page"])))
     if not ranked:
-        raise HTTPException(status_code=422, detail={"code": "NO_TEXT_EVIDENCE", "message": "không tìm thấy text có thể dùng làm căn cứ trong PDF"})
+        raise user_error(422, "NO_TEXT_EVIDENCE")
     return ranked[: max(1, limit)]
 
 
@@ -1535,11 +1531,11 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
     request_fingerprint = sha256(f"{payload.document_id}|{payload.question}".encode("utf-8")).hexdigest()
     request_keys = session.setdefault("request_keys", {})
     if idempotency_key and len(idempotency_key) > 200:
-        raise HTTPException(status_code=422, detail={"code": "INVALID_IDEMPOTENCY_KEY", "message": "Idempotency-Key quá dài"})
+        raise user_error(422, "INVALID_IDEMPOTENCY_KEY")
     if idempotency_key and idempotency_key in request_keys:
         stored = request_keys[idempotency_key]
         if stored.get("request_hash") != request_fingerprint:
-            raise HTTPException(status_code=409, detail={"code": "IDEMPOTENCY_KEY_REUSED", "message": "Idempotency-Key đã được dùng cho payload khác"})
+            raise user_error(409, "IDEMPOTENCY_KEY_REUSED")
         return stored["response"]
     def finish(response: dict[str, Any]) -> dict[str, Any]:
         if idempotency_key:
@@ -1551,7 +1547,7 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
         return response
     document = next((item for item in session["documents"] if item["id"] == payload.document_id), None)
     if document is None:
-        raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+        raise user_error(404, "DOCUMENT_NOT_FOUND")
     marker = extraction_marker(document)
     # PostgreSQL mode can move the expensive answer path out of the request.
     # The default stays synchronous for the offline compatibility tests; the
@@ -1590,7 +1586,7 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
         return finish({"user_message": user_message, "assistant_message": assistant_message, "limitations": [], "trace_id": trace_id, "status": "queued", "job": job})
     if assistant_mode() == "tools":
         if document.get("extraction_status") != "ready":
-            raise HTTPException(status_code=409, detail={"code": "EXTRACTION_NOT_READY", "message": "Tài liệu chưa trích xuất xong."})
+            raise user_error(409, "EXTRACTION_NOT_READY")
         owner = session.get("owner_id", LOCAL_OWNER_ID)
         try:
             return finish(answer_document(
@@ -1693,7 +1689,7 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
     if score < minimum_score and not summary_request:
         trace.append(trace_event("answer_generation", "rejected", code="NO_TEXT_EVIDENCE"))
         flow_log("RETRIEVAL_REJECTED", trace_id=trace_id, session_id=session_id, document_id=document["id"], code="NO_TEXT_EVIDENCE", score=score, minimum_score=minimum_score, question_chars=len(payload.question))
-        raise HTTPException(status_code=422, detail={"code": "NO_TEXT_EVIDENCE", "message": "Không tìm thấy đoạn text đủ liên quan để trả lời; hãy hỏi bằng thuật ngữ có trong tài liệu.", "trace_id": trace_id})
+        raise user_error(422, "NO_TEXT_EVIDENCE", extra={"trace_id": trace_id})
     flow_log(
         "RETRIEVAL_SELECTED",
         trace_id=trace_id,
@@ -1788,14 +1784,7 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
                         )
                     except (PermissionError, RuntimeError, ValueError) as exc:
                         trace.append(trace_event("chart_persistence", "failed", code=str(exc)))
-                        raise HTTPException(
-                            status_code=503,
-                            detail={
-                                "code": "CHART_EVIDENCE_PERSISTENCE_FAILED",
-                                "message": "Không thể lưu evidence biểu đồ để tạo liên kết trích dẫn bền vững.",
-                                "trace_id": trace_id,
-                            },
-                        ) from exc
+                        raise user_error(503, "CHART_EVIDENCE_PERSISTENCE_FAILED", extra={"trace_id": trace_id}) from exc
                     for item in chart_batch_payload.get("evidences", []):
                         revision_id = chart_revision_ids.get(str(item.get("evidence_key")))
                         if revision_id:
@@ -1977,7 +1966,7 @@ def read_session_message_trace(session_id: str, message_id: str, request: Reques
     session = get_session(session_id, owner_id_for_request(request))
     message = next((item for item in session["messages"] if item["id"] == message_id), None)
     if message is None or message.get("role") != "assistant":
-        raise HTTPException(status_code=404, detail={"code": "MESSAGE_TRACE_NOT_FOUND", "message": "assistant message trace not found"})
+        raise user_error(404, "MESSAGE_TRACE_NOT_FOUND")
     return {"session_id": session_id, "message_id": message_id, "trace_id": message.get("trace_id"), "trace": message.get("trace", [])}
 
 

@@ -998,7 +998,7 @@ def test_tools_mode_ai_failure_shows_a_vietnamese_message_and_keeps_the_code(mon
         assert response.status_code == 502
         detail = response.json()["detail"]
         assert detail["code"] == code
-        assert detail["message"] == api_main.AI_ERROR_MESSAGES[code]
+        assert detail["message"] == api_main.MESSAGES[code]
         assert detail.get("provider_http_status") == provider_status
     finally:
         cleanup_session(created["id"])
@@ -1024,6 +1024,34 @@ def test_extraction_failure_logs_the_traceback_and_stores_a_stable_code(monkeypa
 def test_object_storage_errors_are_readable_vietnamese() -> None:
     response = api_main.object_storage_error_handler(None, api_main.ObjectStorageError("down"))
     assert json.loads(response.body)["detail"]["message"] == "Cloudflare R2 tạm thời không sẵn sàng; hãy thử lại sau."
+
+
+def test_every_error_response_carries_the_vietnamese_message_of_its_code(monkeypatch) -> None:
+    from report_qa.api.user_messages import MESSAGES
+
+    missing = f"/api/v1/sessions/{uuid4()}"
+    created = client.post("/api/v1/sessions", json={"title": "Errors"}).json()["session"]
+    try:
+        responses = {
+            "SESSION_NOT_FOUND": client.get(missing),
+            "DOCUMENT_NOT_FOUND": client.get(f"/api/v1/sessions/{created['id']}/documents/{uuid4()}/evidences"),
+            "MESSAGE_TRACE_NOT_FOUND": client.get(f"/api/v1/sessions/{created['id']}/messages/{uuid4()}/trace"),
+            "REQUEST_INVALID": client.post("/api/v1/sessions", json={"title": ""}),
+            "METHOD_NOT_ALLOWED": client.put("/api/v1/sessions"),
+        }
+        for code, response in responses.items():
+            assert response.json()["detail"]["code"] == code
+            assert response.json()["detail"]["message"] == MESSAGES[code]
+        assert responses["REQUEST_INVALID"].json()["detail"]["errors"][0]["loc"] == ["body", "title"]
+
+        def broken(*args, **kwargs):
+            raise RuntimeError("internal detail")
+        monkeypatch.setattr(api_main, "get_session", broken)
+        crashed = TestClient(app, raise_server_exceptions=False).get(missing, headers={"X-Trace-Id": "t-500"})
+        assert crashed.status_code == 500
+        assert crashed.json() == {"detail": {"code": "INTERNAL_ERROR", "message": MESSAGES["INTERNAL_ERROR"], "trace_id": "t-500"}}
+    finally:
+        cleanup_session(created["id"])
 
 
 def test_session_payload_leaves_number_state_to_the_evidence_endpoints() -> None:
@@ -1234,7 +1262,7 @@ def test_upload_body_the_multipart_parser_refuses_gets_the_upload_error_shape() 
     try:
         refused = client.post(f"/api/v1/sessions/{created['id']}/documents", files={"file": ("a" * 5000 + ".pdf", pdf_with_text("x"), "application/pdf")})
         assert refused.status_code == 400
-        assert refused.json() == {"detail": {"code": "UPLOAD_FORM_INVALID", "message": api_main.UPLOAD_FORM_INVALID_MESSAGE}}
-        assert client.get("/api/v1/no-such-route").json() == {"detail": "Not Found"}
+        assert refused.json() == {"detail": {"code": "UPLOAD_FORM_INVALID", "message": api_main.MESSAGES["UPLOAD_FORM_INVALID"]}}
+        assert client.get("/api/v1/no-such-route").json() == {"detail": {"code": "NOT_FOUND", "message": api_main.MESSAGES["NOT_FOUND"]}}
     finally:
         cleanup_session(created["id"])
