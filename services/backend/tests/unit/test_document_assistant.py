@@ -101,7 +101,7 @@ def test_numbers_traced_to_results_rows_quotes_and_question_are_accepted(answer)
     row = {"evidence_key": "k", "numeric_value": "1250500", "raw_text": "1.250.500",
            "table_locator": {"row_header": "Miền Bắc", "column_header": "Q2/2026"}}
     assert untraced_numbers(answer, evidences=[row],
-                            quotes=[{"page": 1, "quote": "Miền Nam chiếm 30% doanh thu."}], results=[{"value": "0.170547", "keys": []}]) == []
+                            quotes=[{"page": 1, "quote": "Miền Nam chiếm 30% doanh thu."}], results=[{"value": "0.170547", "typed": [], "keys": []}]) == []
 
 
 @pytest.mark.parametrize("answer", [
@@ -155,12 +155,12 @@ def test_answer_numbers_are_read_in_the_number_format_of_their_source(locale):
 def test_a_number_read_two_ways_traces_only_when_the_source_fixes_the_format():
     from report_qa.application.document_assistant import untraced_numbers
 
-    result = [{"value": "1250", "keys": []}]  # a python result has no printed text of its own
+    result = [{"value": "1250", "typed": [], "keys": []}]  # a python result has no printed text of its own
     assert untraced_numbers("Tổng là 1.250.", evidences=[], quotes=[], results=result) == ["1.250"]
     assert untraced_numbers("Tổng là 1.250.", evidences=[], quotes=[], results=result, locale="vi") == []
     printed = [{"evidence_key": "k", "numeric_value": "1000", "raw_text": "1.000"}]
     assert untraced_numbers("Tổng là 1.250.", evidences=[], quotes=[], rows=printed,
-                            results=[{"value": "1250", "keys": ["k"]}]) == []
+                            results=[{"value": "1250", "typed": [], "keys": ["k"]}]) == []
 
 
 def test_a_corrected_number_does_not_trace_through_its_printed_text_or_a_quote_of_its_page():
@@ -202,7 +202,7 @@ def test_the_question_is_not_a_source_of_quantities():
 def test_a_direction_word_must_agree_with_the_sign_of_a_python_result(answer, result, untraced):
     from report_qa.application.document_assistant import untraced_numbers
 
-    assert untraced_numbers(answer, evidences=[], quotes=[], results=[{"value": result, "keys": []}], locale="vi") == untraced
+    assert untraced_numbers(answer, evidences=[], quotes=[], results=[{"value": result, "typed": [], "keys": []}], locale="vi") == untraced
 
 
 def test_a_negative_data_value_is_signed_but_a_positive_one_is_not():
@@ -212,6 +212,21 @@ def test_a_negative_data_value_is_signed_but_a_positive_one_is_not():
     rate = {"evidence_key": "r", "numeric_value": "5", "raw_text": "5%"}
     assert untraced_numbers("Biên lợi nhuận tăng 3,2%.", evidences=[falling], quotes=[], results=[], locale="vi") == ["3,2%"]
     assert untraced_numbers("Doanh thu giảm 5%.", evidences=[rate], quotes=[], results=[], locale="vi") == []
+
+
+def test_a_result_built_with_an_uncited_typed_number_traces_nothing():
+    # value('a') - value('a') + 987654 only warned in the summary; the answer check accepted 987654.
+    complete = sequence(
+        {"action": "python", "code": "result = value('a') - value('a') + 987654"},
+        {"action": "answer", "answer": "Doanh thu là 987.654.", "evidence_keys": ["a"]},
+        {"action": "python", "code": "result = value('a') * Decimal('0.3')"},
+        {"action": "answer", "answer": "30% của Q1 là 30.", "evidence_keys": ["a"],
+         "sources": [{"page": 1, "quote": "Miền Nam chiếm 30% doanh thu."}]},
+    )
+    ctx = {**context(), "pages": [{"page": 1, "text": "Miền Nam chiếm 30% doanh thu."}], "number_locale": "vi"}
+    result = run_assistant("Doanh thu?", ctx, complete=complete, read_chart=Mock())
+    assert result["answer"] == "30% của Q1 là 30."  # 0.3 is cited by the quote, so its result is a source
+    assert json.loads(complete.call_args.args[1])["tool_results"][1]["untraced_numbers"] == ["987.654"]
 
 
 def test_a_number_from_an_uncited_row_is_not_traced():
@@ -581,7 +596,7 @@ def test_unverified_warning_names_charts_only_when_every_unverified_value_is_fro
 def test_summary_does_not_claim_data_table_values_when_the_script_typed_numbers():
     rows = [_row("a", "valid", "table")]
     typed = _tools_answer(rows, {"action": "python", "code": "result = value('a') + 37", "explanation": "x"},
-                          {"action": "answer", "answer": "137", "evidence_keys": ["a"]})
+                          {"action": "answer", "answer": "Đã cộng thêm phí.", "evidence_keys": ["a"]})
     read = _tools_answer(rows, {"action": "python", "code": "result = value('a') + value('a')", "explanation": "x"},
                          {"action": "answer", "answer": "200", "evidence_keys": ["a"]})
     assert "gõ tay" in typed["summary"]

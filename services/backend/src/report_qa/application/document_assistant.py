@@ -206,8 +206,11 @@ def untraced_numbers(answer: str, *, evidences: list[dict], quotes: list[dict], 
     """Quantities written in the answer that no trusted source contains, in answer order.
 
     Trusted sources are the cited Data rows, the accepted quotes ({page,
-    quote}) and the numbers of succeeded python results that derive from
-    Data rows. The question is not a source: "có đạt 500 tỷ không?" must not
+    quote}) and the numbers of succeeded python results ({value, typed,
+    keys}) that derive from Data rows; a result number is a source only when
+    every number typed into its script ("typed", formula constants aside) is
+    itself in a cited row or quote, so value('a') - value('a') + 987654
+    traces nothing. The question is not a source: "có đạt 500 tỷ không?" must not
     make "đạt 500 tỷ" true. A row's source is its current value; its printed
     PDF text counts only while the row has no value. A printed number the
     user corrected is no source anywhere on its page: a quote of that page
@@ -246,10 +249,6 @@ def untraced_numbers(answer: str, *, evidences: list[dict], quotes: list[dict], 
                     formats = answer_formats or frozenset({number_format})
                     trusted.extend((value, formats, None) for value in {reading[0], reading[0] * (scale or 1)})
 
-    for result in results:
-        formats = frozenset(every).intersection(*(row_formats(by_key[k], locale) for k in result["keys"] if k in by_key))
-        value = Decimal(result["value"])
-        trusted.append((value, formats or every, 1 if value >= 0 else -1))
     for evidence in evidences:
         if evidence.get("numeric_value") is not None:
             value = Decimal(str(evidence["numeric_value"]))
@@ -260,6 +259,13 @@ def untraced_numbers(answer: str, *, evidences: list[dict], quotes: list[dict], 
             add_text(evidence.get("raw_text"))
     for quote in quotes:
         add_text(quote["quote"], quote["page"])
+    cited_values = {abs(value) for value, _, _ in trusted}
+    for result in results:
+        if any(abs(Decimal(typed)) not in cited_values for typed in result["typed"]):
+            continue
+        formats = frozenset(every).intersection(*(row_formats(by_key[k], locale) for k in result["keys"] if k in by_key))
+        value = Decimal(result["value"])
+        trusted.append((value, formats or every, 1 if value >= 0 else -1))
     trusted = [(abs(value), formats, sign if value else None) for value, formats, sign in trusted if value.is_finite()]
 
     def traced(numeral, scale, written_sign):
@@ -454,7 +460,7 @@ class _Turn:
         untraced = untraced_numbers(
             answer, evidences=cited,
             quotes=sources,
-            results=[{"value": n, "keys": c["result"]["used_evidence_keys"]} for c in succeeded for n in c["result"]["traced_numbers"]],
+            results=[{**n, "keys": c["result"]["used_evidence_keys"]} for c in succeeded for n in c["result"]["traced_numbers"]],
             rows=self.context["evidences"], locale=self.context.get("number_locale"),
             cited_pages={e["page_number"] for e in cited} | {s["page"] for s in sources} | set(pages),
         ) if kind == "answer" else []
