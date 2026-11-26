@@ -983,7 +983,7 @@ def list_document_evidences(session_id: str, document_id: str, request: Request)
 
 
 def _evidence_records(document: dict[str, Any], document_id: str, extraction: dict[str, Any]) -> dict[str, Any]:
-    state = ensure_document_evidence_state(document, extraction)
+    state, changed = _ensure_evidence_state_reporting_change(document, extraction)
     records = []
     for evidence in (extraction.get("evidence_batch") or {}).get("evidences", []):
         item = state["items"][evidence["evidence_key"]]
@@ -998,7 +998,7 @@ def _evidence_records(document: dict[str, Any], document_id: str, extraction: di
             "original_numeric_value": item["original_numeric_value"], "current_numeric_value": current["numeric_value"],
             "current_revision_id": current["id"], "revision_count": len(item["revisions"]),
         })
-    if not postgres_runtime:
+    if changed and not postgres_runtime:
         save_catalog(catalog)
     return json.loads(json.dumps({"document_id": document_id, "data_revision": state["data_revision"], "evidences": records}))
 
@@ -1011,11 +1011,11 @@ def list_evidence_revisions(session_id: str, document_id: str, evidence_key: str
     session = get_session(session_id, owner_id_for_request(request))
     document, extraction = _ready_document(session, document_id)
     with catalog_lock:
-        state = ensure_document_evidence_state(document, extraction)
+        state, changed = _ensure_evidence_state_reporting_change(document, extraction)
         item = state["items"].get(evidence_key)
         if item is None:
             raise HTTPException(status_code=404, detail={"code": "EVIDENCE_NOT_FOUND", "message": "Không tìm thấy số liệu trong tài liệu."})
-        if not postgres_runtime:
+        if changed and not postgres_runtime:
             save_catalog(catalog)
         return json.loads(json.dumps({"document_id": document_id, "evidence_key": evidence_key, "original_numeric_value": item["original_numeric_value"], "current_revision_id": item["current_revision_id"], "revisions": item["revisions"]}))
 
@@ -1146,6 +1146,18 @@ def ensure_document_evidence_state(document: dict[str, Any], extraction: dict[st
             "current_revision_id": initial["id"], "revisions": [initial],
         }
     return state
+
+
+def _evidence_state_shape(document: dict[str, Any]) -> tuple[Any, ...] | None:
+    state = document.get("evidence_state")
+    return None if state is None else (state.get("data_revision"), "items" in state, len(state.get("items", {})))
+
+
+def _ensure_evidence_state_reporting_change(document: dict[str, Any], extraction: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """The evidence state, and whether bringing it up to date changed anything that must be saved."""
+    before = _evidence_state_shape(document)
+    state = ensure_document_evidence_state(document, extraction)
+    return state, _evidence_state_shape(document) != before
 
 
 def _record_reread_value(state: dict[str, Any], item: dict[str, Any], value: str | None) -> None:

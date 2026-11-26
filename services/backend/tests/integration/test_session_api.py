@@ -393,6 +393,25 @@ def test_parallel_requests_with_one_idempotency_key_answer_once(monkeypatch) -> 
         cleanup_session(created["id"])
 
 
+def test_reading_evidences_saves_the_catalog_only_when_something_changed(monkeypatch) -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Read-only GET"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        key = client.get(f"{base}/evidences").json()["evidences"][0]["evidence_key"]
+        saves = []
+        real_save = api_main.save_catalog
+        monkeypatch.setattr(api_main, "save_catalog", lambda *args: (saves.append(1), real_save(*args))[1])
+        assert client.get(f"{base}/evidences").status_code == 200
+        assert client.get(f"{base}/evidences/{key}/revisions").status_code == 200
+        assert saves == []
+        api_main.catalog["sessions"][created["id"]]["documents"][0].pop("evidence_state")
+        assert client.get(f"{base}/evidences").status_code == 200
+        assert saves == [1]
+    finally:
+        cleanup_session(created["id"])
+
+
 def test_unmatched_question_is_rejected_instead_of_sent_to_ai() -> None:
     created = client.post("/api/v1/sessions", json={"title": "Retrieval guard"}).json()["session"]
     try:
