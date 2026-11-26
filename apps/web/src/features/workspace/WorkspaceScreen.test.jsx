@@ -152,8 +152,8 @@ it("shows tools-mode evidence and the executed script, without duplicate citatio
   const view = render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
   await screen.findByText("Mức tăng là 760.25");
   expect(view.container.querySelectorAll(".evidence-item")).toHaveLength(2);
-  expect(screen.getByText("Script Python")).toBeTruthy();
-  expect(screen.getByText("Kết quả: 760.25")).toBeTruthy();
+  expect(screen.getByText("Phép tính")).toBeTruthy();
+  expect(screen.getByText("Kết quả: 760,25")).toBeTruthy();
   expect(screen.queryByText(/vùng trích dẫn/)).toBeNull();
 });
 

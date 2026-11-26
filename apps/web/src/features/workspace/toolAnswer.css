@@ -22,10 +22,16 @@
 .message small.script-manual { margin: 0; color: var(--color-warning); font-size: 10px; font-weight: 700; }
 .script-card details summary { color: var(--muted); font-size: 10px; cursor: pointer; }
 .script-card pre { max-width: 100%; margin: 4px 0 0; padding: 8px 9px; overflow-x: auto; border-radius: 6px; background: #16202c; color: #e2eaf3; font: 10px/1.5 var(--font-mono); white-space: pre; }
+.script-result { display: grid; gap: 4px; }
+.script-result dl, .script-keys { display: grid; gap: 3px; margin: 0; }
+.script-result dl > div, .script-keys > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; }
+.script-result dt, .script-result dd, .script-keys dd { margin: 0; }
+.script-result dt { color: var(--ink-soft); }
+.script-result dd { color: var(--ink); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; }
+.script-keys { margin-top: 6px; color: var(--muted); font-size: 9px; }
+.script-keys code { color: var(--ink-soft); font-size: 9px; }
 .script-card pre.script-stdout { border: 1px dashed var(--border); background: var(--surface-soft); color: var(--ink-soft); white-space: pre-wrap; }
-/* .formula-card sets fixed dark-green text; the script card follows the theme. */
-.formula-card.script-card strong, .formula-card.script-card b { color: var(--ink); }
-.formula-card.script-card span { color: var(--ink-soft); }
+.formula-card.script-card strong { color: var(--ink); }
 .formula-card.script-card .script-input.head span { color: var(--muted); }
 [data-theme="dark"] .evidence-index, [data-theme="dark"] .script-card .formula-verified { color: #6ee7b7; }
 

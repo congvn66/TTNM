@@ -39,9 +39,9 @@
 .evidence-quote-label { display: inline-flex; align-items: center; gap: 4px; color: var(--gold-dark); font-size: 7px; font-weight: 850; letter-spacing: .09em; text-transform: uppercase; }
 .evidence-pages { display: flex; flex-wrap: wrap; gap: 8px; }
 .formula-card { display: grid; gap: 5px; margin: 7px 0; border-left: 3px solid var(--green); border-radius: 8px; padding: 9px 10px; background: var(--green-soft); font-size: 10px; }
-.formula-card code { color: #164f40; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
-.formula-card span { color: #4f6f66; }
-.formula-card b { color: #124f3f; }
+.formula-card code { color: var(--green); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
+.formula-card span { color: var(--ink-soft); }
+.formula-card b { color: var(--ink); }
 .formula-card em { font-size: 8px; font-style: normal; }
 .formula-verified { color: var(--green); }
 .formula-unverified { color: var(--gold-dark); }
@@ -128,17 +128,28 @@
 .evidence-record-main:hover { background: var(--gold-soft); }
 .evidence-record-main span { color: var(--muted); font-size: 7px; font-weight: 800; text-transform: uppercase; }
 .evidence-record-main b { color: var(--gold-dark); font: 700 15px ui-monospace, SFMono-Regular, Consolas, monospace; }
-.evidence-record-main small, .evidence-record-main code { grid-column: 1 / -1; }
+.evidence-record-main small { grid-column: 1 / -1; }
 .evidence-record-main small { color: var(--muted); font-size: 8px; }
-.evidence-record-main code { overflow: hidden; color: var(--subtle); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
-.evidence-edit-button { margin: 0 10px 10px; border: 1px solid #c9baa0; border-radius: 7px; padding: 6px 8px; background: var(--gold-soft); color: var(--gold-dark); font-size: 8px; font-weight: 750; }
+.evidence-record-main .evidence-record-label { color: var(--ink-soft); font-size: 10px; font-weight: 650; }
+.evidence-record-main .evidence-record-status { color: var(--color-warning); font-weight: 700; }
+.evidence-record-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 10px; }
+.evidence-history-button { border: 1px solid var(--border-strong); border-radius: 7px; padding: 6px 8px; background: var(--surface); color: var(--ink-soft); font-size: 8px; font-weight: 750; }
+.evidence-history { display: grid; gap: 6px; margin: 0; padding: 10px 10px 10px 28px; border-top: 1px solid var(--border); background: var(--surface-soft); color: var(--ink-soft); font-size: 9px; }
+.evidence-history li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; }
+.evidence-history b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.evidence-history time { color: var(--muted); }
+.evidence-history-note { margin: 0; padding: 10px; border-top: 1px solid var(--border); color: var(--muted); font-size: 9px; }
+.evidence-edit-error { margin: 0; border-radius: 7px; padding: 7px 8px; background: var(--red-soft); color: var(--color-danger); font-size: 9px; line-height: 1.45; }
+.evidence-edit-preview { margin: 0; border-radius: 7px; padding: 7px 8px; background: var(--accent-soft); color: var(--ink-soft); font-size: 10px; }
+.evidence-edit-preview b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.evidence-edit-button { border: 1px solid #c9baa0; border-radius: 7px; padding: 6px 8px; background: var(--gold-soft); color: var(--gold-dark); font-size: 8px; font-weight: 750; }
 .evidence-edit-form { display: grid; gap: 8px; border-top: 1px solid var(--border); padding: 10px; background: var(--surface-soft); }
 .evidence-edit-form label { display: grid; gap: 4px; color: var(--muted); font-size: 8px; font-weight: 750; }
 .evidence-edit-form input, .evidence-edit-form textarea { width: 100%; border: 1px solid var(--border-strong); border-radius: 7px; padding: 7px; background: var(--surface); color: var(--ink); font-size: 9px; }
 .evidence-edit-form textarea { min-height: 56px; resize: vertical; }
 .evidence-edit-form > div { display: flex; justify-content: flex-end; gap: 6px; }
 .evidence-edit-form button { border: 1px solid var(--border-strong); border-radius: 7px; padding: 6px 8px; background: var(--surface); color: var(--ink-soft); font-size: 8px; }
-.evidence-edit-form button[type=submit] { border-color: var(--inverse-bg); background: var(--inverse-bg); color: var(--inverse-fg); }
+.evidence-edit-form .evidence-edit-primary { border-color: var(--inverse-bg); background: var(--inverse-bg); color: var(--inverse-fg); }
 .evidence-empty { padding: 18px; color: var(--muted); font-size: 10px; text-align: center; }
 
 @media (max-width: 1020px) {

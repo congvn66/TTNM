@@ -4,6 +4,9 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { API, request } from "../../shared/api/client.js";
 import { useTheme } from "../theme/ThemeProvider.jsx";
 import { EvidenceList, ScriptCard } from "./ToolAnswer.jsx";
+import { Icon } from "./Icon.jsx";
+import { EvidenceDrawer } from "./EvidenceDrawer.jsx";
+import { formatNumber } from "./format.js";
 
 const SESSION_KEY = "sourcelens-active-session";
 const DOCUMENT_KEY = "sourcelens-active-document";
@@ -34,38 +37,6 @@ function writeSessionSnapshot(sessions) {
   } catch {
     // Storage can be disabled or full; the network path remains authoritative.
   }
-}
-
-function Icon({ name, size = 16 }) {
-  const paths = {
-    add: <path d="M12 5v14M5 12h14" />,
-    arrowLeft: <><path d="m15 18-6-6 6-6" /><path d="M9 12h10" /></>,
-    arrowRight: <><path d="m9 18 6-6-6-6" /><path d="M5 12h10" /></>,
-    close: <path d="m6 6 12 12M18 6 6 18" />,
-    chevronDown: <path d="m6 9 6 6 6-6" />,
-    copy: <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
-    fit: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
-    folder: <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />,
-    grid: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
-    link: <><path d="M10 13a5 5 0 0 0 7.1.1l1.4-1.4a5 5 0 0 0-7.1-7.1L10 6" /><path d="M14 11a5 5 0 0 0-7.1-.1l-1.4 1.4a5 5 0 0 0 7.1 7.1L14 18" /></>,
-    more: <><circle cx="5" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="19" cy="12" r="1" fill="currentColor" /></>,
-    edit: <><path d="m4 20 4.2-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z" /><path d="m13.8 7.2 3 3" /></>,
-    trash: <><path d="M4 7h16M10 11v5M14 11v5M6 7l1 13h10l1-13M9 7V4h6v3" /></>,
-    user: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c.6-3.4 3-5.2 7-5.2s6.4 1.8 7 5.2" /></>,
-    logout: <><path d="M10 5H5v14h5" /><path d="m14 8 4 4-4 4M8 12h10" /></>,
-    moon: <path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z" />,
-    minus: <path d="M5 12h14" />,
-    plus: <path d="M12 5v14M5 12h14" />,
-    refresh: <><path d="M20 11a8 8 0 0 0-14.7-3L4 10" /><path d="M4 5v5h5" /><path d="M4 13a8 8 0 0 0 14.7 3L20 14" /><path d="M20 19v-5h-5" /></>,
-    rotate: <><path d="M4 9a8 8 0 0 1 13.7-3L20 8" /><path d="M20 3v5h-5" /><path d="M20 15a8 8 0 0 1-13.7 3L4 16" /><path d="M4 21v-5h5" /></>,
-    send: <><path d="m4 4 16 8-16 8 3-8z" /><path d="M7 12h13" /></>,
-    settings: <><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" /><circle cx="12" cy="12" r="3.5" /></>,
-    spark: <><path d="m12 3 1.3 5.7L19 10l-5.7 1.3L12 17l-1.3-5.7L5 10l5.7-1.3z" /><path d="m19 16 .6 2.4L22 19l-2.4.6z" /></>,
-    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></>,
-    trace: <><path d="M5 5h4v4H5zM15 15h4v4h-4z" /><path d="M9 7h3a3 3 0 0 1 3 3v5" /><path d="M12 15h3" /></>,
-    upload: <><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 20h14" /></>,
-  };
-  return <svg className="ui-icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
 function formatBytes(value = 0) {
@@ -186,29 +157,7 @@ function JobCenterDrawer({ jobs, busy, onClose, onAction }) {
   return <section className="job-center-drawer" role="dialog" aria-modal="true" aria-labelledby="job-center-title">
     <header className="job-center-header"><div><span className="audit-kicker">TRUNG TÂM TÁC VỤ</span><h3 id="job-center-title">Tác vụ đang chạy</h3><small>Theo dõi việc chuẩn bị tài liệu và câu trả lời</small></div><button type="button" aria-label="Đóng trung tâm tác vụ" onClick={onClose}><Icon name="close" size={15} /></button></header>
     <div className="job-center-summary"><span><i></i>{active.length} đang xử lý</span><small>Trạng thái được lưu bền theo tài khoản</small></div>
-    <div className="job-center-list">{jobs.length ? jobs.map((job) => <article className="job-center-row" key={job.id}><div className={`job-center-status ${job.status}`}><span></span></div><div className="job-center-main"><strong>{["document_extraction", "extract_document"].includes(job.kind) ? "Chuẩn bị tài liệu" : ["answer_generation", "generate_answer"].includes(job.kind) ? "Tạo câu trả lời" : "Tác vụ đang chạy"}</strong><small>{job.status === "queued" ? "Đang chờ xử lý" : job.status === "running" ? "Đang xử lý" : job.status === "failed" ? "Cần thử lại" : "Đã hoàn tất"}{job.error_code ? ` · ${job.error_code}` : ""}</small></div><div className="job-center-actions">{["queued", "running"].includes(job.status) && <button type="button" onClick={() => onAction(job, "cancel")} disabled={busy}>Huỷ</button>}{job.status === "failed" && <button type="button" onClick={() => onAction(job, "retry")} disabled={busy}>Thử lại</button>}</div></article>) : <div className="job-center-empty"><span>✓</span><p>Không có tác vụ gần đây.</p><small>Khi tải PDF hoặc hỏi AI, trạng thái sẽ xuất hiện ở đây.</small></div>}</div>
-  </section>;
-}
-
-// What the number is: table row and column, or chart category and series.
-function evidenceName(evidence) {
-  const { row_header: row, column_header: column } = evidence.table_locator ?? {};
-  const { category_label: category, series_label: series } = evidence.chart_read ?? {};
-  return [row, column, category, series].filter(Boolean).join(" · ");
-}
-
-function EvidenceDrawer({ data, busy, onClose, onFocus, onSave }) {
-  const [editingKey, setEditingKey] = useState(null);
-  const [value, setValue] = useState("");
-  const [reason, setReason] = useState("");
-  if (!data) return null;
-  const beginEdit = (evidence) => { setEditingKey(evidence.evidence_key); setValue(evidence.current_numeric_value ?? ""); setReason(""); };
-  return <section className="evidence-drawer" role="dialog" aria-label="Dữ liệu số và lịch sử sửa">
-    <header className="audit-drawer-header"><div><span className="audit-kicker">DATA REVISION</span><h3>Dữ liệu đầu vào</h3><small>revision {data.data_revision ?? 0} · giá trị gốc không bị ghi đè</small></div><button aria-label="Đóng dữ liệu" onClick={onClose}><Icon name="close" size={15} /></button></header>
-    <div className="evidence-drawer-body">{data.evidences?.length ? data.evidences.map((evidence) => <article className="evidence-record" key={evidence.evidence_key}>
-      <button className="evidence-record-main" onClick={() => onFocus(evidence)}><span>p.{evidence.page_number} · {evidence.method_label}</span><b>{evidence.current_numeric_value ?? evidence.raw_text ?? "Chưa đọc được"}</b>{evidenceName(evidence) && <small>{evidenceName(evidence)}</small>}<small>Gốc: {evidence.original_numeric_value ?? evidence.raw_text ?? "chưa xác định"} · {evidence.revision_count} revision{evidence.data_status && evidence.data_status !== "valid" ? " · Cần kiểm tra" : ""}</small><code>{evidence.evidence_key}</code></button>
-      {editingKey === evidence.evidence_key ? <form className="evidence-edit-form" onSubmit={(event) => { event.preventDefault(); onSave(evidence, value, reason).then(() => setEditingKey(null)).catch(() => {}); }}><label>Giá trị mới<input autoFocus value={value} onChange={(event) => setValue(event.target.value)} required /></label><label>Lý do sửa<textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength="3" required placeholder="Ví dụ: Đối chiếu lại PDF gốc" /></label><div><button type="button" onClick={() => setEditingKey(null)}>Hủy</button><button type="submit" disabled={busy}>Lưu revision</button></div></form> : <button className="evidence-edit-button" onClick={() => beginEdit(evidence)} disabled={busy}>Sửa số</button>}
-    </article>) : <p className="evidence-empty">Chưa có số liệu trích xuất để sửa.</p>}</div>
+    <div className="job-center-list">{jobs.length ? jobs.map((job) => <article className="job-center-row" key={job.id}><div className={`job-center-status ${job.status}`}><span></span></div><div className="job-center-main"><strong>{["document_extraction", "extract_document"].includes(job.kind) ? "Chuẩn bị tài liệu" : ["answer_generation", "generate_answer"].includes(job.kind) ? "Tạo câu trả lời" : "Tác vụ đang chạy"}</strong><small>{job.status === "queued" ? "Đang chờ xử lý" : job.status === "running" ? "Đang xử lý" : job.status === "failed" ? "Cần thử lại" : "Đã hoàn tất"}{ERROR_COPY[job.error_code] ? ` · ${ERROR_COPY[job.error_code]}` : ""}</small></div><div className="job-center-actions">{["queued", "running"].includes(job.status) && <button type="button" onClick={() => onAction(job, "cancel")} disabled={busy}>Huỷ</button>}{job.status === "failed" && <button type="button" onClick={() => onAction(job, "retry")} disabled={busy}>Thử lại</button>}</div></article>) : <div className="job-center-empty"><span>✓</span><p>Không có tác vụ gần đây.</p><small>Khi tải PDF hoặc hỏi AI, trạng thái sẽ xuất hiện ở đây.</small></div>}</div>
   </section>;
 }
 
@@ -224,7 +173,7 @@ function RetrievalExcerpt({ answer }) {
   </section>;
 }
 
-function StructuredAnswer({ answer, fallback, onCitation }) {
+function StructuredAnswer({ answer, fallback, onCitation, evidenceByKey }) {
   if (answer?.pending) return <div className="typing-indicator" aria-live="polite"><span className="typing-dots"><i></i><i></i><i></i></span><span>Đang tạo câu trả lời</span></div>;
   if (!answer && typeof fallback === "string" && fallback.startsWith("Không thể tạo câu trả lời:")) return <div className="answer-failure" role="alert"><Icon name="refresh" size={14} /><span>{fallback}</span></div>;
   if (!answer) return <p>{fallback}</p>;
@@ -237,15 +186,15 @@ function StructuredAnswer({ answer, fallback, onCitation }) {
   const warnings = answer.warnings?.filter(Boolean) ?? [];
   return <div className="structured-answer">
     <p className="answer-lead">{answer.answer}</p>
-    {answer.evidence?.length > 0 && <EvidenceList items={answer.evidence} onCitation={onCitation} />}
+    {answer.evidence?.length > 0 && <EvidenceList items={answer.evidence} evidenceByKey={evidenceByKey} onCitation={onCitation} />}
     {answer.summary && <p className="answer-summary">{answer.summary}</p>}
-    {answer.claims?.length > 0 && <section className="answer-section answer-claims"><h4>Claims và căn cứ</h4>{answer.claims.map((claim, index) => <div className="claim-card" key={`${claim.claim}-${index}`}>
+    {answer.claims?.length > 0 && <section className="answer-section answer-claims"><h4>Nhận định và căn cứ</h4>{answer.claims.map((claim, index) => <div className="claim-card" key={`${claim.claim}-${index}`}>
       <p>{claim.claim}</p>
-      {claim.evidence_quotes?.map((quote, quoteIndex) => <button className="evidence-quote" key={`${quote}-${quoteIndex}`} onClick={() => onCitation?.(claim.evidence_pages?.[quoteIndex] ?? claim.evidence_pages?.[0], quote)}><span className="evidence-quote-label"><Icon name="link" size={12} /> Evidence</span><span>“{quote}”</span></button>)}
+      {claim.evidence_quotes?.map((quote, quoteIndex) => <button className="evidence-quote" key={`${quote}-${quoteIndex}`} onClick={() => onCitation?.(claim.evidence_pages?.[quoteIndex] ?? claim.evidence_pages?.[0], quote)}><span className="evidence-quote-label"><Icon name="link" size={12} /> Trích dẫn</span><span>“{quote}”</span></button>)}
       {claim.evidence_pages?.length > 0 && <div className="evidence-pages">{claim.evidence_pages.map((page) => <button className="citation" key={page} onClick={() => onCitation?.(page, claim.evidence_quotes?.[0] ?? "")}><Icon name="link" size={12} /> Trang {page}</button>)}</div>}
     </div>)}</section>}
     {answer.sections?.map((section, index) => <section className="answer-section" key={`${section.heading}-${index}`}><h4>{section.heading}</h4>{section.points?.filter(Boolean).length > 0 && <ul>{section.points.filter(Boolean).map((point, pointIndex) => <li key={pointIndex}>{point}</li>)}</ul>}</section>)}
-    {answer.formulas?.length > 0 && <section className="answer-section"><h4>Công thức và tính toán</h4>{answer.formulas.map((formula, index) => formula.inputs ? <ScriptCard formula={formula} onCitation={onCitation} key={`script-${index}`} /> : <div className="formula-card" key={`${formula.name}-${index}`}><strong>{formula.name}</strong><code>{formula.expression}</code><span>Thay số: {formula.substitution || "Chưa đủ toán hạng"}</span><b>Kết quả: {formula.result ?? "Không xác định"}{formula.unit ? ` ${formula.unit}` : ""}</b>{["verified", "succeeded"].includes(formula.calculation?.status) ? <em className="formula-verified">✓ Calculator: {formula.calculation.computed_result} {formula.calculation.unit}</em> : <em className="formula-unverified">Calculator: {formula.calculation?.status ?? "chưa chạy"}</em>}</div>)}</section>}
+    {answer.formulas?.length > 0 && <section className="answer-section"><h4>Công thức và tính toán</h4>{answer.formulas.map((formula, index) => formula.inputs ? <ScriptCard formula={formula} onCitation={onCitation} key={`script-${index}`} /> : <div className="formula-card" key={`${formula.name}-${index}`}><strong>{formula.name}</strong><code>{formula.expression}</code><span>Thay số: {formula.substitution || "Chưa đủ toán hạng"}</span><b>Kết quả: {formatNumber(formula.result) || "Không xác định"}{formula.unit ? ` ${formula.unit}` : ""}</b>{["verified", "succeeded"].includes(formula.calculation?.status) ? <em className="formula-verified">✓ Đã tính lại: {formatNumber(formula.calculation.computed_result)}{formula.calculation.unit ? ` ${formula.calculation.unit}` : ""}</em> : <em className="formula-unverified">Chưa tính lại được</em>}</div>)}</section>}
     {answer.tables?.map((table, index) => <section className="answer-section" key={`${table.title}-${index}`}><h4>{table.title}</h4><div className="answer-table-wrap"><table className="answer-table"><thead><tr>{table.columns?.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{table.rows?.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div></section>)}
     {warnings.length > 0 && <div className="answer-warnings"><strong>Lưu ý</strong><ul>{warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}
   </div>;
@@ -502,8 +451,10 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const [citationPage, setCitationPage] = useState(null);
   const [citationQuote, setCitationQuote] = useState("");
   const [citationBbox, setCitationBbox] = useState(null);
+  // Data rows of the active document: the drawer lists them and answer cards
+  // use them to tell a user edit from the value read from the PDF.
   const [evidenceData, setEvidenceData] = useState(null);
-  const [evidenceBusy, setEvidenceBusy] = useState(false);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [pendingMessages, setPendingMessages] = useState([]);
   const [activeJobs, setActiveJobs] = useState([]);
   const [jobsOpen, setJobsOpen] = useState(false);
@@ -633,7 +584,19 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     window.setTimeout(() => uploadRef.current?.click(), 80);
   }, [activeSession?.id]);
   useEffect(() => { if (activeDocument && activeDocument.id !== activeDocumentId) setActiveDocumentId(activeDocument.id); }, [activeSession?.id, activeDocument?.id, activeDocumentId]);
-  useEffect(() => { setEvidenceData(null); setCitationPage(null); setCitationQuote(""); setCitationBbox(null); }, [activeSession?.id, activeDocument?.id]);
+  useEffect(() => { setEvidenceOpen(false); setCitationPage(null); setCitationQuote(""); setCitationBbox(null); }, [activeSession?.id, activeDocument?.id]);
+  const evidencePath = activeSession && activeDocument ? `/api/v1/sessions/${activeSession.id}/documents/${activeDocument.id}` : null;
+  const documentReady = activeDocument?.extraction_status === "ready";
+  const loadEvidence = useCallback(async () => {
+    if (!evidencePath || !documentReady) { setEvidenceData(null); return null; }
+    const data = await request(`${evidencePath}/evidences`);
+    setEvidenceData({ ...data, path: evidencePath });
+    return data;
+  }, [evidencePath, documentReady]);
+  useEffect(() => { loadEvidence().catch(() => setEvidenceData(null)); }, [loadEvidence]);
+  // Rows loaded for another document must never label this one.
+  const activeEvidence = evidenceData?.path === evidencePath ? evidenceData : null;
+  const evidenceByKey = useMemo(() => new Map((activeEvidence?.evidences ?? []).map((item) => [item.evidence_key, item])), [activeEvidence]);
   useEffect(() => {
     // The worker can expose both queued and processing. Stop polling only once
     // the document reaches a terminal state; otherwise the composer could stay
@@ -878,12 +841,21 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     } catch (error) { showNotice(error.message, "error"); }
   }
 
+  const closeEvidence = useCallback(() => setEvidenceOpen(false), []);
+
   async function openEvidence() {
-    if (!activeSession || !activeDocument || activeDocument.extraction_status !== "ready") return;
-    setEvidenceBusy(true);
-    try { setEvidenceData(await request(`/api/v1/sessions/${activeSession.id}/documents/${activeDocument.id}/evidences`)); }
+    if (!documentReady) return;
+    setEvidenceOpen(true);
+    try { await loadEvidence(); }
+    catch (error) { setEvidenceOpen(false); showNotice(error.message, "error"); }
+  }
+
+  async function evidenceSaved(evidence, result) {
+    const before = formatNumber(result.revision?.old_numeric_value ?? evidence.current_numeric_value) || "trống";
+    const after = result.display ?? formatNumber(result.revision?.numeric_value);
+    showNotice(`Đã lưu ${before} → ${after}.${result.affected_message_ids?.length ? " Các câu trả lời dùng số này cần được tính lại." : ""}`);
+    try { await Promise.all([loadEvidence(), refreshSessionDetail(activeSession.id)]); }
     catch (error) { showNotice(error.message, "error"); }
-    finally { setEvidenceBusy(false); }
   }
 
   // PostgreSQL keeps completed extractions immutable; there a failed document
@@ -897,23 +869,10 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     try {
       const result = await request(`/api/v1/sessions/${activeSession.id}/documents/${document.id}/extraction`, { method: "POST" });
       await refreshSessionDetail(activeSession.id);
-      setEvidenceData(null);
       const affected = result.affected_message_ids?.length ?? 0;
       showNotice(`Đang trích xuất lại ${document.file_name}.${affected ? ` ${affected} câu trả lời cũ cần tính lại.` : ""}`);
     } catch (error) { showNotice(error.message, "error"); }
     finally { setBusy(false); }
-  }
-
-  async function saveEvidence(evidence, numeric_value, reason) {
-    if (!activeSession || !activeDocument) return;
-    setEvidenceBusy(true);
-    try {
-      const result = await request(`/api/v1/sessions/${activeSession.id}/documents/${activeDocument.id}/evidences/${encodeURIComponent(evidence.evidence_key)}/revisions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ numeric_value, reason, expected_revision_id: evidence.current_revision_id }) });
-      setEvidenceData(await request(`/api/v1/sessions/${activeSession.id}/documents/${activeDocument.id}/evidences`));
-      await refresh(activeSession.id);
-      showNotice(`Đã lưu ${result.revision.old_numeric_value} → ${result.revision.numeric_value}. ${result.affected_message_ids?.length ? "Câu trả lời liên quan cần tính lại." : ""}`);
-    } catch (error) { showNotice(error.message, "error"); }
-    finally { setEvidenceBusy(false); }
   }
 
   const nextTheme = preference === "light" ? "dark" : preference === "dark" ? "system" : "light";
@@ -951,7 +910,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
         <span className={`connection-pill ${readinessState === "ready" ? "online" : readinessState === "offline" ? "offline" : "checking"}`} title={readinessBlockers || readinessLabel}><i></i>{readinessLabel}</span>
         {activeJobs.length > 0 && <button className="job-pill" type="button" aria-label={`Mở trung tâm tác vụ, ${activeJobs.length} tác vụ`} onClick={() => setJobsOpen(true)}><i></i>{activeJobCount > 0 ? `${activeJobCount} đang xử lý` : "Trung tâm tác vụ"}</button>}
         <button className="icon-button" type="button" title={`Chuyển giao diện sang ${nextTheme}`} aria-label={`Chuyển giao diện sang ${nextTheme}`} onClick={() => setPreference(nextTheme)}><Icon name={resolvedTheme === "dark" ? "moon" : "sun"} size={15} /></button>
-        <button className="audit-button" disabled={!activeDocument || activeDocument.extraction_status !== "ready" || evidenceBusy} onClick={openEvidence}><Icon name="link" size={14} /> Bằng chứng</button>
+        <button className="audit-button" disabled={!documentReady} onClick={openEvidence}><Icon name="link" size={14} /> Bằng chứng</button>
         <ProfileMenu user={user} onSignOut={onSignOut} onNavigate={onNavigate} />
         <input ref={uploadRef} type="file" accept="application/pdf,.pdf" hidden onChange={(event) => upload(event.target.files?.[0])} />
       </div>
@@ -963,11 +922,11 @@ function App({ user = null, onSignOut = null, onNavigate }) {
         <header className="chat-header"><div className="ai-avatar">S</div><div><h2>Trợ lý tài liệu</h2><span>{activeDocument ? activeDocument.file_name : "Chưa chọn tài liệu"}</span></div><span className="mode-badge">{modeLabel}</span></header>
         <div className="chat-body">
           {!messages.length && <div className="welcome"><div className="welcome-mark"><Icon name="spark" size={18} /></div><h3>Bắt đầu với tài liệu của bạn</h3><p>Đặt câu hỏi để nhận câu trả lời có dẫn nguồn, trích dẫn theo trang và cấu trúc rõ ràng.</p>{activeDocument?.extraction_status === "ready" && <button onClick={() => setQuery("Tóm tắt nội dung chính của tài liệu")}>Tóm tắt tài liệu</button>}</div>}
-          {messages.map((message, index) => <article key={message.id} className={`message ${message.role} ${message.failed || message.status === "failed" ? "failed" : ""}`}><span className="message-avatar">{message.role === "user" ? "B" : "S"}</span><div><small>{message.role === "user" ? "Bạn" : "Trợ lý SourceLens"}</small><StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} onCitation={(page, quote, bbox) => { setCitationPage(page); setCitationQuote(quote); setCitationBbox(normalizedBbox(bbox)); }} />{message.role === "assistant" && message.status === "processing" && <button className="retry-answer-button" type="button" onClick={() => stopAnswer(message)}>Dừng trả lời</button>}{(message.failed || message.status === "failed") && message.role === "assistant" && <button className="retry-answer-button" type="button" onClick={() => { const previous = messages.find((item) => item.id === message.reply_to_message_id) ?? messages[index - 1]; if (previous?.role === "user") submitQuestion(previous.body); }} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}{message.role === "user" && !message.pending && <button className="message-icon-button" type="button" aria-label="Sửa câu hỏi" title="Sửa câu hỏi" onClick={() => { setQuery(message.body); document.querySelector('.chat-composer textarea')?.focus(); }}><Icon name="edit" size={14} /></button>}{message.role === "assistant" && message.body && !message.pending && !message.failed && message.status !== "failed" && message.status !== "processing" && <button className="message-icon-button" type="button" aria-label="Sao chép câu trả lời" title="Sao chép câu trả lời" onClick={async () => { try { await navigator.clipboard.writeText(message.body); showNotice("Đã sao chép."); } catch { showNotice("Không thể sao chép.", "error"); } }}><Icon name="copy" size={14} /></button>}{message.needs_update && <div className="answer-status-note stale-answer"><Icon name="refresh" size={13} /><span>Dữ liệu nguồn đã thay đổi; câu trả lời này cần được cập nhật.</span></div>}{!message.structured_answer?.evidence?.length && message.citations?.map((citation, citationIndex) => <button className="citation" key={citationIndex} onClick={() => { setCitationPage(citation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(citation.bbox)); }}><Icon name="link" size={12} /> Trang {citation.page}{citation.bbox ? " · vùng trích dẫn" : ""}</button>)}</div></article>)}
+          {messages.map((message, index) => <article key={message.id} className={`message ${message.role} ${message.failed || message.status === "failed" ? "failed" : ""}`}><span className="message-avatar">{message.role === "user" ? "B" : "S"}</span><div><small>{message.role === "user" ? "Bạn" : "Trợ lý SourceLens"}</small><StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} evidenceByKey={evidenceByKey} onCitation={(page, quote, bbox) => { setCitationPage(page); setCitationQuote(quote); setCitationBbox(normalizedBbox(bbox)); }} />{message.role === "assistant" && message.status === "processing" && <button className="retry-answer-button" type="button" onClick={() => stopAnswer(message)}>Dừng trả lời</button>}{(message.failed || message.status === "failed") && message.role === "assistant" && <button className="retry-answer-button" type="button" onClick={() => { const previous = messages.find((item) => item.id === message.reply_to_message_id) ?? messages[index - 1]; if (previous?.role === "user") submitQuestion(previous.body); }} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}{message.role === "user" && !message.pending && <button className="message-icon-button" type="button" aria-label="Sửa câu hỏi" title="Sửa câu hỏi" onClick={() => { setQuery(message.body); document.querySelector('.chat-composer textarea')?.focus(); }}><Icon name="edit" size={14} /></button>}{message.role === "assistant" && message.body && !message.pending && !message.failed && message.status !== "failed" && message.status !== "processing" && <button className="message-icon-button" type="button" aria-label="Sao chép câu trả lời" title="Sao chép câu trả lời" onClick={async () => { try { await navigator.clipboard.writeText(message.body); showNotice("Đã sao chép."); } catch { showNotice("Không thể sao chép.", "error"); } }}><Icon name="copy" size={14} /></button>}{message.needs_update && <div className="answer-status-note stale-answer"><Icon name="refresh" size={13} /><span>Dữ liệu nguồn đã thay đổi; câu trả lời này cần được cập nhật.</span></div>}{!message.structured_answer?.evidence?.length && message.citations?.map((citation, citationIndex) => <button className="citation" key={citationIndex} onClick={() => { setCitationPage(citation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(citation.bbox)); }}><Icon name="link" size={12} /> Trang {citation.page}{citation.bbox ? " · vùng trích dẫn" : ""}</button>)}</div></article>)}
         </div>
         <form className="chat-composer" onSubmit={ask}><textarea aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Thêm tài liệu để bắt đầu" : activeDocument.extraction_status === "ready" ? "Đặt câu hỏi về tài liệu…" : activeDocument.extraction_status === "failed" ? canReextract ? "Chưa thể đọc tài liệu, bấm Trích xuất lại" : "Chưa thể đọc tài liệu — mở Trung tâm tác vụ để thử lại" : "Đặt câu hỏi — trợ lý sẽ trả lời khi tài liệu sẵn sàng…"} disabled={!activeDocument || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Trợ lý sẵn sàng" : activeDocument?.extraction_status === "failed" ? "Tài liệu chưa đọc được" : activeDocument?.extraction_status === "queued" || activeDocument?.extraction_status === "processing" ? "Câu hỏi sẽ được xử lý sau khi đọc tài liệu" : "Chưa sẵn sàng"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status === "failed" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form>
       </aside>
-      <EvidenceDrawer data={evidenceData} busy={evidenceBusy} onClose={() => setEvidenceData(null)} onFocus={(evidence) => { setCitationPage(evidence.page_number); setCitationQuote(""); setCitationBbox(normalizedBbox(evidence.bbox)); }} onSave={saveEvidence} />
+      <EvidenceDrawer data={evidenceOpen ? activeEvidence : null} basePath={evidencePath} onClose={closeEvidence} onReload={() => loadEvidence().catch(() => {})} onSaved={evidenceSaved} onFocus={(evidence) => { setCitationPage(evidence.page_number); setCitationQuote(""); setCitationBbox(normalizedBbox(evidence.bbox)); }} />
       <ResourceDialog dialog={resourceDialog} busy={busy} onClose={() => setResourceDialog(null)} onConfirm={confirmResourceAction} />
       <JobCenterDrawer jobs={jobsOpen ? activeJobs : null} busy={busy} onClose={() => setJobsOpen(false)} onAction={handleJobAction} />
     </main>
