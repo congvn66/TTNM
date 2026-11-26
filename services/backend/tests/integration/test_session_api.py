@@ -76,6 +76,7 @@ def test_health_docs_and_openapi_expose_only_the_main_flow() -> None:
         "selected": "deterministic", "status": "available", "network_probe": "not_run"
     }
     assert health.headers["x-persistence-backend"] == "json"
+    assert health_body["capabilities"]["reextraction"] == {"status": "available"}
 
     assert client.get("/docs").status_code == 200
     schema = client.get("/openapi.json").json()

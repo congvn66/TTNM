@@ -47,7 +47,7 @@ from .number_input import AmbiguousNumberError, display_number, document_number_
 from report_qa.config import settings
 from report_qa.infrastructure.postgres import postgres_health
 from report_qa.infrastructure.integrations import readiness as integration_readiness
-from report_qa.infrastructure.integrations import runtime_capabilities
+from report_qa.infrastructure.integrations import reextraction_status, runtime_capabilities
 from report_qa.infrastructure.postgres.runtime_store import PostgresRuntimeStore
 from report_qa.infrastructure.postgres.job_queue import PostgresJobQueue
 from .session_storage import (
@@ -1055,9 +1055,8 @@ def _append_carried_edit(state: dict[str, Any], item: dict[str, Any], edit: dict
 )
 def rerun_document_extraction(session_id: str, document_id: str, request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
     owner_id = owner_id_for_request(request)
-    if postgres_runtime:
-        # Completed extraction rows are immutable in PostgreSQL and a document
-        # version has one base run; re-running needs a new version.
+    # /health capabilities.reextraction reports the same decision to the UI.
+    if reextraction_status()["status"] != "available":
         raise HTTPException(status_code=409, detail={"code": "REEXTRACTION_NOT_SUPPORTED", "message": "Chưa hỗ trợ trích xuất lại khi lưu bằng PostgreSQL; hãy tải lại PDF."})
     session = get_session(session_id, owner_id)
     trace_id = trace_id_for(request)
