@@ -313,3 +313,15 @@ it("tells which edited numbers a re-extraction kept", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "Đọc lại tài liệu" }));
   await screen.findByText("Đã đọc lại Report.pdf: 50 số liệu. Giữ lại 2 số đã sửa; 1 số không giữ được vì vị trí đã thay đổi.", {}, { timeout: 4000 });
 });
+
+it("names the account button and closes its menu with Escape", async () => {
+  const session = { id: "chat", title: "My session", documents: [], messages: [] };
+  requestMock.mockImplementation(async (path) => path === "/api/v1/sessions" ? { sessions: [session] } : path === "/api/v1/sessions/chat" ? { session } : { jobs: [] });
+  render(<ThemeProvider><WorkspaceScreen user={{ display_name: "An", email: "an@example.test" }} onSignOut={() => {}} onNavigate={() => {}} /></ThemeProvider>);
+  const account = await screen.findByRole("button", { name: "Tài khoản: An" });
+  fireEvent.click(account);
+  expect(await screen.findByRole("button", { name: /Đăng xuất/ })).toBeTruthy();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("button", { name: /Đăng xuất/ })).toBeNull();
+  expect(screen.getByRole("link", { name: "Đến ô đặt câu hỏi" }).getAttribute("href")).toBe("#chat-question");
+});

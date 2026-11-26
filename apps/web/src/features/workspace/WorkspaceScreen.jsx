@@ -394,7 +394,18 @@ function ProfileMenu({ user, onSignOut, onNavigate }) {
   const [displayName, setDisplayName] = useState(user?.display_name ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const menuRef = useRef(null);
+  const nameId = useId();
   useEffect(() => { setProfile(user); setDisplayName(user?.display_name ?? ""); }, [user]);
+  // Escape or a click outside closes the menu, like the other popovers.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointer = (event) => { if (!menuRef.current?.contains(event.target)) setOpen(false); };
+    const onKey = (event) => { if (event.key === "Escape") { setOpen(false); menuRef.current?.querySelector(".profile-chip")?.focus(); } };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onPointer); document.removeEventListener("keydown", onKey); };
+  }, [open]);
   const initial = (profile?.display_name || profile?.email || "S").trim().slice(0, 1).toUpperCase();
   const saveProfile = async (event) => {
     event.preventDefault();
@@ -406,18 +417,19 @@ function ProfileMenu({ user, onSignOut, onNavigate }) {
     } catch (reason) { setError(reason.message || "Không thể lưu hồ sơ."); }
     finally { setSaving(false); }
   };
-  return <div className="profile-menu">
-    <button className="profile-chip" type="button" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((value) => !value)}>
+  const accountName = profile?.display_name || profile?.email || "Workspace cá nhân";
+  return <div className="profile-menu" ref={menuRef}>
+    <button className="profile-chip" type="button" aria-expanded={open} aria-label={`Tài khoản: ${accountName}`} onClick={() => setOpen((value) => !value)}>
       <span className="profile-avatar">{initial}</span>
       <span className="profile-copy"><b>{profile?.display_name || "Workspace cá nhân"}</b><small>{profile?.email || "Chế độ demo"}</small></span>
       <Icon name="chevronDown" size={13} />
     </button>
-    {open && <div className="profile-popover" role="menu">
+    {open && <div className="profile-popover">
       <div className="profile-summary"><span className="profile-avatar large">{initial}</span><div><b>{profile?.display_name || "Workspace cá nhân"}</b><small>{profile?.email || "Không yêu cầu đăng nhập"}</small></div></div>
       <div className="profile-meta"><Icon name="user" size={14} /><span>Tài khoản và dữ liệu được phân tách theo phiên làm việc.</span></div>
       {onNavigate && !editing && <><button className="profile-manage" type="button" onClick={() => { setOpen(false); onNavigate("/app/settings/profile"); }}><Icon name="user" size={14} /> Hồ sơ tài khoản</button><button className="profile-manage" type="button" onClick={() => { setOpen(false); onNavigate("/app/settings/preferences"); }}><Icon name="settings" size={14} /> Tuỳ chọn giao diện</button><button className="profile-manage" type="button" onClick={() => { setOpen(false); onNavigate("/app/settings/security"); }}><Icon name="trace" size={14} /> Bảo mật</button></>}
       {onSignOut && !editing && <button className="profile-manage" type="button" onClick={() => setEditing(true)}><Icon name="edit" size={14} /> Chỉnh sửa nhanh</button>}
-      {onSignOut && editing && <form className="profile-edit-form" onSubmit={saveProfile}><label>Tên hiển thị<input autoFocus value={displayName} maxLength={120} onChange={(event) => setDisplayName(event.target.value)} /></label>{error && <p role="alert">{error}</p>}<div><button type="button" onClick={() => { setDisplayName(profile?.display_name ?? ""); setEditing(false); setError(""); }}>Hủy</button><button type="submit" disabled={saving || !displayName.trim()}>{saving ? "Đang lưu…" : "Lưu hồ sơ"}</button></div></form>}
+      {onSignOut && editing && <form className="profile-edit-form" onSubmit={saveProfile}><label htmlFor={nameId}>Tên hiển thị</label><input id={nameId} autoFocus value={displayName} maxLength={120} onChange={(event) => setDisplayName(event.target.value)} />{error && <p role="alert">{error}</p>}<div><button type="button" onClick={() => { setDisplayName(profile?.display_name ?? ""); setEditing(false); setError(""); }}>Hủy</button><button type="submit" disabled={saving || !displayName.trim()}>{saving ? "Đang lưu…" : "Lưu hồ sơ"}</button></div></form>}
       {onSignOut && <button className="profile-signout" type="button" onClick={onSignOut}><Icon name="logout" size={15} /> Đăng xuất</button>}
     </div>}
   </div>;
@@ -1012,6 +1024,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   }, [activeDocument?.id, activeDocument?.extraction_status, activeDocument?.file_name, activeDocument?.numeric_evidence_count, activeDocument?.extraction_error, showNotice]);
 
   const nextTheme = preference === "light" ? "dark" : preference === "dark" ? "system" : "light";
+  const nextThemeLabel = { light: "giao diện sáng", dark: "giao diện tối", system: "giao diện theo hệ thống" }[nextTheme];
   const activeJobCount = activeJobs.filter((job) => ["queued", "running"].includes(job.status)).length;
   const readinessState = runtimeHealth?.readiness?.status ?? (runtimeHealth ? "checking" : "offline");
   const readinessLabel = readinessState === "ready" ? "Sẵn sàng" : readinessState === "degraded" ? "Một số dịch vụ cần kiểm tra" : readinessState === "checking" ? "Đang kiểm tra" : "Kết nối gián đoạn";
@@ -1042,11 +1055,11 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     <header className="topbar">
       <div className="brand"><span>S</span><div><strong>SourceLens</strong><small>Document intelligence</small></div></div>
       <div className="topbar-context"><span>WORKSPACE</span><strong>{activeDocument?.file_name ?? "Thư viện tài liệu"}</strong></div>
-      <nav className="top-nav" aria-label="Điều hướng chính"><button className="top-nav-item active" type="button"><Icon name="grid" size={14} /> Workspace</button><button className="top-nav-item" type="button" onClick={() => onNavigate?.("/app/library")}><Icon name="folder" size={14} /> Tài liệu</button></nav>
+      <nav className="top-nav" aria-label="Điều hướng chính"><button className="top-nav-item active" type="button" aria-current="page"><Icon name="grid" size={14} /> Workspace</button><button className="top-nav-item" type="button" onClick={() => onNavigate?.("/app/library")}><Icon name="folder" size={14} /> Tài liệu</button></nav>
       <div className="top-actions">
         <span className={`connection-pill ${readinessState === "ready" ? "online" : readinessState === "offline" ? "offline" : "checking"}`} title={readinessBlockers || readinessLabel}><i></i>{readinessLabel}</span>
         {activeJobs.length > 0 && <button className="job-pill" type="button" aria-label={`Mở trung tâm tác vụ, ${activeJobs.length} tác vụ`} onClick={() => setJobsOpen(true)}><i></i>{activeJobCount > 0 ? `${activeJobCount} đang xử lý` : "Trung tâm tác vụ"}</button>}
-        <button className="icon-button" type="button" title={`Chuyển giao diện sang ${nextTheme}`} aria-label={`Chuyển giao diện sang ${nextTheme}`} onClick={() => setPreference(nextTheme)}><Icon name={resolvedTheme === "dark" ? "moon" : "sun"} size={15} /></button>
+        <button className="icon-button" type="button" title={`Chuyển sang ${nextThemeLabel}`} aria-label={`Chuyển sang ${nextThemeLabel}`} onClick={() => setPreference(nextTheme)}><Icon name={resolvedTheme === "dark" ? "moon" : "sun"} size={15} /></button>
         <button className="audit-button" disabled={!documentReady} onClick={openEvidence}><Icon name="link" size={14} /> Bằng chứng</button>
         <ProfileMenu user={user} onSignOut={onSignOut} onNavigate={onNavigate} />
         <input ref={uploadRef} type="file" accept="application/pdf,.pdf" hidden onChange={(event) => upload(event.target.files?.[0])} />

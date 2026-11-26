@@ -72,7 +72,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .profile-signout { color: var(--red); }
 .profile-signout:hover { background: var(--red-soft); }
 .profile-edit-form { display: grid; gap: 8px; margin: 2px 0 9px; border: 1px solid var(--border); border-radius: 9px; padding: 9px; background: var(--surface-soft); }
-.profile-edit-form label { display: grid; gap: 5px; color: var(--ink-soft); font-size: 9px; font-weight: 750; }
+.profile-edit-form label { display: block; margin-bottom: -3px; color: var(--ink-soft); font-size: 9px; font-weight: 750; }
 .profile-edit-form input { width: 100%; border: 1px solid var(--border-strong); border-radius: 7px; padding: 7px 8px; background: var(--surface); color: var(--ink); font-size: 10px; outline: none; }
 .profile-edit-form input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(167,123,32,.10); }
 .profile-edit-form p { margin: 0; color: var(--red); font-size: 9px; line-height: 1.4; }
