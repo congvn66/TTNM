@@ -343,6 +343,12 @@ def _text_artifact(tmp_path, items, locale="vi"):
     return extract_docling_artifact(path, "version", locale=locale, converter=converter)["evidence_batch"]["evidences"]
 
 
+def test_a_number_ends_at_its_last_digit_not_at_the_punctuation_after_it(tmp_path):
+    # "Nhóm 7," came out as the row "7,"; a sentence-final "1.250." could not be read as a number at all.
+    evidences = _text_artifact(tmp_path, [("text", "Tai lieu do Nhom 7, doanh thu dat 1.250.")])
+    assert [(e["raw_text"], e["numeric_value"], e["data_status"]) for e in evidences] == [("7", "7", "valid"), ("1.250", "1250", "valid")]
+
+
 def test_numbers_are_read_in_the_format_the_page_text_proves_when_none_is_configured(tmp_path):
     # S1 prints "6,5%", so its table's "18.240" is 18240, not a number the user must confirm.
     evidences = _text_artifact(tmp_path, [("text", "Doanh thu 18.240 VND, chi phi 6,5% doanh thu.")], locale=None)

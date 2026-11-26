@@ -5,8 +5,9 @@ import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
+# A number ends at a digit: the "," of "Nhóm 7," and the "." ending a sentence are punctuation.
 NUMBER = re.compile(
-    r"(?<![\w/])(?:\(\s*[-+]?\d[\d.,]*\s*\)|[-+]?\d[\d.,]*)(?:\s*%)?(?![\w/])"
+    r"(?<![\w/])(?:\(\s*[-+]?\d(?:[\d.,]*\d)?\s*\)|[-+]?\d(?:[\d.,]*\d)?)(?:\s*%)?(?![\w/])"
 )
 
 
@@ -190,7 +191,7 @@ def detected_locale(texts) -> str | None:
     found = set()
     for text in texts:
         for match in quantities(text or ""):
-            token = match.group().strip("()+-%., ")
+            token = match.group().strip("()+-% ")
             readers = {locale for locale, grammar in GRAMMAR.items() if grammar.fullmatch(token)}
             if len(readers) == 1:
                 found |= readers
