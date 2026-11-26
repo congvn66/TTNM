@@ -438,3 +438,30 @@ def test_summary_does_not_claim_data_table_values_when_the_script_typed_numbers(
                          {"action": "answer", "answer": "200", "evidence_keys": ["a"]})
     assert "gõ tay" in typed["summary"]
     assert read["summary"] == "Phép tính được chạy bằng script Python trên giá trị hiện tại của bảng Dữ liệu."
+
+
+@pytest.mark.parametrize("change", ["reextract", "edit", None])
+def test_an_answer_whose_inputs_changed_while_it_ran_is_stored_as_needing_update(change):
+    from report_qa.api import document_assistant_flow as flow
+    from report_qa.api.main import extraction_with_evidence_revisions, snapshot_answer_revision
+
+    extraction = {"pages": [{"page": 1, "text": "x"}], "evidence_batch": {"evidences": [_row("a", "valid", "table")]}, "chart_regions": []}
+    document = {"id": "doc", "extraction_name": "x", "storage_name": "x"}
+    session = {"messages": []}
+    answer = json.dumps({"action": "answer", "answer": "100", "evidence_keys": ["a"]})
+
+    def complete(system, user):
+        # What a re-run or an edit does to the document while the AI is still answering.
+        if change == "reextract":
+            document.setdefault("extraction_history", []).append({"status": "ready"})
+        elif change == "edit":
+            document["evidence_state"]["items"]["a"]["current_revision_id"] = "edited"
+        return answer
+
+    message = flow.answer_document(
+        session, document, "q", "trace", [], {"sessions": {}},
+        overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision, complete=complete,
+        load_extraction=lambda name: extraction, resolve_pdf=lambda name: name, save=lambda catalog: None,
+    )["assistant_message"]
+    assert session["messages"][-1]["needs_update"] is (change is not None)
+    assert message["needs_update"] is (change is not None)

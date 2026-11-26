@@ -29,7 +29,7 @@ from report_qa.application.deplot_reading import DeplotChartReader
 from report_qa.application.p0_pipeline import calculation_answer, execute_calculation, resolve_evidence
 from report_qa.application.question_planner import build_catalog, plan_question
 from report_qa.application.text_safety import storable
-from report_qa.api.document_assistant_flow import answer_document, with_chart_batches
+from report_qa.api.document_assistant_flow import answer_document, extraction_marker, flag_if_inputs_changed, with_chart_batches
 from report_qa.application.document_assistant import AssistantError
 from report_qa.domain.contracts import validate_calculation_result_v1, validate_question_plan_v2
 from report_qa.domain.types import validate_decimal_text
@@ -1213,12 +1213,14 @@ def mark_answers_needing_update(session: dict[str, Any], document_id: str, evide
     return affected
 
 
-def _append_exchange(session: dict[str, Any], user_message: dict[str, Any], assistant_message: dict[str, Any], now: str) -> None:
+def _append_exchange(session: dict[str, Any], user_message: dict[str, Any], assistant_message: dict[str, Any], now: str, *, document: dict[str, Any] | None = None, marker: int | None = None) -> None:
     for message in (user_message, assistant_message):
         cleaned = storable(message)
         message.clear()
         message.update(cleaned)
     with catalog_lock:
+        if document is not None:
+            flag_if_inputs_changed(document, assistant_message, marker)
         session["messages"].extend([user_message, assistant_message])
         session["updated_at"] = now
     try:
@@ -1347,6 +1349,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     document = next((item for item in session["documents"] if item["id"] == payload.document_id), None)
     if document is None:
         raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
+    marker = extraction_marker(document)
     # PostgreSQL mode can move the expensive answer path out of the request.
     # The default stays synchronous for the offline compatibility tests; the
     # flag is explicit so operators cannot accidentally run a worker-less UI.
@@ -1664,7 +1667,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         trace.append(trace_event("answer_generation", "ok", provider="deterministic_calculator", format="structured_answer_v1"))
         trace.append(trace_event("persistence", "committed", artifact="runtime/sessions.json", assistant_message_id=assistant_message["id"], citation_pages=structured_answer["cited_pages"], input_revision_ids=[item["evidence_revision_id"] for item in calculation["operands"]]))
         assistant_message["trace"] = trace
-        _append_exchange(session, user_message, assistant_message, now)
+        _append_exchange(session, user_message, assistant_message, now, document=document, marker=marker)
         flow_log("ANSWER_PERSISTED", trace_id=trace_id, session_id=session_id, document_id=document["id"], assistant_message_id=assistant_message["id"], citation_pages=structured_answer["cited_pages"], mode="deterministic_calculation", calculation_status=calculation["status"])
         return finish({
             "user_message": user_message,

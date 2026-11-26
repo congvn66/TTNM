@@ -86,6 +86,27 @@ def _formula(record, by_key):
     }
 
 
+def extraction_marker(document):
+    """Changes whenever a re-run archives the extraction an answer may have read."""
+    return len(document.get("extraction_history") or [])
+
+
+def flag_if_inputs_changed(document, assistant, marker):
+    """Mark an answer stale if its inputs changed while it was being made. Call under catalog_lock."""
+    inputs = assistant.get("answer_inputs") or []
+    if not inputs:
+        return
+    items = (document.get("evidence_state") or {}).get("items", {})
+    edited = any(
+        item.get("evidence_revision_id") is not None
+        and item["evidence_key"] in items
+        and items[item["evidence_key"]]["current_revision_id"] != item["evidence_revision_id"]
+        for item in inputs
+    )
+    if edited or extraction_marker(document) != marker:
+        assistant["needs_update"] = True
+
+
 def _calculation_summary(calculations):
     if not calculations:
         return ""
@@ -129,6 +150,7 @@ def answer_document(
     The caller injects storage: local JSON by default, or PostgreSQL/R2 through
     load_extraction, resolve_pdf, save and persist_chart.
     """
+    marker = extraction_marker(document)
     load_extraction = load_extraction or (lambda name: json.loads(extraction_path(name).read_text(encoding="utf-8")))
     resolve_pdf = resolve_pdf or document_path
     save = save or save_catalog
@@ -260,6 +282,7 @@ def answer_document(
     user = {"id": str(uuid4()), "role": "user", "body": question, "document_id": document["id"], "created_at": now}
     user, assistant = storable(user), storable(assistant)
     with catalog_lock:
+        flag_if_inputs_changed(document, assistant, marker)
         session["messages"].extend([user, assistant])
         session["updated_at"] = now
     try:
