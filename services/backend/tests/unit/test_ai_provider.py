@@ -247,7 +247,7 @@ def test_provider_rejection_reason_is_logged_not_returned(monkeypatch, caplog):
         raise AssertionError("expected ProviderError")
 
 
-def test_a_delivered_non_json_body_is_invalid_output_and_not_retried(monkeypatch):
+def test_a_delivered_non_json_body_is_a_provider_failure_and_not_retried(monkeypatch):
     ai_provider, client = _gemini_client(monkeypatch, REPORT_QA_AI_RETRIES="1")
     calls = []
 
@@ -265,7 +265,35 @@ def test_a_delivered_non_json_body_is_invalid_output_and_not_retried(monkeypatch
     try:
         client.complete("system", "user")
     except ai_provider.ProviderError as exc:
-        assert exc.code == "AI_INVALID_OUTPUT"
+        assert exc.code == "AI_PROVIDER_BAD_RESPONSE"
+    else:
+        raise AssertionError("expected ProviderError")
+    assert len(calls) == 1
+
+
+def test_tools_mode_stops_at_a_gateway_page_instead_of_asking_the_model_again(monkeypatch):
+    # The HTML body was classed as bad model output and retried for all 7 tool steps.
+    from report_qa.application.document_assistant import run_assistant
+
+    ai_provider, client = _gemini_client(monkeypatch)
+    calls = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return b"<html>gateway page</html>"
+
+    monkeypatch.setattr(ai_provider, "urlopen", lambda request, timeout: (calls.append(1), Response())[1])
+    context = {"pages": [{"page": 1, "text": "x"}], "evidences": [], "chart_regions": []}
+    try:
+        run_assistant("q", context, complete=client.complete, read_chart=lambda key: {})
+    except ai_provider.ProviderError as exc:
+        assert exc.code == "AI_PROVIDER_BAD_RESPONSE"
     else:
         raise AssertionError("expected ProviderError")
     assert len(calls) == 1

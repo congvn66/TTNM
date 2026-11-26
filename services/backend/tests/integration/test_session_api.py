@@ -731,13 +731,31 @@ def test_planner_provider_failure_falls_back_to_rules(monkeypatch):
         cleanup_session(created["id"])
 
 
-def test_unreachable_planner_is_reported_instead_of_calling_the_question_out_of_scope(monkeypatch):
-    unavailable = ProviderError("AI_PROVIDER_UNAVAILABLE", "fake planner is unreachable")
-    created, _, response = _ask_with_planner(monkeypatch, unavailable, "Tổng doanh thu Q1 và Q2?")
+@pytest.mark.parametrize(("failure", "code"), [
+    (ProviderError("AI_PROVIDER_UNAVAILABLE", "fake planner is unreachable"), "AI_PROVIDER_UNAVAILABLE"),
+    (ProviderError("AI_PROVIDER_HTTP_ERROR", "fake planner rejected", 400), "AI_PROVIDER_HTTP_ERROR"),
+    (ProviderError("AI_MODEL_UNAVAILABLE", "fake model is gone", 404), "AI_MODEL_UNAVAILABLE"),
+    (ProviderError("AI_PROVIDER_BAD_RESPONSE", "gateway page"), "AI_PROVIDER_BAD_RESPONSE"),
+    (TimeoutError("slow"), "PLANNER_PROVIDER_FAILED"),
+])
+def test_a_failed_planner_is_reported_instead_of_calling_the_question_out_of_scope(monkeypatch, failure, code):
+    created, _, response = _ask_with_planner(monkeypatch, failure, "Tổng doanh thu Q1 và Q2?")
     try:
         assert response.status_code == 502
-        assert response.json()["detail"]["code"] == "AI_PROVIDER_UNAVAILABLE"
+        assert response.json()["detail"]["code"] == code
         assert client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["messages"] == []
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_unusable_planner_output_on_an_unsupported_question_is_still_out_of_scope(monkeypatch):
+    created, _, response = _ask_with_planner(monkeypatch, {"status": "maybe"}, "Tổng doanh thu Q1 và Q2?")
+    try:
+        assert response.status_code == 200, response.text
+        assistant = response.json()["assistant_message"]
+        assert assistant["mode"] == "question_unsupported"
+        plan_event = next(e for e in assistant["trace"] if e["stage"] == "question_plan")
+        assert plan_event["planner_fallback"] == "PLANNER_INVALID_OUTPUT"
     finally:
         cleanup_session(created["id"])
 

@@ -103,6 +103,7 @@ AI_ERROR_MESSAGES = {
     "AI_UNSUPPORTED_EVIDENCE": "AI chưa xác minh được evidence trong tài liệu. Hãy thử lại câu hỏi.",
     "DOCUMENT_CONTEXT_TOO_LARGE": "Tài liệu quá dài để trợ lý đọc hết trong một lần hỏi.",
     "ASSISTANT_INCOMPLETE": "Trợ lý chưa hoàn tất câu trả lời trong số bước cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",
+    "AI_PROVIDER_BAD_RESPONSE": "Dịch vụ AI trả về phản hồi không hợp lệ. Hãy thử lại sau.",
     "AI_ANSWER_TIMEOUT": "Trợ lý chưa trả lời xong trong thời gian cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",
 }
 
@@ -1642,10 +1643,10 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
         )
     )
     if question_plan["status"] == "unsupported":
-        if planning.fallback_code == "AI_PROVIDER_UNAVAILABLE":
+        if planning.provider_error:
             # The rules alone call many answerable questions out of scope;
-            # saying so would hide that the AI planner could not be reached.
-            raise ai_failure(planning.fallback_code, "planner unavailable; rules fallback found the question unsupported", trace_id)
+            # saying so would hide that the AI planner failed.
+            raise ai_failure(planning.provider_error, "planner failed; rules fallback found the question unsupported", trace_id)
         return finish(_persist_unsupported(session, session_id, document, payload.question, question_plan, trace, trace_id))
     if question_plan["status"] == "needs_clarification":
         clarification = question_plan["clarification"]
