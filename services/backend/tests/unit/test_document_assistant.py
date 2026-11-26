@@ -229,6 +229,29 @@ def test_a_result_built_with_an_uncited_typed_number_traces_nothing():
     assert json.loads(complete.call_args.args[1])["tool_results"][1]["untraced_numbers"] == ["987.654"]
 
 
+@pytest.mark.parametrize(("answer", "untraced"), [
+    ("Doanh thu là 1.250,5 tỷ đồng.", []),
+    ("Doanh thu là 1.250.500 triệu đồng.", []),
+    ("Doanh thu là 1.250,5.", []),  # no scale word: the number as printed
+    ("Doanh thu là 1.250,5 triệu đồng.", ["1.250,5 triệu"]),  # used to pass: a factor of 1 was always tried
+    ("Doanh thu là 1.250,5%.", ["1.250,5%"]),
+])
+def test_a_scale_word_must_match_the_unit_of_the_source(answer, untraced):
+    from report_qa.application.document_assistant import untraced_numbers
+
+    row = {"evidence_key": "k", "numeric_value": "1250.5", "raw_text": "1.250,5", "semantic": {"unit": "VND_BILLION"}}
+    assert untraced_numbers(answer, evidences=[row], quotes=[], results=[], locale="vi") == untraced
+
+
+def test_quote_numbers_carry_their_own_scale_word():
+    from report_qa.application.document_assistant import untraced_numbers
+
+    quote = [{"page": 1, "quote": "Mục tiêu doanh thu là 220 tỷ đồng."}]
+    check = lambda answer: untraced_numbers(answer, evidences=[], quotes=quote, results=[], locale="vi")
+    assert check("Mục tiêu là 220 tỷ đồng, tức 220.000 triệu đồng.") == []
+    assert check("Mục tiêu là 220 triệu đồng.") == ["220 triệu"]
+
+
 def test_a_number_from_an_uncited_row_is_not_traced():
     from report_qa.application.document_assistant import untraced_numbers
 
