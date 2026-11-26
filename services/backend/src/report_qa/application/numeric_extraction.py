@@ -2,6 +2,7 @@
 
 import calendar
 import re
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
 NUMBER = re.compile(
@@ -57,11 +58,11 @@ def decimal_text(raw: str, locale: str | None = None) -> str:
     return format(number, "f") if number else "0"
 
 
-# A period written in a header or sentence: "Q2/25", "Quý 2/2026", "Q3" (no
+# A period written in a header or sentence: "Q2/25", "Quý 2/2026", "Quý II/2026", "Q3" (no
 # year), "6T2026" or "6 tháng đầu năm 2026" (six months to date), "H1/2026",
 # a month ("tháng 3/2026", "tháng 6") or a year ("2026", "2026F").
 PERIOD = re.compile(
-    r"(?i)(?<![\w/])(?:q|quý\s*)(?P<quarter>[1-4])"
+    r"(?i)(?<![\w/])(?:q|quý\s*)(?P<quarter>[1-4]|iv|i{1,3})"
     r"(?:\s*[/\-]\s*(?P<quarter_yy>\d{2})(?!\d)|\s*[/\-\s]\s*(?P<quarter_year>(?:19|20)\d{2})(?!\d))?(?!\w)"
     r"|(?<![\w/])(?P<months>\d{1,2})(?:t\s*/?|\s*tháng\s+đầu\s+năm)\s*(?P<months_year>(?:19|20)\d{2}|\d{2})(?!\d)"
     r"|(?<![\w/])h(?P<half>[12])(?:\s*[/\-\s]\s*(?P<half_year>(?:19|20)\d{2}|\d{2})(?!\d))?(?!\w)"
@@ -75,6 +76,7 @@ DATE = re.compile(
 # A length of time counted in periods: "4 quý", "3 năm", "6 tháng" (not "6 năm 2026").
 DURATION = re.compile(r"(?i)(?<![\w/.,])\d{1,3}\s*(?:năm|quý|tháng)(?!\w)(?!\s*(?:19|20)\d{2})")
 _DASHES = {"-", "—", "–"}
+_ROMAN = {"i": 1, "ii": 2, "iii": 3, "iv": 4}
 # Joins the levels of a table header path: "Doanh thu thuần · Quý 2/2026".
 HEADER_JOIN = " · "
 _MONTHS_GRANULARITY = {3: "quarter", 6: "half_year", 12: "year"}
@@ -104,7 +106,7 @@ def _period(match: re.Match, page_year: str | None = None) -> dict | None:
         year = match["quarter_year"] or (match["quarter_yy"] and _full_year(match["quarter_yy"])) or page_year
         if not year:
             return None
-        quarter = int(match["quarter"])
+        quarter = _ROMAN.get(match["quarter"].casefold()) or int(match["quarter"])
         return {"label": f"Q{quarter}/{year}", "start": f"{year}-{(quarter - 1) * 3 + 1:02d}-01", "end": None,
                 "granularity": "quarter"}
     if match["months"]:
@@ -124,6 +126,34 @@ def period_near(text: str, number_start: int) -> dict | None:
     found = [(abs(start - number_start), period) for start, period in found if period]
     specific = [item for item in found if item[1]["granularity"] != "year"] or found
     return min(specific, key=lambda item: item[0])[1] if specific else None
+
+
+def period_span(period: dict | None) -> tuple[date, date] | None:
+    """First and last day a contract period covers; None when it has no start."""
+    if not period or not period.get("start"):
+        return None
+    start = date.fromisoformat(period["start"])
+    if period.get("end"):
+        return start, date.fromisoformat(period["end"])
+    if period.get("granularity") == "quarter":
+        last_month = start.month + 2
+        return start, date(start.year, last_month, calendar.monthrange(start.year, last_month)[1])
+    return None
+
+
+def asked_periods(text: str) -> list[tuple[date, date]]:
+    """Spans of the periods a question names with their year ("quý 2/2025", "6T2026", "năm 2026").
+
+    "cùng kỳ" (the same period a year earlier) adds each of them a year back.
+    """
+    spans = [span for match in PERIOD.finditer(text) if (span := period_span(_period(match)))]
+    if "cùng kỳ" in text.casefold():
+        spans += [(_year_back(a), _year_back(b)) for a, b in spans]
+    return spans
+
+
+def _year_back(day: date) -> date:
+    return day.replace(year=day.year - 1, day=min(day.day, calendar.monthrange(day.year - 1, day.month)[1]))
 
 
 def header_period(headers: list[str | None], page_year: str | None = None) -> dict | None:

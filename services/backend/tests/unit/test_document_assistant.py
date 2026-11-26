@@ -844,3 +844,41 @@ def test_quoted_rows_compare_quantities_not_digit_strings(locale):
     profit = [{"page": 1, "quote": "Lợi nhuận sau thuế năm 2023 đạt 1.250 tỷ đồng."}]
     assert [e["evidence_key"] for e in quoted_rows(growth, rows, locale)] == ["pct"]
     assert [e["evidence_key"] for e in quoted_rows(profit, rows, locale)] == ["printed", "plain"]
+
+
+def _period_row(key, value, header):
+    from report_qa.application.numeric_extraction import header_period
+
+    return {"evidence_key": key, "page_number": 1, "numeric_value": value, "raw_text": value, "data_status": "valid",
+            "table_locator": {"row_header": "DTT", "column_header": header},
+            "semantic": {"period": header_period(["DTT", header]), "unit": "VND_BILLION"}}
+
+
+def test_an_answer_citing_another_period_than_the_question_is_sent_back():
+    # R1: "Doanh thu thuần quý 2/2025" was answered with the Q2/26 cell and the Q2/2026 question with the Q2/25 cell.
+    rows = [_period_row("q2-25", "35911", "Q2/25"), _period_row("q2-26", "55159", "Q2/26"), _period_row("f26", "199829", "2026F")]
+    complete = sequence(
+        {"action": "answer", "answer": "Doanh thu thuần quý 2/2026 là 55159 tỷ đồng.", "evidence_keys": ["q2-26"]},
+        {"action": "answer", "answer": "Doanh thu thuần quý 2/2025 là 35911 tỷ đồng.", "evidence_keys": ["q2-25"]},
+    )
+    ctx = {"pages": [{"page": 1, "text": "x"}], "evidences": rows, "chart_regions": []}
+    result = run_assistant("Doanh thu thuần quý 2/2025 của HPG là bao nhiêu?", ctx, complete=complete, read_chart=Mock())
+    assert result["evidence_keys"] == ["q2-25"]
+    rejected = json.loads(complete.call_args.args[1])["tool_results"][0]
+    assert rejected["wrong_period_rows"] == [{"key": "q2-26", "label": "DTT · Q2/26"}]
+
+
+@pytest.mark.parametrize(("question", "keys", "wrong"), [
+    ("Doanh thu quý 2/2026 tăng bao nhiêu so với cùng kỳ?", ["q2-25", "q2-26"], []),  # cùng kỳ: a year back
+    ("Doanh thu 6 tháng đầu năm 2026?", ["q1-26", "q2-26"], []),  # quarters inside the half year
+    ("Doanh thu năm 2026 dự phóng?", ["f26"], []),
+    ("Doanh thu quý II/2026?", ["q2-26"], []),
+    ("Doanh thu quý 2?", ["q2-25"], []),  # no year: no period is explicit
+    ("Doanh thu quý 2/2026?", ["f26"], ["f26"]),  # a year row is not the quarter asked
+])
+def test_cited_rows_must_lie_inside_a_period_the_question_names(question, keys, wrong):
+    from report_qa.application.document_assistant import _Turn
+
+    rows = {r["evidence_key"]: r for r in [_period_row("q2-25", "35911", "Q2/25"), _period_row("q1-26", "52901", "Q1/26"),
+                                           _period_row("q2-26", "55159", "Q2/26"), _period_row("f26", "199829", "2026F")]}
+    assert [r["key"] for r in _Turn.wrong_period_rows(question, [rows[k] for k in keys])] == wrong

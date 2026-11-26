@@ -16,7 +16,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import NamedTuple
 
 from report_qa.api.ai_provider import MAX_ANSWER_CHARS, ProviderError, _json_from_content
-from report_qa.application.numeric_extraction import decimal_text, quantities
+from report_qa.application.numeric_extraction import asked_periods, decimal_text, period_span, quantities
 from report_qa.application.python_calculator import run_calculation
 from report_qa.application.text_evidence import match_quote, suggest_quote
 
@@ -439,6 +439,17 @@ class _Turn:
             for key in record["result"].get("used_evidence_keys", [])
         ]
 
+    @staticmethod
+    def wrong_period_rows(question, rows):
+        """Cited rows whose own period lies outside every period the question names (none named: no check)."""
+        asked = asked_periods(question)
+        wrong = []
+        for row in rows:
+            span = period_span((row.get("semantic") or {}).get("period"))
+            if asked and span and not any(a <= span[0] and span[1] <= b for a, b in asked):
+                wrong.append({"key": row["evidence_key"], "label": evidence_label(row)})
+        return wrong
+
     def checked_sources(self, action):
         """(verbatim sources, rejected sources) or None if sources is malformed."""
         sources = action.get("sources") or []
@@ -492,6 +503,11 @@ class _Turn:
         if rejected:
             self.trace.append({"stage": "citation_validation", "status": "omitted_unsupported_quotes",
                                "count": len(rejected)})
+        wrong_period = self.wrong_period_rows(question, [by_key[k] for k in keys]) if kind == "answer" else []
+        if wrong_period:
+            self.reject("The question names a period; these cited rows are for another period. "
+                        "Use the rows of the period asked, or say the report does not have it", wrong_period_rows=wrong_period)
+            return None
         if kind == "answer" and not (keys or sources) and action.get("not_found") is not True:
             self.reject("Answer must cite evidence_keys or verbatim sources, unless not_found=true; pages alone are not a citation")
             return None
