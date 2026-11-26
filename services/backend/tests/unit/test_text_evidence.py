@@ -44,6 +44,20 @@ def test_a_snap_never_changes_a_number_or_a_polarity_word(quote):
     assert match_quote(FACTS + "\n" + PAGE, quote) is None
 
 
+@pytest.mark.parametrize("quote", [
+    "Lợi nhuận trước thuế năm 2023 đạt 1.250 tỷ đồng.",  # a word swapped: trước for sau
+    "Chi phí thuần năm 2023 tăng 8% so với năm trước.",  # a subject swapped: Chi phí for Doanh thu
+])
+def test_a_quote_about_another_subject_does_not_snap(quote):
+    page = "Lợi nhuận sau thuế năm 2023 đạt 1.250 tỷ đồng. Doanh thu thuần năm 2023 tăng 8% so với năm trước."
+    assert match_quote(page, quote) is None
+
+
+def test_spacing_and_punctuation_slips_snap():
+    page = "Doanh thu thuần năm 2023 tăng 8% so với năm trước."
+    assert match_quote(page, "Doanh thu thuần năm 2023 tăng 8 % so với năm trước")["quote"] == page
+
+
 def test_copy_noise_around_unchanged_numbers_still_snaps():
     match = match_quote(FACTS, "Lợi nhuận sau thue giảm 8% so vói năm trước")
     assert match == {"quote": "Lợi nhuận sau thuế giảm 8% so với năm trước.", "match": "snapped"}
