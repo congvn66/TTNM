@@ -6,7 +6,10 @@ provenance: the Data keys it came from and the numbers the script typed into
 its arithmetic. Arithmetic, rounding and math/statistics calls propagate it,
 so the reported inputs are the sources of the result itself, and every typed
 number that shaped the result (or a result number with no Data source at
-all, e.g. built from strings) is reported as manual. Provenance is decided at
+all, e.g. built from strings) is reported as manual. The typed numbers 1, 100
+and 1000 are formula constants (growth b/a-1, percent, per-mille, unit
+scaling), not manual numbers; len(), int(), round() and divmod() of traced
+values keep their sources. Provenance is decided at
 runtime, never from the script text, and the names the runtime provides
 cannot be rebound. Scripts can use Decimal, math, statistics, loops,
 comprehensions, small helper functions and list/dict methods. There is no file, environment,
@@ -176,12 +179,20 @@ def provenance(items):
         if isinstance(x, Traced):
             sources |= x.sources; typed += x.typed
         elif is_number(x):
-            typed.append(str(x))
+            typed += typed_of(x)
         elif isinstance(x,(list,tuple)):
             s,t=provenance(x); sources|=s; typed+=t
     return sources, typed
 # An operand equal to the identity of the operation (x+0, x*1, x/1) does not change the value.
 IDENTITY={'add':0,'sub':0,'mul':1,'truediv':1,'floordiv':1,'pow':1}
+# Percent, per-mille and unit scaling (b/a-1, *100, /1000) are formula constants, not copied data.
+FORMULA_CONSTANTS={Decimal(1),Decimal(100),Decimal(1000)}
+def typed_of(number):
+    return () if Decimal(number) in FORMULA_CONSTANTS else (str(number),)
+def operands(other, self_sources, self_typed, name):
+    if isinstance(other,Traced): return self_sources|other.sources, self_typed+other.typed
+    if other==IDENTITY.get(name): return self_sources, self_typed
+    return self_sources, self_typed+typed_of(other)
 def operator(name, reflected):
     plain=getattr(Decimal,'__'+name+'__')
     def apply(self, other):
@@ -189,10 +200,8 @@ def operator(name, reflected):
         left,right=(other,self) if reflected else (self,other)
         number=plain(Decimal(left),Decimal(right))
         if number is NotImplemented: return number
-        if isinstance(other,Traced): sources,typed=self.sources|other.sources,self.typed+other.typed
-        elif other==IDENTITY.get(name): sources,typed=self.sources,self.typed
-        else: sources,typed=self.sources,self.typed+(str(other),)
-        return traced(number,sources,typed)
+        sources,typed=operands(other,self.sources,self.typed,name)
+        return tuple(traced(n,sources,typed) for n in number) if name=='divmod' else traced(number,sources,typed)
     return apply
 def same_provenance(method):
     plain=getattr(Decimal,method)
@@ -208,9 +217,13 @@ class Traced(Decimal):
         if isinstance(value,Traced): return value
         number=Decimal.__new__(cls,value,context)
         number.sources=frozenset()
-        number.typed=(str(number),)
+        number.typed=typed_of(number)
         return number
-for _name in ('add','sub','mul','truediv','floordiv','mod','pow'):
+    # A whole traced number (len(), int()) still works as an index or range bound.
+    def __index__(self):
+        if self!=self.to_integral_value(): raise TypeError('only a whole number can be an index')
+        return int(self)
+for _name in ('add','sub','mul','truediv','floordiv','mod','pow','divmod'):
     setattr(Traced,'__'+_name+'__',operator(_name,False))
     setattr(Traced,'__r'+_name+'__',operator(_name,True))
 for _method in ('__neg__','__pos__','__abs__','__round__','quantize','sqrt','ln','log10','exp','normalize','to_integral_value'):
@@ -236,6 +249,14 @@ def value(key):
         raise ValueError('Evidence is missing or unverified: '+key)
     if key not in used: used.append(key)
     return traced(Decimal(item['numeric_value']),{key},())
+# A count of traced values and the whole part of a traced value keep their sources.
+def traced_len(items):
+    count=len(items)
+    sources,_=provenance(list(items.values()) if isinstance(items,dict) else [] if isinstance(items,str) else list(items))
+    return traced(Decimal(count),sources,()) if sources else count
+def traced_int(x=0, *args):
+    number=int(x,*args)
+    return traced(Decimal(number),x.sources,x.typed) if isinstance(x,Traced) else number
 def result_numbers(x):
     if isinstance(x,dict): return [n for k,v in x.items() for n in result_numbers(k)+result_numbers(v)]
     if isinstance(x,(list,tuple)): return [n for item in x for n in result_numbers(item)]
@@ -244,6 +265,8 @@ def captured_print(*args, sep=' ', end='\n'):
     room=payload['max_stdout']-sum(map(len, printed))
     if room>0: printed.append((sep.join(map(str, args))+end)[:room])
 safe={name: __builtins__.__dict__[name] for name in payload['builtins']}
+safe['len']=traced_len
+safe['int']=traced_int
 modules={
     'math':namespace(math,payload['modules']['math']),
     'statistics':namespace(statistics,payload['modules']['statistics']),
@@ -261,7 +284,7 @@ try:
     numbers=result_numbers(env['result'])
     sources=set().union(*(n.sources for n in numbers if isinstance(n,Traced)))
     if not sources: raise ValueError('result must contain numbers computed from value(evidence_key), not copied constants or text')
-    manual=unique(t for n in numbers for t in (n.typed if isinstance(n,Traced) else (str(n),)))
+    manual=unique(t for n in numbers for t in (n.typed if isinstance(n,Traced) else typed_of(n)))
     output=json.dumps({'status':'succeeded','result':env['result'],'used_evidence_keys':[k for k in used if k in sources],
                        'manual_numbers':list(manual),'traced_numbers':[str(n) for n in numbers if isinstance(n,Traced) and n.sources],
                        'stdout':''.join(printed)},default=str,allow_nan=False)

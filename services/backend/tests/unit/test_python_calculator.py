@@ -88,7 +88,7 @@ def test_numbers_typed_into_the_script_are_reported():
     code = "rate = Decimal('74') / value('a')\nresult = round((rate + Decimal(7) / 10) / 2 * 100, 2)"
     result = run_calculation(code, facts())
     assert result["status"] == "succeeded"
-    assert result["manual_numbers"] == ["74", "7", "10", "2", "100"]
+    assert result["manual_numbers"] == ["74", "7", "10", "2"]
 
 
 def test_inputs_are_the_sources_of_the_result_not_every_value_read():
@@ -107,7 +107,7 @@ result = {'sum': sum(rows), 'mean': round(statistics.mean(rows), 2), 'root': mat
     result = run_calculation(code, facts())
     assert result["status"] == "succeeded", result
     assert result["used_evidence_keys"] == ["a", "b"]
-    assert result["manual_numbers"] == ["2"]  # only len(rows) entered the arithmetic from outside the Data table
+    assert result["manual_numbers"] == []  # len(rows) counts Data values, it is not typed
     assert "2230.50" in result["traced_numbers"]
 
 
@@ -127,6 +127,29 @@ def test_numbers_passed_as_keyword_arguments_are_reported():
     result = run_calculation("result = math.prod([value('a')], start=12345)", facts())
     assert result["status"] == "succeeded"
     assert result["manual_numbers"] == ["12345"]
+
+
+@pytest.mark.parametrize("code", [
+    "xs = [value('a'), value('b')]\nresult = sum(xs) / len(xs)",
+    "result = value('b') / value('a') - 1",
+    "result = round((value('b') - value('a')) / value('a') * 100, 2)",
+    "result = value('a') / 100",
+    "result = value('a') * Decimal('1000')",
+    "n = int(value('a'))\nresult = value('b') * n",
+    "q, r = divmod(value('a'), value('b'))\nresult = q + r",
+    "xs = [value('a'), value('b')]\nresult = {'mean': sum(xs) / len(xs), 'n': len(xs), 'last': xs[len(xs) - 1]}",
+])
+def test_honest_formulas_have_no_manual_numbers(code):
+    # Percent answers all showed "có số được gõ tay" because 100, 1 and len() were manual.
+    result = run_calculation(code, facts())
+    assert result["status"] == "succeeded", result
+    assert result["manual_numbers"] == []
+
+
+def test_other_typed_numbers_stay_manual_through_divmod_and_int():
+    assert run_calculation("result = value('b') + divmod(value('a'), 7)[0]", facts())["manual_numbers"] == ["7"]
+    assert run_calculation("result = value('a') * Decimal('0.31')", facts())["manual_numbers"] == ["0.31"]
+    assert run_calculation("result = value('a') + int('12')", facts())["manual_numbers"] == ["12"]
 
 
 def test_a_number_built_from_strings_is_reported_as_manual():

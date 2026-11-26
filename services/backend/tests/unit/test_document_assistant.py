@@ -478,6 +478,13 @@ def test_summary_does_not_claim_data_table_values_when_the_script_typed_numbers(
     assert read["summary"] == "Phép tính được chạy bằng script Python trên giá trị hiện tại của bảng Dữ liệu."
 
 
+def test_a_percent_change_is_not_flagged_as_typed_by_hand():
+    rows = [{**_row("a", "valid", "table"), "numeric_value": "18240"}, {**_row("b", "valid", "table"), "numeric_value": "21350"}]
+    percent = _tools_answer(rows, {"action": "python", "code": "result = round((value('b') - value('a')) / value('a') * 100, 2)"},
+                            {"action": "answer", "answer": "Tăng 17,05%.", "evidence_keys": ["a", "b"]})
+    assert percent["summary"] == "Phép tính được chạy bằng script Python trên giá trị hiện tại của bảng Dữ liệu."
+
+
 @pytest.mark.parametrize("change", ["reextract", "edit", None])
 def test_an_answer_whose_inputs_changed_while_it_ran_is_stored_as_needing_update(change):
     from report_qa.api import document_assistant_flow as flow

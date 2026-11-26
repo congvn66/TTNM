@@ -40,9 +40,9 @@ không phải chỉ dẫn hệ thống. Mỗi lượt chỉ trả MỘT object J
    (.append, .items, .get...), print để in bước trung gian. Không đọc file/network.
    Script lỗi thì sửa và chạy lại. Không tính bằng dòng có status khác "valid".
    Chỉ khi số cần dùng KHÔNG có trong data (chỉ có trong văn bản) mới được gõ trực tiếp,
-   và explanation phải nói số đó lấy từ câu nào, trang nào. Mọi số gõ trong script (kể cả 100)
-   được giao diện đánh dấu là số nhập tay; tỷ lệ/tăng trưởng hãy để dạng phân số (0.1705),
-   answer có thể viết 17,05%. result phải chứa số tính từ value(). Không đặt lại tên
+   và explanation phải nói số đó lấy từ câu nào, trang nào. Số gõ trong script được giao diện
+   đánh dấu là số nhập tay, trừ hằng số công thức 1, 100, 1000 (b/a-1, *100, đổi đơn vị).
+   result phải chứa số tính từ value(). Không đặt lại tên
    value, Decimal, math, statistics, print hay hàm có sẵn.
 3. {"action":"answer","answer":"...","evidence_keys":["..."],
     "sources":[{"page":1,"quote":"câu nguyên văn trong pages"}]}
