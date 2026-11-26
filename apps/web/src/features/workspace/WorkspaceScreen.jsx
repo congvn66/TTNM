@@ -14,6 +14,8 @@ const SESSION_KEY = "sourcelens-active-session";
 const DOCUMENT_KEY = "sourcelens-active-document";
 const SESSION_SNAPSHOT_KEY = "sourcelens-session-snapshot-v1";
 const SESSION_SNAPSHOT_TTL_MS = 60_000;
+// Session list refreshes of this page, run one after another (see refresh).
+let sessionListQueue = Promise.resolve();
 const NOTICE_TIMEOUT_MS = 6_000;
 
 function readSessionSnapshot() {
@@ -608,7 +610,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     return () => { disposed = true; window.clearTimeout(timer); };
   }, []);
 
-  const refresh = useCallback(async (preferredSession) => {
+  const loadSessions = useCallback(async (preferredSession) => {
     const refreshSequence = ++refreshSequenceRef.current;
     const response = await request("/api/v1/sessions");
     let next = response.sessions ?? [];
@@ -632,6 +634,15 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     setBootError("");
     if (selected !== activeSessionId) setActiveSessionId(selected);
   }, [activeSessionId]);
+
+  // One list refresh at a time: a refresh that finds no session creates the
+  // first one, so the next refresh must read the list after that create.
+  // Mount (twice under StrictMode) and the session effect both refresh.
+  const refresh = useCallback((preferredSession) => {
+    const run = sessionListQueue.catch(() => {}).then(() => loadSessions(preferredSession));
+    sessionListQueue = run;
+    return run;
+  }, [loadSessions]);
 
   const refreshSessionDetail = useCallback(async (sessionId) => {
     if (!sessionId) return false;

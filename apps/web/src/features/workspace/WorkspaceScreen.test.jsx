@@ -1,4 +1,5 @@
 /** @vitest-environment jsdom */
+import { StrictMode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 const { requestMock } = vi.hoisted(() => ({ requestMock: vi.fn() }));
@@ -26,6 +27,29 @@ it("places replies after their linked questions even when the server returns the
   const view = render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
   await screen.findByText("Answer two");
   expect([...view.container.querySelectorAll(".chat-body article p")].map((node) => node.textContent)).toEqual(["Question one", "Answer one", "Question two", "Answer two"]);
+});
+
+it("creates one first session when several refreshes find none", async () => {
+  // A tab that still holds an old session list refreshes on mount and again
+  // for its remembered session; StrictMode runs both effects twice.
+  sessionStorage.setItem("sourcelens-session-snapshot-v1", JSON.stringify({ savedAt: Date.now(), sessions: [{ id: "old", title: "Old", documents: [], messages: [] }] }));
+  localStorage.setItem("sourcelens-active-session", "old");
+  const created = [];
+  requestMock.mockImplementation(async (path, options) => {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    if (path === "/api/v1/sessions" && options?.method === "POST") {
+      const session = { id: `new-${created.length + 1}`, title: "Phiên phân tích đầu tiên", documents: [], messages: [] };
+      created.push(session);
+      return { session };
+    }
+    if (path === "/api/v1/sessions") return { sessions: [...created] };
+    if (path.startsWith("/api/v1/sessions/")) return { session: created.find((session) => path.endsWith(session.id)) ?? created[0] };
+    return { jobs: [] };
+  });
+  render(<StrictMode><ThemeProvider><WorkspaceScreen /></ThemeProvider></StrictMode>);
+  await screen.findByText("Phiên phân tích đầu tiên");
+  await act(() => new Promise((resolve) => setTimeout(resolve, 100)));
+  expect(created).toHaveLength(1);
 });
 
 it("loads chat from session detail when the list contains metadata only", async () => {
