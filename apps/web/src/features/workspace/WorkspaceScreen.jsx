@@ -4,6 +4,7 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { API, CLIENT_ERRORS, request } from "../../shared/api/client.js";
 import { useTheme } from "../theme/ThemeProvider.jsx";
 import { EvidenceList, ScriptCard } from "./ToolAnswer.jsx";
+import { AnswerText } from "./AnswerText.jsx";
 import { Icon } from "./Icon.jsx";
 import { EvidenceDrawer } from "./EvidenceDrawer.jsx";
 import { distinctFormulas, formatNumber } from "./format.js";
@@ -240,14 +241,14 @@ function StructuredAnswer({ answer, fallback, onCitation, evidenceByKey }) {
   if (!answer && typeof fallback === "string" && fallback.startsWith("Không thể tạo câu trả lời:")) return <div className="answer-failure" role="alert"><Icon name="refresh" size={14} /><span>{fallback}</span></div>;
   if (!answer) return <p>{fallback}</p>;
   if (answer.presentation === "retrieval_excerpt") return <div className="structured-answer retrieval-answer">
-    <p className="answer-lead">{answer.answer}</p>
+    <AnswerText text={answer.answer} />
     {answer.summary && <p className="answer-summary">{answer.summary}</p>}
     <RetrievalExcerpt answer={answer} />
     {answer.warnings?.filter(Boolean).length > 0 && <div className="answer-status-note"><Icon name="trace" size={13} /><span>{answer.warnings.filter(Boolean)[0]}</span></div>}
   </div>;
   const warnings = answer.warnings?.filter(Boolean) ?? [];
   return <div className="structured-answer">
-    <p className="answer-lead">{answer.answer}</p>
+    <AnswerText text={answer.answer} />
     {answer.evidence?.length > 0 && <EvidenceList items={answer.evidence} evidenceByKey={evidenceByKey} onCitation={onCitation} />}
     {answer.summary && <p className="answer-summary">{answer.summary}</p>}
     {answer.claims?.length > 0 && <section className="answer-section answer-claims"><h4>Nhận định và căn cứ</h4>{answer.claims.map((claim, index) => <div className="claim-card" key={`${claim.claim}-${index}`}>

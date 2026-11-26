@@ -18,6 +18,10 @@
 .message .structured-answer { padding: 0; background: transparent; }
 .message .structured-answer > p, .message .structured-answer .claim-card p { border: 0; border-radius: 0; padding: 0; background: transparent; color: var(--ink-soft); white-space: normal; }
 .answer-lead { margin: 0 0 8px; color: var(--ink) !important; font-size: var(--text-sm) !important; font-weight: 720; line-height: 1.52 !important; }
+.answer-paragraph { margin: 0 0 8px !important; color: var(--ink-soft); }
+.structured-answer > .answer-list { margin: 0 0 8px; padding-left: 20px; color: var(--ink-soft); }
+.structured-answer > .answer-list li { margin: 3px 0; line-height: 1.52; }
+.structured-answer strong { color: var(--ink); font-weight: 720; }
 .answer-summary { margin: 0 0 10px; color: var(--muted) !important; line-height: 1.58 !important; }
 .typing-indicator { display: inline-flex; align-items: center; gap: 9px; border: 1px solid var(--border); border-radius: 4px 11px 11px; padding: 10px 12px; background: var(--surface-soft); color: var(--muted); font-size: var(--text-xs); }
 .typing-dots { display: inline-flex; gap: 3px; }
