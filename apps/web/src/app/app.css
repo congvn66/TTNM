@@ -175,7 +175,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .empty-reader h2 { margin: 17px 0 6px; color: var(--ink); font-size: var(--text-lg); letter-spacing: -.02em; }
 .empty-reader p { max-width: 320px; margin: 0; font-size: var(--text-sm); line-height: 1.55; }
 
-.chat-column { min-width: 0; min-height: 0; display: grid; grid-template-rows: 66px minmax(0, 1fr) auto; border-left: 1px solid var(--border); background: var(--surface); }
+.chat-column { position: relative; min-width: 0; min-height: 0; display: grid; grid-template-rows: 66px minmax(0, 1fr) auto; border-left: 1px solid var(--border); background: var(--surface); }
 .chat-header { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0 16px; border-bottom: 1px solid var(--border); }
 .ai-avatar { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; border-radius: 9px; background: var(--ink); color: #f4d88d; font-size: var(--text-sm); font-weight: 800; }
 .chat-header > div:nth-child(2) { min-width: 0; }
