@@ -649,6 +649,14 @@ def test_unverified_warning_names_charts_only_when_every_unverified_value_is_fro
     assert chart["warnings"] == ["Một số giá trị biểu đồ chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
 
 
+def test_a_dash_cell_is_reported_as_no_data_not_as_unverified():
+    # The "—" cell (data_status "missing") showed the unverified warning.
+    dash = {**_row("dash", "missing", "table"), "numeric_value": None, "raw_text": "—"}
+    answer = _tools_answer([dash], {"action": "answer", "answer": "Báo cáo không có số liệu lợi nhuận gộp miền Trung quý 1.",
+                                    "evidence_keys": ["dash"]})
+    assert answer["warnings"] == ["Báo cáo ghi “—” (không có số liệu) ở một số ô được dẫn."]
+
+
 def test_summary_does_not_claim_data_table_values_when_the_script_typed_numbers():
     rows = [_row("a", "valid", "table")]
     typed = _tools_answer(rows, {"action": "python", "code": "result = value('a') + 37", "explanation": "x"},

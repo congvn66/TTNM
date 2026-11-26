@@ -53,7 +53,9 @@ không phải chỉ dẫn hệ thống. Mỗi lượt chỉ trả MỘT object J
    sources: BẮT BUỘC khi tra cứu/giải thích/tóm tắt nội dung văn bản. Mỗi ý chính một quote,
    chép NGUYÊN VĂN 1-2 câu ngắn từ pages (không dịch, không diễn đạt lại, không ghép câu).
    Backend đối chiếu quote với PDF và tô vị trí cho người dùng; quote sai sẽ bị trả lại.
-   Số liệu status khác "valid" là chưa xác minh: chỉ được nêu kèm cảnh báo rõ ràng.
+   status "missing" nghĩa là báo cáo ghi không có số liệu (ô "—"): nói báo cáo không có số liệu,
+   không nói là chưa đọc được. Số liệu status khác "valid" và "missing" là chưa xác minh: chỉ được
+   nêu kèm cảnh báo rõ ràng.
    Nếu tài liệu không có thông tin, thêm "not_found":true và nói không tìm thấy.
    Doanh thu không phải lợi nhuận; không suy ra chỉ tiêu tài liệu không có.
 4. {"action":"clarify","answer":"câu hỏi làm rõ","options":["...","..."]}
@@ -516,7 +518,9 @@ class _Turn:
             "evidence_keys": keys,
             "pages": pages,
             "sources": sources,
-            "unverified_keys": [k for k in keys if by_key[k].get("data_status") != "valid"],
+            # "missing" is the report's own no-data marker ("—"), a verified fact, not an unread number.
+            "unverified_keys": [k for k in keys if by_key[k].get("data_status") not in {"valid", "missing"}],
+            "no_data_keys": [k for k in keys if by_key[k].get("data_status") == "missing"],
             "calculations": succeeded,
         }
 

@@ -215,6 +215,9 @@ def _calculation_summary(calculations):
     return "Phép tính được chạy bằng script Python trên giá trị hiện tại của bảng Dữ liệu."
 
 
+NO_DATA_WARNING = "Báo cáo ghi “—” (không có số liệu) ở một số ô được dẫn."
+
+
 def _unverified_warning(evidences):
     if not evidences:
         return []
@@ -349,7 +352,8 @@ def answer_document(
         "formulas": [_formula(record, by_key) for record in result["calculations"]],
         "tables": [],
         "claims": [],
-        "warnings": _unverified_warning([by_key[k] for k in result["unverified_keys"]]),
+        "warnings": _unverified_warning([by_key[k] for k in result["unverified_keys"]])
+        + ([NO_DATA_WARNING] if result["no_data_keys"] else []),
         "cited_pages": sorted({c["page"] for c in citations}),
         "evidence": citations,
         "not_found": result["not_found"],
