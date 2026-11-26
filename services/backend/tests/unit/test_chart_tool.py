@@ -196,3 +196,31 @@ def test_deplot_cache_lives_under_the_configured_runtime_root(tmp_path, monkeypa
     monkeypatch.setattr(chart_tool, "predict_chart", lambda image: RAW)
     read_chart_region(PDF, REGION, "v", "q", complete=lambda *args: json.dumps({"rows": []}))
     assert len(list((tmp_path / "chart-cache").glob("*.json"))) == 1
+
+
+# google/deplot's real output for S1 page 2 ("Số đơn hàng theo tháng"): a unit
+# subtitle on its own line after TITLE, and Vietnamese letters as byte tokens.
+S1_ORDERS_RAW = (
+    "TITLE | Bi<0xE1><0xBB><0x83>u đ<0xE1><0xBB><0x93> 1. S<0xE1><0xBB><0x91> đon hàng theo tháng, 6 th<0xE1><0xBA><0xA3>ng "
+    "đầu năm 2026<0x0A>Don vì: nghin đ<0xE1><0xBB><0x93>n<0x0A>T1 | Miên B<0xE1><0xBA><0xAF>c | Mi<0xE1><0xBB><0x81>n Trung | "
+    "Mi<0xE1><0xBB><0x81>n Nam<0x0A>T2 | 35 | 15 | 30<0x0A>T3 | 41 | 19 | 36<0x0A>T4 | 44 | 21 | 35<0x0A>T5 | 49 | 24 | 37"
+    "<0x0A>T6 | 47 | 30 | 38"
+)
+
+
+def test_real_deplot_output_with_a_subtitle_line_and_byte_tokens_is_parsed():
+    from report_qa.application.deplot_reading import parse_table
+
+    title, rows = parse_table(S1_ORDERS_RAW)
+    assert title == "Biểu đồ 1. Số đon hàng theo tháng, 6 thảng đầu năm 2026 Don vì: nghin đồn"
+    assert ("T4", "Miền Nam", "35", "35") in rows and ("T5", "Miên Bắc", "49", "49") in rows
+    assert len(rows) == 15  # T1 is DePlot's header cell, so its bars were not read; nothing is guessed
+
+
+def test_grouped_bar_chart_values_get_category_and_series_labels():
+    result = read_chart_region(
+        PDF, REGION, "v", "q", complete=lambda *args: json.dumps({"rows": []}), predictor=lambda image: S1_ORDERS_RAW
+    )
+    labels = {(e["chart_read"]["category_label"], e["chart_read"]["series_label"]): e["raw_text"]
+              for e in result["evidence_batch"]["evidences"]}
+    assert labels[("T4", "Miền Nam")] == "35" and labels[("T5", "Miên Bắc")] == "49"

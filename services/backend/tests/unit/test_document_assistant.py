@@ -419,6 +419,8 @@ def test_an_unexpected_chart_error_is_reported_to_the_model():
     context = {"pages": [], "evidences": [], "chart_regions": [{"chart_region_key": "r1", "read": False}]}
     result = run_assistant("q", context, complete=lambda *args: json.dumps(next(actions)), read_chart=Mock(side_effect=KeyError("x" * 900)))
     assert result["tool_results"][0]["error"].startswith("KeyError") and len(result["tool_results"][0]["error"]) <= 300
+    assert result["tool_results"][0]["status"] == "failed"
+    assert "không kết luận tài liệu không có thông tin" in result["tool_results"][0]["message"]
 
 
 def test_a_quote_without_pymupdf_keeps_its_text_and_loses_only_the_highlight(monkeypatch):

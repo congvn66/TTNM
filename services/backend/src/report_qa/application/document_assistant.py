@@ -91,6 +91,10 @@ def with_time_budget(complete, seconds: float):
     return timed
 
 
+CHART_READ_FAILED = ("Chưa đọc được số liệu của biểu đồ này. Số liệu có thể vẫn nằm trong biểu đồ: "
+                     "nói với người dùng là chưa đọc được biểu đồ, không kết luận tài liệu không có thông tin.")
+
+
 class AssistantError(RuntimeError):
     def __init__(self, message: str, tool_results: list | None = None) -> None:
         super().__init__(message)
@@ -249,7 +253,9 @@ class _Turn:
             result = self.read_chart(key)
         except Exception as exc:  # noqa: BLE001  a failed chart read must not lose the whole answer
             error = f"{type(exc).__name__}: {exc}"[:300]
-            self.tools.append({"tool": "read_chart", "chart_region_key": key, "error": error})
+            # The error alone read to the model like "no such data" and it told users the report lacked the figure.
+            self.tools.append({"tool": "read_chart", "chart_region_key": key, "status": "failed", "error": error,
+                               "message": CHART_READ_FAILED})
             self.trace.append({"stage": "chart_read", "status": "failed", "chart_region_key": key, "error": error})
             return
         self.context["evidences"] = result.get("all_evidences", self.context["evidences"])
