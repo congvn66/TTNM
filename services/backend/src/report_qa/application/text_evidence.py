@@ -100,6 +100,17 @@ def suggest_quote(page_text: str, quote: str) -> str | None:
     return _closest(page_text, folded_quote, 0.5) if folded_quote else None
 
 
+def _first_hit(page, rects, quote: str) -> list:
+    """Rects of the first hit only: search_for returns every hit's line rects in one flat list."""
+    wanted = len(_fold(quote)[0].replace(" ", ""))
+    found = 0
+    for count, rect in enumerate(rects, 1):
+        found += len(_fold(page.get_textbox(rect))[0].replace(" ", ""))
+        if found >= wanted:
+            return rects[:count]
+    return rects
+
+
 def quote_bbox(pdf_path, page_number: int, quote: str) -> list[float] | None:
     """Normalized [x0, y0, x1, y1] around the quote's first occurrence, if found."""
     import pymupdf
@@ -108,7 +119,7 @@ def quote_bbox(pdf_path, page_number: int, quote: str) -> list[float] | None:
         if not 1 <= page_number <= pdf.page_count:
             return None
         page = pdf[page_number - 1]
-        rects = page.search_for(quote)
+        rects = _first_hit(page, page.search_for(quote), quote)
         words = quote.split()
         if not rects and len(words) > 8:
             head = page.search_for(" ".join(words[:5]))

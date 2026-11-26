@@ -46,6 +46,28 @@ def test_quote_is_located_on_the_pdf_page():
     assert quote_bbox(PDF, 99, line) is None
 
 
+
+def test_repeated_quote_box_covers_only_the_first_occurrence(tmp_path):
+    import pymupdf
+
+    sentence = "Doanh thu tăng 15 phần trăm trong năm 2024."
+    paragraph = "Doanh thu tăng mười lăm phần trăm trong năm hai nghìn không trăm hai mươi bốn ở mọi khu vực"
+    path = tmp_path / "repeat.pdf"
+    with pymupdf.open() as pdf:
+        page = pdf.new_page()
+        page.insert_text((50, 80), sentence, fontname="helv")
+        page.insert_text((50, 760), sentence, fontname="helv")
+        page.insert_textbox(pymupdf.Rect(50, 200, 250, 300), paragraph)
+        page.insert_textbox(pymupdf.Rect(50, 500, 250, 600), paragraph)
+        pdf.save(path)
+    with pymupdf.open(path) as pdf:
+        sentence, paragraph = (" ".join(pdf[0].get_textbox(rect).split()) for rect in
+                               (pymupdf.Rect(40, 60, 560, 90), pymupdf.Rect(40, 190, 260, 310)))
+    line = quote_bbox(path, 1, sentence)
+    assert line[3] < 0.15
+    box = quote_bbox(path, 1, paragraph)
+    assert 0.2 < box[1] < box[3] < 0.45
+
 def context():
     return {
         "pages": [{"page": 1, "text": PAGE}],
