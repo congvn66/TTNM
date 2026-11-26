@@ -3,6 +3,7 @@ import { request } from "../../shared/api/client.js";
 import { Icon } from "./Icon.jsx";
 import { dataStatusLabel, evidenceLabel, formatDateTime, formatNumber, numbersDiffer } from "./format.js";
 
+const REASON_MIN_LENGTH = 3;
 const EDIT_ERROR_FALLBACK = "Không đọc được số này. Hãy nhập lại, ví dụ 21.500 hoặc 21500.";
 
 // A 422 without a code is the server rejecting the shape of the typed text;
@@ -39,6 +40,10 @@ function EditForm({ evidence, basePath, onCancel, onSaved, onConflict }) {
   const [reason, setReason] = useState("");
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState("");
+  // Empty fields, checked here so the message is Vietnamese and next to the field.
+  const [missing, setMissing] = useState({});
+  const valueRef = useRef(null);
+  const reasonRef = useRef(null);
   // Possible readings of an ambiguous number; the one the user picks is sent
   // as numeric_value instead of the typed text.
   const [readings, setReadings] = useState([]);
@@ -51,7 +56,17 @@ function EditForm({ evidence, basePath, onCancel, onSaved, onConflict }) {
   });
 
   // Any change to the text invalidates the number we asked the user to confirm.
-  const change = (setter) => (event) => { setter(event.target.value); setPreview(null); setError(""); setReadings([]); setChosenValue(null); };
+  const change = (setter, field) => (event) => { setter(event.target.value); setPreview(null); setError(""); setReadings([]); setChosenValue(null); setMissing((current) => ({ ...current, [field]: "" })); };
+
+  function filledIn() {
+    const next = {
+      value: inputText.trim() ? "" : "Hãy nhập giá trị mới.",
+      reason: reason.trim().length >= REASON_MIN_LENGTH ? "" : `Hãy ghi lý do sửa, ít nhất ${REASON_MIN_LENGTH} ký tự.`,
+    };
+    setMissing(next);
+    (next.value ? valueRef : next.reason ? reasonRef : null)?.current?.focus();
+    return !next.value && !next.reason;
+  }
 
   async function requestPreview(value) {
     setWorking(true); setError(""); setReadings([]);
@@ -64,7 +79,7 @@ function EditForm({ evidence, basePath, onCancel, onSaved, onConflict }) {
     finally { setWorking(false); }
   }
 
-  function check(event) { event.preventDefault(); requestPreview(null); }
+  function check(event) { event.preventDefault(); if (filledIn()) requestPreview(null); }
 
   async function save() {
     setWorking(true); setError("");
@@ -73,11 +88,14 @@ function EditForm({ evidence, basePath, onCancel, onSaved, onConflict }) {
     finally { setWorking(false); }
   }
 
-  return <form className="evidence-edit-form" onSubmit={check} aria-label={`Sửa số ${evidenceLabel(evidence) || `trang ${evidence.page_number}`}`}>
+  const valueHelp = [missing.value && `${ids}-value-missing`, error && `${ids}-error`].filter(Boolean).join(" ") || undefined;
+  return <form className="evidence-edit-form" onSubmit={check} noValidate aria-label={`Sửa số ${evidenceLabel(evidence) || `trang ${evidence.page_number}`}`}>
     <label htmlFor={`${ids}-value`}>Giá trị mới</label>
-    <input id={`${ids}-value`} autoFocus inputMode="decimal" value={inputText} onChange={change(setInputText)} required aria-invalid={Boolean(error)} aria-describedby={error ? `${ids}-error` : undefined} />
+    <input id={`${ids}-value`} ref={valueRef} autoFocus inputMode="decimal" value={inputText} onChange={change(setInputText, "value")} aria-required="true" aria-invalid={Boolean(missing.value || error)} aria-describedby={valueHelp} />
+    {missing.value && <p className="evidence-field-error" id={`${ids}-value-missing`}>{missing.value}</p>}
     <label htmlFor={`${ids}-reason`}>Lý do sửa</label>
-    <textarea id={`${ids}-reason`} value={reason} onChange={change(setReason)} minLength="3" required placeholder="Ví dụ: Đối chiếu lại PDF gốc" />
+    <textarea id={`${ids}-reason`} ref={reasonRef} value={reason} onChange={change(setReason, "reason")} aria-required="true" aria-invalid={Boolean(missing.reason)} aria-describedby={missing.reason ? `${ids}-reason-missing` : undefined} placeholder="Ví dụ: Đối chiếu lại PDF gốc" />
+    {missing.reason && <p className="evidence-field-error" id={`${ids}-reason-missing`}>{missing.reason}</p>}
     {error && <p className="evidence-edit-error" id={`${ids}-error`} role="alert">{error}</p>}
     {readings.length > 0 && <div className="evidence-edit-readings" role="group" aria-label="Chọn số bạn muốn lưu"><span>Ý bạn là:</span>{readings.map((reading) => <button type="button" key={reading} disabled={working} onClick={() => requestPreview(reading)}>{formatNumber(reading)}</button>)}</div>}
     {preview && <p className="evidence-edit-preview" role="status">Sẽ lưu: <b>{preview.display ?? formatNumber(preview.parsed_value)}</b></p>}

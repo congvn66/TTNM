@@ -392,3 +392,30 @@ it("names the account button and closes its menu with Escape", async () => {
   expect(screen.queryByRole("button", { name: /Đăng xuất/ })).toBeNull();
   expect(screen.getByRole("link", { name: "Đến ô đặt câu hỏi" }).getAttribute("href")).toBe("#chat-question");
 });
+
+it("renames with Enter and gives focus back to the opener when a dialog closes", async () => {
+  const session = { id: "chat", title: "My session", documents: [], messages: [] };
+  requestMock.mockImplementation(async (path, options) => {
+    if (path === "/api/v1/sessions") return { sessions: [session] };
+    if (path === "/api/v1/sessions/chat" && options?.method === "PATCH") { session.title = JSON.parse(options.body).title; return { session }; }
+    if (path === "/api/v1/sessions/chat") return { session };
+    return { jobs: [] };
+  });
+  render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  const trigger = await screen.findByRole("button", { name: "Tùy chọn My session" });
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole("menuitem", { name: /Xóa/ }));
+  await screen.findByRole("dialog", { name: "Xóa phiên này?" });
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole("menuitem", { name: /Đổi tên/ }));
+  const input = await screen.findByLabelText("Tên hiển thị");
+  fireEvent.change(input, { target: { value: "Báo cáo quý" } });
+  fireEvent.submit(input.form);
+  await waitFor(() => expect(requestMock).toHaveBeenCalledWith("/api/v1/sessions/chat", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ title: "Báo cáo quý" }) })));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(document.activeElement).toBe(trigger);
+});

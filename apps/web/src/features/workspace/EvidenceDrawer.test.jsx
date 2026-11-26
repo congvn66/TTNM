@@ -139,3 +139,16 @@ it("offers the readings of an ambiguous number and sends the chosen one as numer
   expect(bodies[1]).toEqual({ numeric_value: "1250", reason: "Đối chiếu PDF", expected_revision_id: "k1-r1" });
   expect(bodies[0].input_text).toBe("1.250");
 });
+
+it("says in Vietnamese next to the field what is missing and sends nothing", async () => {
+  mockApi([[`${base}/evidences`, async () => ({ evidences: [row("k1")] })]]);
+  const { drawer } = await openDrawer();
+  fireEvent.click(within(drawer).getByRole("button", { name: /^Sửa số/ }));
+  fireEvent.change(within(drawer).getByLabelText("Giá trị mới"), { target: { value: " " } });
+  fireEvent.click(within(drawer).getByRole("button", { name: "Kiểm tra số" }));
+  expect(within(drawer).getByText("Hãy nhập giá trị mới.")).toBeTruthy();
+  expect(within(drawer).getByText("Hãy ghi lý do sửa, ít nhất 3 ký tự.")).toBeTruthy();
+  expect(document.activeElement).toBe(within(drawer).getByLabelText("Giá trị mới"));
+  expect(within(drawer).getByLabelText("Lý do sửa").getAttribute("aria-invalid")).toBe("true");
+  expect(requestMock.mock.calls.some(([path]) => path.includes("/revisions"))).toBe(false);
+});

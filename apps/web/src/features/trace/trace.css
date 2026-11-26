@@ -143,6 +143,7 @@
 .evidence-history b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .evidence-history time { color: var(--muted); }
 .evidence-history-note { margin: 0; padding: 10px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--text-xs); }
+.evidence-field-error { margin: -4px 0 0; color: var(--color-danger); font-size: var(--text-xs); font-weight: 700; }
 .evidence-edit-error { margin: 0; border-radius: 7px; padding: 7px 8px; background: var(--red-soft); color: var(--color-danger); font-size: var(--text-xs); line-height: 1.45; }
 .evidence-edit-readings { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--ink-soft); font-size: var(--text-xs); }
 .evidence-edit-readings button { border: 1px solid var(--accent-border); border-radius: 7px; padding: 5px 9px; background: var(--accent-soft); color: var(--accent-strong); font: 700 var(--text-sm) var(--font-mono); }

@@ -476,7 +476,7 @@ function ActionMenu({ label, onRename, onDelete }) {
       if (triggerRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
       setOpen(false);
     };
-    const closeOnKey = (event) => { if (event.key === "Escape") setOpen(false); };
+    const closeOnKey = (event) => { if (event.key === "Escape") { setOpen(false); triggerRef.current?.focus(); } };
     document.addEventListener("pointerdown", closeOnPointer);
     document.addEventListener("keydown", closeOnKey);
     return () => {
@@ -484,6 +484,9 @@ function ActionMenu({ label, onRename, onDelete }) {
       document.removeEventListener("keydown", closeOnKey);
     };
   }, [open]);
+  // Focus goes back to the trigger before the chosen action opens a dialog,
+  // so the dialog can hand it back there when it closes.
+  const choose = (action) => { setOpen(false); triggerRef.current?.focus(); action(); };
   const toggle = () => {
     if (open) { setOpen(false); return; }
     const rect = triggerRef.current?.getBoundingClientRect();
@@ -498,14 +501,16 @@ function ActionMenu({ label, onRename, onDelete }) {
   return <>
     <button ref={triggerRef} className="item-menu-trigger" type="button" aria-label={`Tùy chọn ${label}`} aria-expanded={open} onClick={(event) => { event.stopPropagation(); toggle(); }}><Icon name="more" size={16} /></button>
     {open && createPortal(<div ref={menuRef} className="resource-menu-popover" role="menu" style={{ top: position.top, left: position.left }}>
-      <button type="button" role="menuitem" onClick={() => { setOpen(false); onRename(); }}><Icon name="edit" size={13} /> Đổi tên</button>
-      <button type="button" role="menuitem" className="danger" onClick={() => { setOpen(false); onDelete(); }}><Icon name="trash" size={13} /> Xóa</button>
+      <button type="button" role="menuitem" onClick={() => choose(onRename)}><Icon name="edit" size={13} /> Đổi tên</button>
+      <button type="button" role="menuitem" className="danger" onClick={() => choose(onDelete)}><Icon name="trash" size={13} /> Xóa</button>
     </div>, document.body)}
   </>;
 }
 
 // One dialog for confirmations: "rename-*" asks for a name, "delete-*" is
 // destructive, anything else is a plain confirmation with its own wording.
+// It is a form, so Enter confirms; Escape, Hủy and the backdrop cancel. When
+// it closes, focus goes back to what had it when the dialog opened.
 function ResourceDialog({ dialog, busy, onClose, onConfirm }) {
   const inputId = useId();
   const [value, setValue] = useState(dialog?.value ?? "");
@@ -516,19 +521,25 @@ function ResourceDialog({ dialog, busy, onClose, onConfirm }) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [dialog, busy, onClose]);
+  const returnFocus = dialog?.returnFocus;
+  useEffect(() => {
+    if (!returnFocus) return undefined;
+    return () => { if (returnFocus.isConnected) returnFocus.focus(); };
+  }, [returnFocus]);
   if (!dialog) return null;
   const isDelete = dialog.kind.startsWith("delete");
   const needsName = dialog.kind.startsWith("rename");
   const confirmLabel = dialog.confirmLabel ?? (isDelete ? "Xóa khỏi workspace" : "Lưu thay đổi");
+  const submit = (event) => { event.preventDefault(); if (!busy && (!needsName || value.trim())) onConfirm(dialog, value.trim()); };
   return <div className="resource-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="resource-dialog-title" aria-describedby="resource-dialog-description">
+    <form className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="resource-dialog-title" aria-describedby="resource-dialog-description" onSubmit={submit}>
       <div className={`resource-modal-icon ${isDelete ? "danger" : ""}`}><Icon name={dialog.icon ?? (isDelete ? "trash" : "edit")} size={19} /></div>
       <div><p className="dialog-kicker">{needsName ? "CHỈNH SỬA" : "XÁC NHẬN THAO TÁC"}</p><h2 id="resource-dialog-title">{dialog.title}</h2><p id="resource-dialog-description">{dialog.description}</p></div>
       {isDelete && <div className="dialog-warning">Thao tác này sẽ ẩn mục khỏi workspace. Dữ liệu nguồn được archive để bảo toàn lịch sử.</div>}
       {needsName && <div className="dialog-input-label"><label htmlFor={inputId}>Tên hiển thị</label><input id={inputId} autoFocus value={value} onChange={(event) => setValue(event.target.value)} maxLength={dialog.maxLength ?? 255} /></div>}
       {dialog.error && <p className="dialog-error" role="alert">{dialog.error}</p>}
-      <div className="resource-modal-actions"><button type="button" className="dialog-secondary" onClick={onClose} disabled={busy}>Hủy</button><button type="button" autoFocus={!needsName} className={isDelete ? "dialog-danger" : "dialog-primary"} disabled={busy || (needsName && !value.trim())} onClick={() => onConfirm(dialog, value.trim())}>{busy ? (dialog.busyLabel ?? "Đang lưu…") : confirmLabel}</button></div>
-    </section>
+      <div className="resource-modal-actions"><button type="button" className="dialog-secondary" onClick={onClose} disabled={busy}>Hủy</button><button type="submit" autoFocus={!needsName} className={isDelete ? "dialog-danger" : "dialog-primary"} disabled={busy || (needsName && !value.trim())}>{busy ? (dialog.busyLabel ?? "Đang lưu…") : confirmLabel}</button></div>
+    </form>
   </div>;
 }
 
@@ -573,6 +584,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const [requestMetrics, setRequestMetrics] = useState([]);
   const [performanceOpen, setPerformanceOpen] = useState(false);
   const [resourceDialog, setResourceDialog] = useState(null);
+  const openDialog = useCallback((dialog) => setResourceDialog({ ...dialog, returnFocus: document.activeElement }), []);
   const uploadRef = useRef(null);
   const bootedRef = useRef(false);
   const refreshSequenceRef = useRef(0);
@@ -1031,7 +1043,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const canReextract = runtimeHealth?.capabilities?.reextraction?.status === "available";
 
   function reextractDocument(document) {
-    setResourceDialog({
+    openDialog({
       kind: "reextract-document", document, icon: "refresh", confirmLabel: "Đọc lại tài liệu", busyLabel: "Đang gửi yêu cầu…",
       title: "Đọc lại tài liệu này?",
       description: document.extraction_status === "ready"
@@ -1101,7 +1113,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
       </div>
     </header>
     <main className="workspace" id="main-content">
-      <SessionBrowser sessions={sessions} filteredSessions={filteredSessions} activeSession={activeSession} activeDocument={activeDocument} booting={booting} search={search} onSearch={setSearch} busy={busy} onSelectSession={(session) => { setActiveSessionId(session.id); setActiveDocumentId(session.documents[0]?.id ?? null); }} onSelectDocument={setActiveDocumentId} onCreate={createSession} onUpload={() => uploadRef.current?.click()} onDialog={setResourceDialog} onNavigate={onNavigate} />
+      <SessionBrowser sessions={sessions} filteredSessions={filteredSessions} activeSession={activeSession} activeDocument={activeDocument} booting={booting} search={search} onSearch={setSearch} busy={busy} onSelectSession={(session) => { setActiveSessionId(session.id); setActiveDocumentId(session.documents[0]?.id ?? null); }} onSelectDocument={setActiveDocumentId} onCreate={createSession} onUpload={() => uploadRef.current?.click()} onDialog={openDialog} onNavigate={onNavigate} />
       <section className="reader-column" ref={readerRef}><PdfViewer document={activeDocument} sessionId={activeSession?.id} citationPage={citationPage} evidenceQuote={citationQuote} evidenceBbox={citationBbox} onReextract={canReextract ? reextractDocument : undefined} reextractDisabled={busy} />{notice && <div className={`toast ${noticeKind}`} role={noticeKind === "error" ? "alert" : "status"}><span>{notice}</span><button type="button" className="toast-close" aria-label="Đóng thông báo" onClick={clearNotice}><Icon name="close" size={13} /></button></div>}</section>
       <aside className="chat-column">
         <header className="chat-header"><div className="ai-avatar">S</div><div><h2>Trợ lý tài liệu</h2><span>{activeDocument ? activeDocument.file_name : "Chưa chọn tài liệu"}</span></div><span className="mode-badge">{modeLabel}</span></header>
