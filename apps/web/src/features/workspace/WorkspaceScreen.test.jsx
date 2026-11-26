@@ -362,23 +362,31 @@ it("opens a conversation at its newest message", async () => {
   await waitFor(() => expect(Element.prototype.scrollTo).toHaveBeenCalledWith({ top: body.scrollHeight, behavior: "instant" }));
 });
 
-it("tells which edited numbers a re-extraction kept", async () => {
+it.each([
+  ["ready", "Đã đọc lại Report.pdf: 50 số liệu. Giữ lại 2 số đã sửa; 1 số không giữ được vì vị trí đã thay đổi. 1 câu trả lời dùng số đã thay đổi cần cập nhật."],
+  ["failed", "Chưa đọc lại được Report.pdf. Hãy thử lại sau. 3 số bạn đã sửa vẫn được giữ cho lần đọc sau."],
+])("tells what a re-extraction did once it ends (%s)", async (outcome, notice) => {
   let status = "ready";
-  const history = () => status === "ready" && requestMock.mock.calls.some(([path]) => path.endsWith("/extraction"))
-    ? [{ edits_carried_over: ["k1", "k2"], edits_not_carried_over: [{ evidence_key: "k3", numeric_value: "5", code: "LOCATION_CHANGED" }] }]
+  const rerun = () => requestMock.mock.calls.some(([path]) => path.endsWith("/extraction"));
+  const history = () => status === "ready" && rerun()
+    ? [{ edits_carried_over: ["k1", "k2"], edits_not_carried_over: [{ evidence_key: "k3", numeric_value: "5", code: "LOCATION_CHANGED" }], affected_message_ids: ["m1"] }]
     : [];
-  const session = () => ({ id: "chat", title: "My session", messages: [], documents: [{ id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: status, numeric_evidence_count: 50, extraction_history: history() }] });
+  const pending = () => status === "failed" ? [{ evidence_key: "k1" }, { evidence_key: "k2" }, { evidence_key: "k3" }] : [];
+  const session = () => ({ id: "chat", title: "My session", messages: [], documents: [{ id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: status, numeric_evidence_count: 50, extraction_history: history(), pending_edits: pending() }] });
   requestMock.mockImplementation(async (path) => {
     if (path === "/health") return { capabilities: { reextraction: { status: "available" } } };
     if (path === "/api/v1/sessions") return { sessions: [session()] };
-    if (path === "/api/v1/sessions/chat") { const value = session(); if (status === "processing") status = "ready"; return { session: value }; }
+    if (path === "/api/v1/sessions/chat") { const value = session(); if (status === "processing") status = outcome; return { session: value }; }
+    // The server flags answers only once the new reading is ready.
     if (path.endsWith("/extraction")) { status = "processing"; return { affected_message_ids: [] }; }
     return { jobs: [] };
   });
   render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
   fireEvent.click(await screen.findByText("Trích xuất lại"));
+  const dialog = await screen.findByRole("dialog", { name: "Đọc lại tài liệu này?" });
+  expect(dialog.textContent).toContain("chỉ câu trả lời dùng số đã thay đổi mới được đánh dấu");
   fireEvent.click(await screen.findByRole("button", { name: "Đọc lại tài liệu" }));
-  await screen.findByText("Đã đọc lại Report.pdf: 50 số liệu. Giữ lại 2 số đã sửa; 1 số không giữ được vì vị trí đã thay đổi.", {}, { timeout: 4000 });
+  await screen.findByText(notice, {}, { timeout: 4000 });
 });
 
 it("names the account button and closes its menu with Escape", async () => {

@@ -121,11 +121,19 @@ function writeSessionSnapshot(sessions) {
   }
 }
 
+// Why an edit was not carried over to a new reading that is ready. (A failed
+// reading carries nothing over: the edits stay in document.pending_edits.)
 const EDIT_NOT_KEPT_REASONS = {
   NOT_IN_NEW_READING: "không còn trong lần đọc mới",
   LOCATION_CHANGED: "vị trí đã thay đổi",
-  NEW_READING_FAILED: "lần đọc mới không đọc được số",
 };
+
+/** What the latest re-extraction did, once its new reading is ready. */
+function rereadSummary(document) {
+  const run = document.extraction_history?.at(-1);
+  const flagged = run?.affected_message_ids?.length ?? 0;
+  return `Đã đọc lại ${document.file_name}: ${document.numeric_evidence_count ?? 0} số liệu.${carriedEditsSummary(run)}${flagged ? ` ${flagged} câu trả lời dùng số đã thay đổi cần cập nhật.` : ""}`;
+}
 
 /** What happened to the user's edits in the latest re-extraction. */
 function carriedEditsSummary(run) {
@@ -1097,7 +1105,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
       kind: "reextract-document", document, icon: "refresh", confirmLabel: "Đọc lại tài liệu", busyLabel: "Đang gửi yêu cầu…",
       title: "Đọc lại tài liệu này?",
       description: document.extraction_status === "ready"
-        ? `SourceLens sẽ đọc lại “${document.file_name}” và lập lại toàn bộ bảng số liệu. Một số bạn đã sửa chỉ được giữ khi số đó vẫn ở cùng vị trí và in giống hệt trong PDF. Các câu trả lời cũ dùng số liệu sẽ được đánh dấu cần tính lại. Việc này có thể mất vài phút.`
+        ? `SourceLens sẽ đọc lại “${document.file_name}” và lập lại toàn bộ bảng số liệu. Một số bạn đã sửa chỉ được giữ khi số đó vẫn ở cùng vị trí và in giống hệt trong PDF. Khi đọc xong, chỉ câu trả lời dùng số đã thay đổi mới được đánh dấu cần cập nhật. Việc này có thể mất vài phút.`
         : `SourceLens sẽ thử đọc lại “${document.file_name}”. Việc này có thể mất vài phút.`,
     });
   }
@@ -1105,10 +1113,10 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   // Documents being re-read, so the end of the run can be announced.
   const reextractingRef = useRef(new Set());
   async function startReextraction(document) {
-    const result = await request(`/api/v1/sessions/${activeSession.id}/documents/${document.id}/extraction`, { method: "POST" });
+    // Which answers to flag is known only once the new reading is ready.
+    await request(`/api/v1/sessions/${activeSession.id}/documents/${document.id}/extraction`, { method: "POST" });
     reextractingRef.current.add(document.id);
-    const affected = result.affected_message_ids?.length ?? 0;
-    showNotice(`Đang đọc lại ${document.file_name}…${affected ? ` ${affected} câu trả lời cũ cần tính lại.` : ""}`);
+    showNotice(`Đang đọc lại ${document.file_name}…`);
     await refreshSessionDetail(activeSession.id).catch(() => {});
   }
   useEffect(() => {
@@ -1116,9 +1124,12 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     const status = activeDocument?.extraction_status;
     if (!id || !reextractingRef.current.has(id) || !["ready", "failed"].includes(status)) return;
     reextractingRef.current.delete(id);
-    if (status === "ready") showNotice(`Đã đọc lại ${activeDocument.file_name}: ${activeDocument.numeric_evidence_count ?? 0} số liệu.${carriedEditsSummary(activeDocument.extraction_history?.at(-1))}`);
-    else showNotice(`Chưa đọc lại được ${activeDocument.file_name}. Hãy thử lại sau.`, "error");
-  }, [activeDocument?.id, activeDocument?.extraction_status, activeDocument?.file_name, activeDocument?.numeric_evidence_count, activeDocument?.extraction_error, showNotice]);
+    if (status === "ready") showNotice(rereadSummary(activeDocument));
+    else {
+      const kept = activeDocument.pending_edits?.length ?? 0;
+      showNotice(`Chưa đọc lại được ${activeDocument.file_name}. Hãy thử lại sau.${kept ? ` ${kept} số bạn đã sửa vẫn được giữ cho lần đọc sau.` : ""}`, "error");
+    }
+  }, [activeDocument, showNotice]);
 
   const nextTheme = preference === "light" ? "dark" : preference === "dark" ? "system" : "light";
   const nextThemeLabel = { light: "giao diện sáng", dark: "giao diện tối", system: "giao diện theo hệ thống" }[nextTheme];
