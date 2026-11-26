@@ -323,7 +323,7 @@ def test_text_numbers_have_native_word_boxes_and_missing_metadata_stays_null(tmp
     validate_extraction_batch(batch)
 
 
-def _text_artifact(tmp_path, items):
+def _text_artifact(tmp_path, items, locale="vi"):
     import pymupdf
 
     path = tmp_path / "prose.pdf"
@@ -340,7 +340,15 @@ def _text_artifact(tmp_path, items):
     converter = Mock()
     converter.convert.return_value = SimpleNamespace(status="ConversionStatus.SUCCESS",
                                                      document=SimpleNamespace(export_to_dict=lambda: data))
-    return extract_docling_artifact(path, "version", locale="vi", converter=converter)["evidence_batch"]["evidences"]
+    return extract_docling_artifact(path, "version", locale=locale, converter=converter)["evidence_batch"]["evidences"]
+
+
+def test_numbers_are_read_in_the_format_the_page_text_proves_when_none_is_configured(tmp_path):
+    # S1 prints "6,5%", so its table's "18.240" is 18240, not a number the user must confirm.
+    evidences = _text_artifact(tmp_path, [("text", "Doanh thu 18.240 VND, chi phi 6,5% doanh thu.")], locale=None)
+    assert [(e["raw_text"], e["numeric_value"]) for e in evidences] == [("18.240", "18240"), ("6,5%", "6.5")]
+    mixed = _text_artifact(tmp_path, [("text", "Doanh thu 18.240 VND, chi phi 6,5%, lai 21.7%.")], locale=None)
+    assert mixed[0]["data_status"] == "ambiguous"
 
 
 def test_headings_and_period_numbers_are_not_published_as_values(tmp_path):

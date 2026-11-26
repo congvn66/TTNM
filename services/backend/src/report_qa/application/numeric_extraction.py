@@ -171,6 +171,31 @@ def header_period(headers: list[str | None], page_year: str | None = None) -> di
                 return period
     return None
 
+SEPARATORS = {"vi": (".", ","), "en": (",", ".")}  # (thousands, decimal)
+# A well-formed number in one format: digits, optional thousands groups of three, optional decimals.
+GRAMMAR = {
+    locale: re.compile(rf"(?P<whole>[0-9]{{1,3}}(?:{re.escape(thousands)}[0-9]{{3}})+|[0-9]+)(?:{re.escape(decimal)}(?P<fraction>[0-9]+))?")
+    for locale, (thousands, decimal) in SEPARATORS.items()
+}
+
+
+def detected_locale(texts) -> str | None:
+    """The number format that printed quantities prove, when they prove exactly one.
+
+    A printed number proves a format when that format's grammar reads it and
+    the other's does not: "1.234.567", "1.234,5" and "6,5" are Vietnamese,
+    "1,234,567", "1,234.5" and "6.5" are English. "1.234" and "2026" prove
+    nothing. A document that proves both formats has no one format.
+    """
+    found = set()
+    for text in texts:
+        for match in quantities(text or ""):
+            token = match.group().strip("()+-%., ")
+            readers = {locale for locale, grammar in GRAMMAR.items() if grammar.fullmatch(token)}
+            if len(readers) == 1:
+                found |= readers
+    return found.pop() if len(found) == 1 else None
+
 
 def single_year(text: str) -> str | None:
     """The page's year when exactly one year is written on it, alone or in a period ("quý 1/2026")."""

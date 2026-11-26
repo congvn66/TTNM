@@ -18,6 +18,7 @@ from report_qa.application.numeric_extraction import (
     HEADER_JOIN,
     NUMBER,
     decimal_text,
+    detected_locale,
     is_value_text,
     period_near,
     quantities,
@@ -155,6 +156,8 @@ def extract_docling_artifact(
                     "OCR_REQUIRED",
                     f"Trang {number} không có lớp chữ; chưa trích xuất số từ trang này.",
                 )
+        # Unconfigured, numbers are read in the format the page text proves (as the API reads typed numbers).
+        locale = locale or detected_locale(page["text"] for page in pages)
 
         def emit(
             raw,

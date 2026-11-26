@@ -1,6 +1,6 @@
 import pytest
 
-from report_qa.api.number_input import AmbiguousNumberError, TypedNumberError, detected_locale, display_number, exact_number, read_typed_number
+from report_qa.api.number_input import AmbiguousNumberError, TypedNumberError, detected_locale, document_number_locale, display_number, exact_number, read_typed_number
 
 
 def test_document_format_is_detected_only_from_numbers_one_format_can_read():
@@ -17,6 +17,14 @@ def test_a_decimal_number_proves_the_format_whose_grammar_alone_reads_it():
     assert detected_locale(["21.7%", "26,200"]) == "en"
     assert detected_locale(["19,0%", "21.7%"]) is None
     assert detected_locale(["Quý 2/2026", "31.12.2023"]) is None
+
+
+def test_a_document_has_the_format_its_page_text_proves_as_its_extraction_uses(monkeypatch):
+    monkeypatch.delenv("PDF_NUMBER_LOCALE", raising=False)
+    extraction = {"pages": [{"page": 1, "text": "Chi phi 6,5% doanh thu"}], "evidence_batch": {"evidences": []}}
+    assert document_number_locale(extraction) == "vi"
+    monkeypatch.setenv("PDF_NUMBER_LOCALE", "en")
+    assert document_number_locale(extraction) == "en"
 
 
 def test_typed_number_uses_the_format_and_reports_ambiguity():

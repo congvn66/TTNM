@@ -1078,7 +1078,9 @@ def _reading(*numbers):
          "chart_read": None, "confidence": 0.9}
         for key, raw, value, page in numbers
     ]
-    return lambda path, version: {"pages": [{"page": 1, "text": "Doanh thu"}], "evidence_batch": {
+    # A page prints its numbers, as in a real extraction.
+    pages = [{"page": 1, "text": " ".join(["Doanh thu", *(raw for _, raw, _, _ in numbers)])}]
+    return lambda path, version: {"pages": pages, "evidence_batch": {
         "schema_version": 2, "document_version_id": version, "extraction_run_id": str(uuid4()), "scope": "base_document",
         "trigger": None, "evidences": evidences, "warnings": []}}
 

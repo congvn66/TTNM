@@ -1,8 +1,8 @@
 """Read a number the user typed, in the number format of the document.
 
-A document's number format is PDF_NUMBER_LOCALE when it is set, as for
-extraction; otherwise it is the format the document's own printed numbers
-show without doubt (detected_locale); otherwise it is unknown.
+A document's number format is PDF_NUMBER_LOCALE when it is set; otherwise
+it is the format its page text proves (detected_locale), the same rule the
+extraction reads the printed numbers with; otherwise it is unknown.
 
 A typed number must be a well-formed number in that format: digits, then
 optionally thousands separators each followed by exactly three digits, then
@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any, Iterable
+from typing import Any
 
-from report_qa.application.numeric_extraction import quantities
+from report_qa.application.numeric_extraction import GRAMMAR, SEPARATORS, detected_locale
 from report_qa.domain.types import validate_decimal_text
 
 from .user_messages import NUMBER_INPUT_MESSAGES
@@ -28,12 +28,6 @@ from .user_messages import NUMBER_INPUT_MESSAGES
 LOCALES = ("vi", "en")
 # Above this the Decimal arithmetic of the answers (28 digits) starts to round.
 MAX_SIGNIFICANT_DIGITS = 18
-SEPARATORS = {"vi": (".", ","), "en": (",", ".")}  # (thousands, decimal)
-_GRAMMAR = {
-    locale: re.compile(rf"(?P<whole>[0-9]{{1,3}}(?:{re.escape(thousands)}[0-9]{{3}})+|[0-9]+)(?:{re.escape(decimal)}(?P<fraction>[0-9]+))?")
-    for locale, (thousands, decimal) in SEPARATORS.items()
-}
-
 _EXPONENT = re.compile(r"[0-9][eE][-+]?[0-9]")
 
 
@@ -55,26 +49,7 @@ def document_number_locale(extraction: dict[str, Any]) -> str | None:
     configured = os.getenv("PDF_NUMBER_LOCALE") or None
     if configured is not None:
         return configured
-    raw_texts = (item.get("raw_text") for item in (extraction.get("evidence_batch") or {}).get("evidences", []))
-    return detected_locale(raw_texts)
-
-
-def detected_locale(raw_texts: Iterable[str | None]) -> str | None:
-    """The format that printed quantities prove, when they prove exactly one.
-
-    A printed number proves a format when that format's grammar reads it and
-    the other's does not: "1.234.567", "1.234,5" and "6,5" are Vietnamese,
-    "1,234,567", "1,234.5" and "6.5" are English. "1.234" and "2026" prove
-    nothing. A document that proves both formats has no one format.
-    """
-    found = set()
-    for text in raw_texts:
-        for match in quantities(text or ""):
-            token = match.group().strip("()+-%., ")
-            readers = {locale for locale, grammar in _GRAMMAR.items() if grammar.fullmatch(token)}
-            if len(readers) == 1:
-                found |= readers
-    return found.pop() if len(found) == 1 else None
+    return detected_locale(page.get("text") for page in extraction.get("pages", []))
 
 
 def decimal_separator(locale: str | None) -> str | None:
@@ -143,7 +118,7 @@ def _split_sign(text: str, percent: bool) -> tuple[str, bool]:
 
 
 def _read(body: str, locale: str) -> str | None:
-    match = _GRAMMAR[locale].fullmatch(body)
+    match = GRAMMAR[locale].fullmatch(body)
     if match is None:
         return None
     whole = match["whole"].replace(SEPARATORS[locale][0], "").lstrip("0") or "0"
