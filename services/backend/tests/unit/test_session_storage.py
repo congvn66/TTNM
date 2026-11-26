@@ -38,7 +38,7 @@ def test_number_events_are_appended_to_the_reading_log_and_never_rewritten(runti
     document = catalog["sessions"]["s1"]["documents"][0]
     with session_storage.catalog_lock:
         session_storage.record_number_events(document, [_edit("a", "5", "r2", number_state.initial_revision_id("run-1", "a"))])
-        document["chart_extractions"] = [{"chart_region_key": "c", "created_at": "t", "evidence_batch": {"evidences": []}}]
+        document["chart_extractions"] = [{"chart_region_key": "c", "created_at": "t", "document_run_id": "run-1", "evidence_batch": {"evidences": []}}]
     session_storage.save_catalog(catalog)
 
     stored = json.loads((runtime / "sessions.json").read_text(encoding="utf-8"))

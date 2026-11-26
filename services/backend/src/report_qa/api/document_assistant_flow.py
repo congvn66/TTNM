@@ -297,7 +297,7 @@ def answer_document(
                 # is used for this answer only and read again next time.
                 unstored_keys.update(e["evidence_key"] for e in result["evidence_batch"]["evidences"])
             with catalog_lock:
-                document.setdefault("chart_extractions", []).append({**result, "chart_region_key": key, "created_at": utc_now()})
+                document.setdefault("chart_extractions", []).append({**result, "chart_region_key": key, "created_at": utc_now(), "document_run_id": extraction["evidence_batch"].get("extraction_run_id")})
             if persist_chart is None:
                 save(catalog)
         else:

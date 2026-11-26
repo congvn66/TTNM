@@ -1093,7 +1093,7 @@ def test_reextraction_rebuilds_numbers_and_carries_over_only_edits_at_the_same_p
             edited = client.post(f"{base}/evidences/{key}/revisions", json={"numeric_value": value, "reason": "Đối chiếu PDF", "expected_revision_id": rows[key]["current_revision_id"]})
             assert edited.status_code == 200, edited.text
         stored = api_main.catalog["sessions"][created["id"]]["documents"][0]
-        stored["chart_extractions"] = [{"chart_region_key": "page-1-picture-0", "evidence_batch": {"evidences": []}}]
+        stored["chart_extractions"] = [{"chart_region_key": "page-1-picture-0", "document_run_id": stored["extraction_run_id"], "evidence_batch": {"evidences": []}}]
 
         monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(
             ("misread", "18.240", "18240", 1), ("kept", "100", "100", 1), ("moved", "200", "200", 2)))
@@ -1114,6 +1114,107 @@ def test_reextraction_rebuilds_numbers_and_carries_over_only_edits_at_the_same_p
         assert [event["record"]["chart_region_key"] for event in archived if event["kind"] == "chart_read"] == ["page-1-picture-0"]
         assert [event["revision"]["numeric_value"] for event in archived if event.get("evidence_key") == "gone"] == ["310"]
     finally:
+        cleanup_session(created["id"])
+
+
+def _rerun_without_extracting(monkeypatch, base):
+    """Re-run extraction but leave the document queued, as while the new reading is still running."""
+    async def later(*args):
+        return None
+    monkeypatch.setattr(api_main, "_extract_in_background", later)
+    assert client.post(f"{base}/extraction").status_code == 200
+
+
+def test_a_request_that_started_before_a_reextraction_cannot_build_numbers_from_the_old_reading(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("misread", "18.240", "18.24", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "In-flight answer"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        document = api_main.catalog["sessions"][created["id"]]["documents"][0]
+        old_artifact = api_main._load_extraction_artifact(document["extraction_name"])
+        old_name = document["extraction_name"]
+        _rerun_without_extracting(monkeypatch, base)
+
+        # An answer still holding the old reading asks for its numbers.
+        with pytest.raises(api_main.ReadingNotCurrent):
+            api_main.extraction_with_evidence_revisions(document, old_artifact, old_artifact)
+        assert "evidence_state" not in document
+        assert api_main.extraction_path(old_name).exists()
+        assert client.get(f"{base}/evidences").json()["detail"]["code"] == "EXTRACTION_NOT_READY"
+        edit = client.post(f"{base}/evidences/misread/revisions", json={"numeric_value": "1", "reason": "Đối chiếu PDF", "expected_revision_id": "x"})
+        assert (edit.status_code, edit.json()["detail"]["code"]) == (409, "EXTRACTION_NOT_READY")
+
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("misread", "18.240", "18240", 1)))
+        api_main.complete_document_extraction(created["id"], document_id)
+        row = client.get(f"{base}/evidences").json()["evidences"][0]
+        assert row["current_numeric_value"] == "18240"
+        assert document["evidence_state"]["extraction_run_id"] == document["extraction_run_id"] != old_artifact["evidence_batch"]["extraction_run_id"]
+        with pytest.raises(api_main.ReadingNotCurrent):
+            api_main.extraction_with_evidence_revisions(document, old_artifact, old_artifact)
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_an_edit_whose_document_was_re_extracted_meanwhile_is_refused_not_lost(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("kept", "100", "100", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Edit race"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        row = client.get(f"{base}/evidences").json()["evidences"][0]
+        real_ready = api_main._ready_document
+
+        def ready_then_rerun(session, requested):
+            loaded = real_ready(session, requested)
+            with api_main.catalog_lock:  # the re-extraction lands between the check and the edit
+                api_main._archive_extraction(loaded[0])
+                loaded[0]["extraction_status"] = "queued"
+            return loaded
+
+        monkeypatch.setattr(api_main, "_ready_document", ready_then_rerun)
+        edit = client.post(f"{base}/evidences/kept/revisions", json={"numeric_value": "110", "reason": "Đối chiếu PDF", "expected_revision_id": row["current_revision_id"]})
+        assert (edit.status_code, edit.json()["detail"]["code"]) == (409, "EXTRACTION_NOT_READY")
+        assert api_main.catalog["sessions"][created["id"]]["documents"][0]["number_log"] == []
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_a_chart_read_made_on_an_earlier_reading_is_dropped(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("kept", "100", "100", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Stale chart read"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        document = api_main.catalog["sessions"][created["id"]]["documents"][0]
+        value = {**_reading(("chart-1", "5", "5", 1))("x", "v")["evidence_batch"]["evidences"][0], "source_type": "chart"}
+        chart = {"chart_region_key": "r", "created_at": api_main.utc_now(), "evidence_batch": {"evidences": [value]}}
+        document["chart_extractions"] = [{**chart, "document_run_id": "an-earlier-reading"}, {**chart, "document_run_id": document["extraction_run_id"]}]
+        api_main.save_catalog(api_main.catalog)
+        assert [record["document_run_id"] for record in document["chart_extractions"]] == [document["extraction_run_id"]]
+        assert [event["kind"] for event in document["number_log"]] == ["chart_read"]
+        assert "chart-1" in {row["evidence_key"] for row in client.get(f"/api/v1/sessions/{created['id']}/documents/{document_id}/evidences").json()["evidences"]}
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_a_crash_during_reextraction_never_leaves_a_ready_document_without_its_artifact(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("kept", "100", "100", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Crash window"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        name = api_main.catalog["sessions"][created["id"]]["documents"][0]["extraction_name"]
+
+        def crash(*args):
+            raise RuntimeError("killed before the catalog was saved")
+        monkeypatch.setattr(api_main, "save_catalog", crash)
+        with pytest.raises(RuntimeError):
+            client.post(f"{base}/extraction")
+        on_disk = api_main.load_catalog()["sessions"][created["id"]]["documents"][0]
+        assert on_disk["extraction_status"] == "ready" and on_disk["extraction_name"] == name
+        assert api_main.extraction_path(name).exists()
+    finally:
+        monkeypatch.undo()
         cleanup_session(created["id"])
 
 

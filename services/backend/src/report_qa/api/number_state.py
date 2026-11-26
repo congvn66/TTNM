@@ -27,6 +27,15 @@ INITIAL_REASON = "Giá trị trích xuất gốc, không thể sửa trực ti�
 REREAD_REASON = "Giá trị được đọc lại và xác minh."
 
 
+class ReadingNotCurrent(Exception):
+    """Numbers were asked for a reading that is not the document's current ready reading."""
+
+    def __init__(self, document_id: str | None, run_id: str | None) -> None:
+        super().__init__(f"reading {run_id} is not the current reading of document {document_id}")
+        self.document_id = document_id
+        self.run_id = run_id
+
+
 def initial_revision_id(run_id: str, evidence_key: str) -> str:
     return str(uuid5(_IDS, f"{run_id}/{evidence_key}/initialize"))
 

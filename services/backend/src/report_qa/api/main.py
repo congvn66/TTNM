@@ -67,7 +67,7 @@ from .session_storage import (
     save_catalog as disk_save_catalog,
     utc_now,
 )
-from .number_state import apply_event, edit_event, replay, run_id_of
+from .number_state import ReadingNotCurrent, apply_event, edit_event, replay, run_id_of
 from .object_storage_runtime import (
     ObjectStorageError,
     cache_extraction,
@@ -226,6 +226,12 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException) -> R
         # Raised by the framework (unknown path, wrong method): no code of ours yet.
         exc = StarletteHTTPException(exc.status_code, error_detail(_HTTP_CODES.get(exc.status_code, "HTTP_ERROR")), exc.headers)
     return await http_exception_handler(request, exc)
+
+
+@app.exception_handler(ReadingNotCurrent)
+def reading_not_current_handler(_: Request, exc: ReadingNotCurrent) -> JSONResponse:
+    flow_log("READING_NOT_CURRENT", document_id=exc.document_id, extraction_run_id=exc.run_id)
+    return JSONResponse(status_code=409, content={"detail": error_detail("EXTRACTION_NOT_READY")})
 
 
 @app.exception_handler(RequestValidationError)
@@ -545,10 +551,17 @@ def clean_file_name(name: str) -> str:
     return stem[: MAX_FILE_NAME_CHARS - len(extension) - 1].rstrip() + "." + extension
 
 
-def extract_pdf_pages(path: Any, extraction_name: str, document_version_id: str) -> dict[str, Any]:
+def extract_pdf_pages(path: Any, document_id: str, document_version_id: str) -> dict[str, Any]:
+    """Read the PDF into a new artifact, extracted/<document id>.<run id>.json.
+
+    Each reading has its own artifact file; it is never moved or overwritten,
+    so a request still reading an earlier one keeps a whole file.
+    """
+    extraction_name = None
     try:
         artifact = storable(extract_pdf_artifact(path, document_version_id))
         EXTRACTION_ROOT.mkdir(parents=True, exist_ok=True)
+        extraction_name = f"{document_id}.{run_id_of(artifact)}.json"
         target = extraction_path(extraction_name)
         temporary = target.with_suffix(".tmp")
         temporary.write_text(json.dumps(artifact, ensure_ascii=False), encoding="utf-8")
@@ -556,6 +569,7 @@ def extract_pdf_pages(path: Any, extraction_name: str, document_version_id: str)
         persist_extraction_cache(extraction_name, target)
         return {
             "status": "ready",
+            "extraction_name": extraction_name,
             "page_count": len(artifact["pages"]),
             "numeric_evidence_count": len(artifact["evidence_batch"]["evidences"]),
             "error": None,
@@ -565,7 +579,7 @@ def extract_pdf_pages(path: Any, extraction_name: str, document_version_id: str)
         # package instead of a bare "ModuleNotFoundError".
         return {"status": "failed", "page_count": None, "numeric_evidence_count": 0, "error": f"MISSING_DEPENDENCY:{exc.name}"}
     except Exception as exc:
-        logger.exception("PDF extraction failed for %s", extraction_name)
+        logger.exception("PDF extraction failed for document %s (%s)", document_id, extraction_name)
         return {"status": "failed", "page_count": None, "numeric_evidence_count": 0, "error": type(exc).__name__}
 
 
@@ -627,7 +641,6 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
         "created_at": now,
         "file_url": f"/api/v1/sessions/{session['id']}/documents/{document_id}/file",
         "storage_name": storage_name,
-        "extraction_name": f"{document_id}.json",
     }
     record.update({"extraction_status": "queued", "page_count": page_count, "numeric_evidence_count": 0, "extraction_error": None})
     with catalog_lock:
@@ -669,14 +682,12 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
     with catalog_lock:
         document.update(extraction_status="processing", extraction_error=None)
     save_catalog(catalog, owner)
-    extraction = extract_pdf_pages(cache_pdf(document["storage_name"]), document["extraction_name"], document_id)
-    artifact = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8")) if extraction["status"] == "ready" else None
+    extraction = extract_pdf_pages(cache_pdf(document["storage_name"]), document_id, document_id)
+    artifact = _load_extraction_artifact(extraction["extraction_name"]) if extraction["status"] == "ready" else None
     with catalog_lock:
         document.update({"extraction_status": extraction["status"], "page_count": extraction["page_count"], "numeric_evidence_count": extraction["numeric_evidence_count"], "extraction_error": extraction["error"]})
-        document.update({"extraction_run_id": run_id_of(artifact) if artifact else None, "extracted_at": utc_now(), "number_event_count": 0, "number_log": [], "chart_extractions": []})
-        document.pop("evidence_state", None)
         if artifact is not None:
-            ensure_document_evidence_state(document, artifact)
+            _publish_reading(document, extraction["extraction_name"], artifact)
         _carry_over_edits(document, artifact)
         session["updated_at"] = utc_now()
     try:
@@ -701,6 +712,14 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
     if extraction["status"] != "ready":
         # The worker must retry/fail the job instead of acknowledging success.
         raise RuntimeError(f"EXTRACTION_FAILED:{extraction['error']}")
+
+
+def _publish_reading(document: dict[str, Any], extraction_name: str, artifact: dict[str, Any]) -> None:
+    """Make a written artifact the document's current reading, with no number events yet. Call under catalog_lock."""
+    document.update({"extraction_name": extraction_name, "extraction_run_id": run_id_of(artifact), "extracted_at": utc_now(),
+                     "number_event_count": 0, "number_log": [], "chart_extractions": []})
+    document.pop("evidence_state", None)
+    ensure_document_evidence_state(document, artifact)
 
 
 def _extract_now(session_id: str, document_id: str, trace_id: str | None = None, owner_id: str | UUID | None = None) -> None:
@@ -939,7 +958,7 @@ def delete_session_document(session_id: str, document_id: str, request: Request)
 
 
 def _archive_extraction(document: dict[str, Any]) -> dict[str, Any]:
-    """Move the current reading aside under its run id: its artifact, its number log and the user's edits.
+    """Record the current reading in the history: its artifact, its number log and the user's edits.
 
     The document then has no number state until the new reading is ready.
     """
@@ -949,21 +968,11 @@ def _archive_extraction(document: dict[str, Any]) -> dict[str, Any]:
         "archived_at": utc_now(), "extraction_run_id": None, "artifact": None, "number_state": None,
         "user_edits": [], "edits_carried_over": None, "edits_not_carried_over": None,
     }
-    current = extraction_path(document["extraction_name"])
-    artifact = None
-    if current.exists():
-        try:
-            artifact = json.loads(current.read_text(encoding="utf-8"))
-            run_id = artifact["evidence_batch"]["extraction_run_id"]
-        except (OSError, ValueError, KeyError, TypeError):
-            artifact, run_id = None, None
-        entry["extraction_run_id"] = run_id
-    archived_name = f"{document['id']}.{entry['extraction_run_id'] or uuid4()}"
-    if current.exists():
-        os.replace(current, extraction_path(f"{archived_name}.json"))
-        entry["artifact"] = f"{archived_name}.json"
     run_id = document.get("extraction_run_id")
     if run_id:
+        # The artifact stays where it is: it is this reading's own file.
+        entry.update(extraction_run_id=run_id, artifact=document["extraction_name"])
+        artifact = _base_extraction_or_none(document)
         record_chart_reads(document)
         if artifact is not None and run_id_of(artifact) == run_id:
             ensure_document_evidence_state(document, artifact)
@@ -1259,18 +1268,15 @@ def relevant_pages(document: dict[str, Any], question: str, limit: int = 3) -> l
     artifact_path = cache_extraction(document["extraction_name"])
     payload = json.loads(artifact_path.read_text(encoding="utf-8"))
     if "evidence_batch" not in payload:
-        upgraded = extract_pdf_pages(
-            cache_pdf(document["storage_name"]),
-            document["extraction_name"],
-            document["id"],
-        )
+        upgraded = extract_pdf_pages(cache_pdf(document["storage_name"]), document["id"], document["id"])
         if upgraded["status"] != "ready":
             raise user_error(409, "EXTRACTION_UPGRADE_FAILED")
+        payload = _load_extraction_artifact(upgraded["extraction_name"])
         with catalog_lock:
             document["numeric_evidence_count"] = upgraded["numeric_evidence_count"]
             document["page_count"] = upgraded["page_count"]
+            _publish_reading(document, upgraded["extraction_name"], payload)
         save_catalog(catalog)
-        payload = json.loads(artifact_path.read_text(encoding="utf-8"))
         flow_log("EXTRACTION_ARTIFACT_UPGRADED", document_id=document["id"], numeric_evidence_count=upgraded["numeric_evidence_count"])
     stop_words = {"bao", "nhiêu", "những", "của", "trong", "được", "với", "theo", "này", "là", "và", "cho", "một"}
     normalized_question = normalize_search_text(question)
@@ -1307,13 +1313,19 @@ def ensure_document_evidence_state(document: dict[str, Any], artifact: dict[str,
     run_id = run_id_of(artifact)
     state = cached_evidence_state(document, run_id)
     if state is None:
-        events = document.get("number_log", []) if document.get("extraction_run_id") == run_id else []
-        state = document["evidence_state"] = replay(artifact, events, read_at=document.get("extracted_at"))
+        state = document["evidence_state"] = replay(artifact, document.get("number_log", []), read_at=document.get("extracted_at"))
     return state
 
 
 def cached_evidence_state(document: dict[str, Any], run_id: str) -> dict[str, Any] | None:
-    """The built number state of reading ``run_id``, with new chart reads logged; None when not built. Call under catalog_lock."""
+    """The built number state of reading ``run_id``, with new chart reads logged; None when not built. Call under catalog_lock.
+
+    Raises ReadingNotCurrent unless ``run_id`` is the document's current ready
+    reading: a request that started before a re-extraction must not build or
+    change the numbers of the reading it started with.
+    """
+    if document.get("extraction_status") != "ready" or document.get("extraction_run_id") != run_id:
+        raise ReadingNotCurrent(document.get("id"), run_id)
     record_chart_reads(document)
     state = document.get("evidence_state")
     return state if state is not None and state.get("extraction_run_id") == run_id else None

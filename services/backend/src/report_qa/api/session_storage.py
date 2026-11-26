@@ -162,11 +162,22 @@ def record_number_events(document: dict[str, Any], events: list[dict[str, Any]])
 
 
 def record_chart_reads(document: dict[str, Any]) -> None:
-    """Log the chart reads appended to ``chart_extractions`` since the last call. Call under catalog_lock."""
+    """Log the chart reads appended to ``chart_extractions`` since the last call. Call under catalog_lock.
+
+    A chart read belongs to the reading it was made on (its
+    ``document_run_id``). One made on another reading, e.g. by an answer that
+    started before a re-extraction, is dropped.
+    """
+    records = document.get("chart_extractions") or []
     logged = sum(1 for event in document.get("number_log", []) if event["kind"] == "chart_read")
-    new = (document.get("chart_extractions") or [])[logged:]
-    if new and document.get("extraction_run_id"):
-        record_number_events(document, [numbers.chart_read_event(record) for record in new])
+    run_id = document.get("extraction_run_id")
+    new = records[logged:]
+    kept = [record for record in new if run_id and record.get("document_run_id") == run_id]
+    if len(kept) != len(new):
+        logger.warning("Dropped %d chart reads of document %s made on another reading", len(new) - len(kept), document.get("id"))
+        records[logged:] = kept
+    if kept:
+        record_number_events(document, [numbers.chart_read_event(record) for record in kept])
 
 
 def _read_number_log(name: str) -> list[dict[str, Any]]:
