@@ -90,7 +90,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .upload-button { border: 1px solid var(--inverse-bg); background: var(--inverse-bg); color: #fff; box-shadow: var(--shadow-1); }
 .upload-button:hover:not(:disabled) { border-color: #303036; background: #303036; }
 
-.workspace { position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: 258px minmax(500px, 1fr) minmax(380px, 430px); grid-template-areas: "sessions reader chat"; }
+.workspace { position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: clamp(220px, 19vw, 270px) minmax(0, 1fr) clamp(340px, 30vw, 440px); grid-template-areas: "sessions reader chat"; }
 .session-sidebar { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 20px 14px 14px; overflow: hidden; border-right: 1px solid var(--border); background: var(--surface-soft); }
 .workspace > .session-sidebar:not(.session-browser) { display: none !important; }
 .workspace > .session-browser { grid-area: sessions; z-index: 4; }
@@ -105,7 +105,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .session-heading small { display: block; color: var(--gold-dark); font-size: 8px; font-weight: 800; letter-spacing: .14em; }
 .session-heading h2 { margin: 4px 0 0; color: var(--ink); font-size: 15px; font-weight: 730; letter-spacing: -.025em; }
 .session-heading button { display: grid; place-items: center; width: 31px; height: 31px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--ink-soft); box-shadow: var(--shadow-1); }
-.session-heading .session-create-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: auto; padding: 0 10px; color: var(--accent); font-size: 10px; font-weight: 750; }
+.session-heading .session-create-button { flex: 0 0 auto; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: auto; padding: 0 10px; color: var(--accent); font-size: 10px; font-weight: 750; }
 .session-heading button:hover:not(:disabled) { border-color: #b7aa8c; background: var(--gold-soft); color: var(--gold-dark); }
 .session-search { width: 100%; height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 0 11px; background: var(--surface); color: var(--ink); font-size: 11px; box-shadow: var(--shadow-1); }
 .session-search::placeholder { color: var(--subtle); }
@@ -120,7 +120,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .session-item.active .session-icon { background: #efe2bf; color: var(--gold-dark); }
 .session-button b, .document-list b { display: block; overflow: hidden; color: var(--ink-soft); font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .session-button small, .document-list small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
-.document-list { display: grid; gap: 4px; padding: 0 8px 9px 19px; }
+.document-list { display: grid; gap: 4px; padding: 0 8px 9px 10px; }
+/* Long report names are the main way to tell documents apart: show two lines. */
+.document-list .document-button b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; }
 .document-list > button { width: 100%; min-width: 0; display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: 7px; border: 1px solid transparent; border-radius: 8px; padding: 8px; background: transparent; color: var(--ink-soft); text-align: left; }
 .document-list > button:hover, .document-list > button.selected { border-color: #ddd6c7; background: var(--surface); box-shadow: var(--shadow-1); }
 .session-row, .document-row { display: grid; grid-template-columns: minmax(0, 1fr) 27px; align-items: center; }
@@ -144,10 +146,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .sidebar-note span { margin-top: 4px; color: var(--muted); font-size: 9px; line-height: 1.45; }
 
 .reader-column { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #e9e8e5; }
-.reader-shell { height: 100%; display: grid; grid-template-rows: 58px minmax(0, 1fr); }
-.reader-toolbar { display: flex; align-items: center; gap: 13px; min-width: 0; padding: 0 14px; border-bottom: 1px solid var(--border); background: rgba(255, 255, 255, .97); }
-.reader-file { min-width: 0; display: grid; gap: 3px; margin-right: auto; }
-.reader-file strong { max-width: 260px; overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+.reader-shell { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+/* Wraps the file name onto its own row when the reader column is narrow. */
+.reader-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 13px; min-width: 0; padding: 8px 14px; border-bottom: 1px solid var(--border); background: rgba(255, 255, 255, .97); }
+.reader-file { flex: 1 1 180px; min-width: 0; display: grid; gap: 3px; }
+.reader-file strong { overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
 .reader-file span { color: var(--muted); font-size: 9px; }
 .page-control, .zoom-control { display: flex; align-items: center; gap: 4px; }
 .page-control button, .zoom-control button { display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface); color: #5b5b61; }
@@ -306,11 +309,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .connection-card > small { display: block; margin-top: 16px; color: var(--muted); font-size: 9px; line-height: 1.5; }
 
 @media (max-width: 1260px) {
-  .workspace { grid-template-columns: 220px minmax(430px, 1fr) 360px; }
   .brand { min-width: 190px; }
   .storage-pill { display: none; }
-  .reader-file strong { max-width: 190px; }
-  .top-nav { display: none; }
 }
 @media (max-width: 1020px) {
   body { overflow: auto; }
@@ -476,7 +476,7 @@ body { background: var(--canvas); }
 .connection-pill, .storage-pill { border-color: var(--border); background: var(--canvas); color: var(--muted); }
 .upload-button { border-color: #0369a1; background: #0369a1; box-shadow: 0 5px 12px rgba(3, 105, 161, .17); }
 .upload-button:hover:not(:disabled) { border-color: #075985; background: #075985; }
-.workspace { grid-template-columns: 270px minmax(500px, 1fr) minmax(390px, 440px); background: var(--canvas); }
+.workspace { background: var(--canvas); }
 .session-sidebar { padding: 22px 16px 16px; border-right-color: var(--border); background: var(--surface); }
 .sidebar-nav-item { min-height: 36px; border-radius: 9px; color: var(--muted); }
 .sidebar-nav-item.active { background: var(--accent-soft); color: var(--accent-strong); box-shadow: none; }
@@ -581,18 +581,20 @@ body { background: var(--canvas); }
   .audit-button { padding-inline: 8px; }
   .audit-button .ui-icon { display: none; }
 }
-@media (max-width: 1120px) {
+@media (max-width: 1180px) {
+  .profile-copy { display: none; }
+  .profile-chip { padding: 3px; }
+}
+@media (max-width: 1020px) {
   .topbar-context { display: none; }
   .top-actions .connection-pill { max-width: 32px; overflow: hidden; padding-inline: 8px; }
   .top-actions .connection-pill i { flex: 0 0 auto; }
   .top-actions .connection-pill { font-size: 0; }
   .top-actions .connection-pill i { margin: 0; }
   .audit-button { display: none; }
-  .profile-copy { display: none; }
-  .profile-chip { padding: 3px; }
 }
-.document-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 4px 3px 38px; color: var(--muted); font-size: 10px; font-weight: 700; }
-.session-upload-button { display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: 6px; padding: 4px 6px; background: var(--gold-soft); color: var(--gold-dark); font-size: 10px; font-weight: 750; cursor: pointer; }
+.document-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 4px 3px 4px; color: var(--muted); font-size: 10px; font-weight: 700; }
+.session-upload-button { flex: 0 0 auto; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: 6px; padding: 4px 6px; background: var(--gold-soft); color: var(--gold-dark); font-size: 10px; font-weight: 750; cursor: pointer; }
 .session-upload-button:hover { background: var(--gold); color: var(--on-gold); }
 
 /* Library scene */
