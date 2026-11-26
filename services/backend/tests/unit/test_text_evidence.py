@@ -153,8 +153,9 @@ def test_flow_returns_located_text_and_data_evidence(tmp_path, monkeypatch):
     key = base["evidence_batch"]["evidences"][0]["evidence_key"]
     session = {"messages": []}
     message = flow.answer_document(
-        session, {"id": "doc", "extraction_name": "x", "storage_name": "x"}, "?", "trace", [], {"sessions": {}},
-        overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision,
+        session, {"id": "doc", "extraction_name": "x", "storage_name": "x", "extraction_status": "ready",
+                  "extraction_run_id": base["evidence_batch"]["extraction_run_id"]}, "?", "trace", [], {"sessions": {}},
+        overlay=lambda document, extraction: extraction_with_evidence_revisions(document, extraction, base), snapshot=snapshot_answer_revision,
         complete=sequence({"action": "answer", "answer": "Báo cáo doanh thu 2024; Q1 là 1250.50.",
                            "evidence_keys": [key], "sources": [{"page": 1, "quote": quote}]}),
     )["assistant_message"]

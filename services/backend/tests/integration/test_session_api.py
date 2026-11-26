@@ -395,7 +395,7 @@ def test_parallel_requests_with_one_idempotency_key_answer_once(monkeypatch) -> 
         cleanup_session(created["id"])
 
 
-def test_reading_evidences_saves_the_catalog_only_when_something_changed(monkeypatch) -> None:
+def test_reading_evidences_never_saves_the_catalog(monkeypatch) -> None:
     created = client.post("/api/v1/sessions", json={"title": "Read-only GET"}).json()["session"]
     try:
         document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
@@ -407,9 +407,10 @@ def test_reading_evidences_saves_the_catalog_only_when_something_changed(monkeyp
         assert client.get(f"{base}/evidences").status_code == 200
         assert client.get(f"{base}/evidences/{key}/revisions").status_code == 200
         assert saves == []
+        # The state is rebuilt from the artifact and the log; nothing is written.
         api_main.catalog["sessions"][created["id"]]["documents"][0].pop("evidence_state")
         assert client.get(f"{base}/evidences").status_code == 200
-        assert saves == [1]
+        assert saves == []
     finally:
         cleanup_session(created["id"])
 
@@ -1109,9 +1110,9 @@ def test_reextraction_rebuilds_numbers_and_carries_over_only_edits_at_the_same_p
         assert entry["edits_carried_over"] == ["kept"]
         assert sorted((item["evidence_key"], item["code"]) for item in entry["edits_not_carried_over"]) == [("gone", "NOT_IN_NEW_READING"), ("moved", "LOCATION_CHANGED")]
         assert stored["chart_extractions"] == []
-        archived = json.loads(api_main.number_state_path(entry["number_state"]).read_text(encoding="utf-8"))
-        assert archived["chart_extractions"][0]["chart_region_key"] == "page-1-picture-0"
-        assert archived["evidence_state"]["items"]["gone"]["revisions"][-1]["numeric_value"] == "310"
+        archived = [json.loads(line) for line in api_main.number_state_path(entry["number_state"]).read_text(encoding="utf-8").splitlines()]
+        assert [event["record"]["chart_region_key"] for event in archived if event["kind"] == "chart_read"] == ["page-1-picture-0"]
+        assert [event["revision"]["numeric_value"] for event in archived if event.get("evidence_key") == "gone"] == ["310"]
     finally:
         cleanup_session(created["id"])
 

@@ -54,18 +54,20 @@ from report_qa.infrastructure.postgres.runtime_store import PostgresRuntimeStore
 from report_qa.infrastructure.postgres.job_queue import PostgresJobQueue
 from .session_storage import (
     EXTRACTION_ROOT,
-    NUMBER_STATE_FIELDS,
+    MEMORY_ONLY_FIELDS,
     UPLOAD_ROOT,
     catalog_lock,
     document_path,
     extraction_path,
     load_catalog,
-    number_state,
+    number_log_name,
     number_state_path,
+    record_chart_reads,
+    record_number_events,
     save_catalog as disk_save_catalog,
     utc_now,
-    write_json_atomically,
 )
+from .number_state import apply_event, edit_event, replay, run_id_of
 from .object_storage_runtime import (
     ObjectStorageError,
     cache_extraction,
@@ -491,7 +493,7 @@ def readiness_probe() -> JSONResponse:
 
 # Storage names are server-side; number state is large and has its own
 # endpoints (/evidences), so the session payload stays metadata only.
-PRIVATE_DOCUMENT_FIELDS = {"storage_name", "extraction_name", *NUMBER_STATE_FIELDS}
+PRIVATE_DOCUMENT_FIELDS = {"storage_name", "extraction_name", "number_event_count", *MEMORY_ONLY_FIELDS}
 
 
 def public_document(document: dict[str, Any]) -> dict[str, Any]:
@@ -671,6 +673,8 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
     artifact = json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8")) if extraction["status"] == "ready" else None
     with catalog_lock:
         document.update({"extraction_status": extraction["status"], "page_count": extraction["page_count"], "numeric_evidence_count": extraction["numeric_evidence_count"], "extraction_error": extraction["error"]})
+        document.update({"extraction_run_id": run_id_of(artifact) if artifact else None, "extracted_at": utc_now(), "number_event_count": 0, "number_log": [], "chart_extractions": []})
+        document.pop("evidence_state", None)
         if artifact is not None:
             ensure_document_evidence_state(document, artifact)
         _carry_over_edits(document, artifact)
@@ -935,9 +939,9 @@ def delete_session_document(session_id: str, document_id: str, request: Request)
 
 
 def _archive_extraction(document: dict[str, Any]) -> dict[str, Any]:
-    """Move the current reading aside under its run id: its artifact, its number state and the user's edits.
+    """Move the current reading aside under its run id: its artifact, its number log and the user's edits.
 
-    The document then has no number state until the new reading builds it.
+    The document then has no number state until the new reading is ready.
     """
     entry = {
         "status": document.get("extraction_status"), "error": document.get("extraction_error"),
@@ -958,13 +962,16 @@ def _archive_extraction(document: dict[str, Any]) -> dict[str, Any]:
     if current.exists():
         os.replace(current, extraction_path(f"{archived_name}.json"))
         entry["artifact"] = f"{archived_name}.json"
-    state = number_state(document)
-    if state:
-        entry["user_edits"] = _user_edits(document, artifact)
-        write_json_atomically(number_state_path(archived_name), state)
-        entry["number_state"] = archived_name
+    run_id = document.get("extraction_run_id")
+    if run_id:
+        record_chart_reads(document)
+        if artifact is not None and run_id_of(artifact) == run_id:
+            ensure_document_evidence_state(document, artifact)
+            entry["user_edits"] = _user_edits(document, artifact)
+        if number_state_path(number_log_name(document["id"], run_id)).exists():
+            entry["number_state"] = number_log_name(document["id"], run_id)
     document.pop("evidence_state", None)
-    document["chart_extractions"] = []
+    document.update({"extraction_run_id": None, "number_event_count": 0, "number_log": [], "chart_extractions": []})
     document.setdefault("extraction_history", []).append(entry)
     return entry
 
@@ -1020,7 +1027,7 @@ def _carry_over_edits(document: dict[str, Any], artifact: dict[str, Any] | None)
         elif edit["location"] != _evidence_location(evidences[key]):
             code = "LOCATION_CHANGED"
         else:
-            _append_carried_edit(document["evidence_state"], items[key], edit)
+            _append_carried_edit(document, items[key], edit)
             carried.append(key)
             continue
         not_carried.append({"evidence_key": key, "numeric_value": edit["numeric_value"], "code": code})
@@ -1028,7 +1035,7 @@ def _carry_over_edits(document: dict[str, Any], artifact: dict[str, Any] | None)
     entry["edits_not_carried_over"] = not_carried
 
 
-def _append_carried_edit(state: dict[str, Any], item: dict[str, Any], edit: dict[str, Any]) -> None:
+def _append_carried_edit(document: dict[str, Any], item: dict[str, Any], edit: dict[str, Any]) -> None:
     current = item["revisions"][-1]
     if current["numeric_value"] is not None and Decimal(current["numeric_value"]) == Decimal(edit["numeric_value"]):
         return  # the new reading already has the edited value
@@ -1037,9 +1044,17 @@ def _append_carried_edit(state: dict[str, Any], item: dict[str, Any], edit: dict
         "numeric_value": edit["numeric_value"], "old_numeric_value": current["numeric_value"], "previous_revision_id": current["id"],
         "reason": edit["reason"], "carried_over_from_revision_id": edit["revision_id"],
     }
-    item["revisions"].append(revision)
-    item["current_revision_id"] = revision["id"]
-    state["data_revision"] += 1
+    _append_edit(document, item["evidence_key"], revision, edit["location"])
+
+
+def _append_edit(document: dict[str, Any], evidence_key: str, revision: dict[str, Any], location: dict[str, Any] | None) -> None:
+    """Add a user's edit to the current reading. Call under catalog_lock."""
+    event = edit_event(evidence_key, revision, location)
+    if postgres_runtime:
+        # The database stores the revision (see create_evidence_revision).
+        apply_event(document["evidence_state"], event)
+    else:
+        record_number_events(document, [event])
 
 
 @app.post(
@@ -1104,15 +1119,15 @@ def read_session_document_file(session_id: str, document_id: str, request: Reque
     return FileResponse(path, media_type="application/pdf", filename=document["file_name"], content_disposition_type="inline")
 
 
-def _ready_document(session: dict[str, Any], document_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Document plus its extraction (with chart batches); 404/409 instead of a 500."""
+def _ready_document(session: dict[str, Any], document_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Document, its extraction artifact and the artifact with its chart reads; 404/409 instead of a 500."""
     document = next((item for item in session["documents"] if item["id"] == document_id), None)
     if document is None:
         raise user_error(404, "DOCUMENT_NOT_FOUND")
     if document.get("extraction_status") != "ready":
         raise user_error(409, "EXTRACTION_NOT_READY")
-    extraction = with_chart_batches(document, _load_extraction_artifact(document["extraction_name"]))
-    return document, extraction
+    artifact = _load_extraction_artifact(document["extraction_name"])
+    return document, artifact, with_chart_batches(document, artifact)
 
 
 @app.get(
@@ -1123,13 +1138,13 @@ def _ready_document(session: dict[str, Any], document_id: str) -> tuple[dict[str
 )
 def list_document_evidences(session_id: str, document_id: str, request: Request) -> dict[str, Any]:
     session = get_session(session_id, owner_id_for_request(request))
-    document, extraction = _ready_document(session, document_id)
+    document, artifact, extraction = _ready_document(session, document_id)
     with catalog_lock:
-        return _evidence_records(document, document_id, extraction)
+        return _evidence_records(document, document_id, artifact, extraction)
 
 
-def _evidence_records(document: dict[str, Any], document_id: str, extraction: dict[str, Any]) -> dict[str, Any]:
-    state, changed = _ensure_evidence_state_reporting_change(document, extraction)
+def _evidence_records(document: dict[str, Any], document_id: str, artifact: dict[str, Any], extraction: dict[str, Any]) -> dict[str, Any]:
+    state = ensure_document_evidence_state(document, artifact)
     records = []
     for evidence in (extraction.get("evidence_batch") or {}).get("evidences", []):
         item = state["items"][evidence["evidence_key"]]
@@ -1144,8 +1159,6 @@ def _evidence_records(document: dict[str, Any], document_id: str, extraction: di
             "original_numeric_value": item["original_numeric_value"], "current_numeric_value": current["numeric_value"],
             "current_revision_id": current["id"], "revision_count": len(item["revisions"]),
         })
-    if changed and not postgres_runtime:
-        save_catalog(catalog)
     return json.loads(json.dumps({"document_id": document_id, "data_revision": state["data_revision"], "evidences": records}))
 
 
@@ -1155,14 +1168,12 @@ def _evidence_records(document: dict[str, Any], document_id: str, extraction: di
 )
 def list_evidence_revisions(session_id: str, document_id: str, evidence_key: str, request: Request) -> dict[str, Any]:
     session = get_session(session_id, owner_id_for_request(request))
-    document, extraction = _ready_document(session, document_id)
+    document, artifact, _ = _ready_document(session, document_id)
     with catalog_lock:
-        state, changed = _ensure_evidence_state_reporting_change(document, extraction)
+        state = ensure_document_evidence_state(document, artifact)
         item = state["items"].get(evidence_key)
         if item is None:
             raise user_error(404, "EVIDENCE_NOT_FOUND")
-        if changed and not postgres_runtime:
-            save_catalog(catalog)
         return json.loads(json.dumps({"document_id": document_id, "evidence_key": evidence_key, "original_numeric_value": item["original_numeric_value"], "current_revision_id": item["current_revision_id"], "revisions": item["revisions"]}))
 
 
@@ -1173,12 +1184,12 @@ def list_evidence_revisions(session_id: str, document_id: str, evidence_key: str
 def create_evidence_revision(session_id: str, document_id: str, evidence_key: str, payload: EvidenceRevisionCreateRequest, request: Request, dry_run: bool = False) -> dict[str, Any]:
     owner_id = owner_id_for_request(request)
     session = get_session(session_id, owner_id)
-    document, extraction = _ready_document(session, document_id)
+    document, artifact, extraction = _ready_document(session, document_id)
     locale = document_number_locale(extraction)
     # The conflict check and the append are one critical section so two
     # concurrent edits cannot both pass expected_revision_id.
     with catalog_lock:
-        state = ensure_document_evidence_state(document, extraction)
+        state = ensure_document_evidence_state(document, artifact)
         item = state["items"].get(evidence_key)
         if item is None:
             raise user_error(404, "EVIDENCE_NOT_FOUND")
@@ -1198,9 +1209,7 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
             "numeric_value": numeric_value, "old_numeric_value": current["numeric_value"], "previous_revision_id": current["id"],
             "reason": payload.reason.strip(),
         }
-        item["revisions"].append(revision)
-        item["current_revision_id"] = revision["id"]
-        state["data_revision"] += 1
+        _append_edit(document, evidence_key, revision, _evidence_location(evidence) if evidence else None)
         affected = mark_answers_needing_update(session, document_id, evidence_key, current["id"])
         session["updated_at"] = utc_now()
         if not postgres_runtime:
@@ -1286,11 +1295,33 @@ def relevant_pages(document: dict[str, Any], question: str, limit: int = 3) -> l
     return ranked[: max(1, limit)]
 
 
-def ensure_document_evidence_state(document: dict[str, Any], extraction: dict[str, Any]) -> dict[str, Any]:
-    """Initialize chat-local working copies without mutating base extraction."""
-    # A new reading starts with no state (see _archive_extraction), so the
-    # state built here belongs to this reading's run.
-    state = document.setdefault("evidence_state", {"data_revision": 0, "items": {}, "extraction_run_id": (extraction.get("evidence_batch") or {}).get("extraction_run_id")})
+def ensure_document_evidence_state(document: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
+    """The number state of ``artifact``'s reading. Call under catalog_lock.
+
+    ``artifact`` is the reading's extraction artifact (without chart reads).
+    The state is its base numbers with the reading's log replayed; it is built
+    once and then kept current by every event appended to the log.
+    """
+    if postgres_runtime:
+        return _database_evidence_state(document, with_chart_batches(document, artifact))
+    run_id = run_id_of(artifact)
+    state = cached_evidence_state(document, run_id)
+    if state is None:
+        events = document.get("number_log", []) if document.get("extraction_run_id") == run_id else []
+        state = document["evidence_state"] = replay(artifact, events, read_at=document.get("extracted_at"))
+    return state
+
+
+def cached_evidence_state(document: dict[str, Any], run_id: str) -> dict[str, Any] | None:
+    """The built number state of reading ``run_id``, with new chart reads logged; None when not built. Call under catalog_lock."""
+    record_chart_reads(document)
+    state = document.get("evidence_state")
+    return state if state is not None and state.get("extraction_run_id") == run_id else None
+
+
+def _database_evidence_state(document: dict[str, Any], extraction: dict[str, Any]) -> dict[str, Any]:
+    """PostgreSQL mode: the state the database loaded, plus numbers it has no row for yet."""
+    state = document.setdefault("evidence_state", {"data_revision": 0, "items": {}})
     state.setdefault("data_revision", 0)
     items = state.setdefault("items", {})
     for evidence in (extraction.get("evidence_batch") or {}).get("evidences", []):
@@ -1298,9 +1329,8 @@ def ensure_document_evidence_state(document: dict[str, Any], extraction: dict[st
         if key in items:
             _record_reread_value(state, items[key], evidence.get("numeric_value"))
             continue
-        now = utc_now()
         initial = {
-            "id": str(uuid4()), "revision_no": 1, "action": "initialize", "created_at": now,
+            "id": str(uuid4()), "revision_no": 1, "action": "initialize", "created_at": utc_now(),
             "numeric_value": evidence.get("numeric_value"), "old_numeric_value": None,
             "previous_revision_id": None, "reason": "Giá trị trích xuất gốc, không thể sửa trực tiếp.",
         }
@@ -1311,25 +1341,8 @@ def ensure_document_evidence_state(document: dict[str, Any], extraction: dict[st
     return state
 
 
-def _evidence_state_shape(document: dict[str, Any]) -> tuple[Any, ...] | None:
-    state = document.get("evidence_state")
-    return None if state is None else (state.get("data_revision"), "items" in state, len(state.get("items", {})))
-
-
-def _ensure_evidence_state_reporting_change(document: dict[str, Any], extraction: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """The evidence state, and whether bringing it up to date changed anything that must be saved."""
-    before = _evidence_state_shape(document)
-    state = ensure_document_evidence_state(document, extraction)
-    return state, _evidence_state_shape(document) != before
-
-
 def _record_reread_value(state: dict[str, Any], item: dict[str, Any], value: str | None) -> None:
-    """Append the value a later read supplies when the first read withheld it.
-
-    E.g. a chart whose visual check failed (provider 503) is read again and
-    now verified under the same evidence key. Without this the key kept its
-    first, empty value forever. User edits always win; history stays append-only.
-    """
+    """PostgreSQL mode: the value a later chart read supplies when the first read withheld it."""
     current = item["revisions"][-1]
     if value is None or current.get("numeric_value") is not None or current.get("action") == "edit":
         return
@@ -1343,10 +1356,10 @@ def _record_reread_value(state: dict[str, Any], item: dict[str, Any], value: str
     state["data_revision"] = state.get("data_revision", 0) + 1
 
 
-def extraction_with_evidence_revisions(document: dict[str, Any], extraction: dict[str, Any]) -> dict[str, Any]:
-    """Overlay a chat-local current revision onto immutable extraction output."""
+def extraction_with_evidence_revisions(document: dict[str, Any], extraction: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
+    """Overlay the current revisions onto ``extraction``: ``artifact``, the reading's artifact, with or without its chart reads."""
     with catalog_lock:
-        state = json.loads(json.dumps(ensure_document_evidence_state(document, extraction)))
+        state = json.loads(json.dumps(ensure_document_evidence_state(document, artifact)))
     result = json.loads(json.dumps(extraction))
     for evidence in (result.get("evidence_batch") or {}).get("evidences", []):
         item = state["items"].get(evidence["evidence_key"])
@@ -1588,12 +1601,13 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
         if document.get("extraction_status") != "ready":
             raise user_error(409, "EXTRACTION_NOT_READY")
         owner = session.get("owner_id", LOCAL_OWNER_ID)
+        artifact = _load_extraction_artifact(document["extraction_name"])
         try:
             return finish(answer_document(
                 session, document, payload.question, trace_id, trace, catalog,
-                overlay=extraction_with_evidence_revisions,
+                overlay=lambda document, extraction: extraction_with_evidence_revisions(document, extraction, artifact),
                 snapshot=snapshot_answer_revision,
-                load_extraction=_load_extraction_artifact,
+                load_extraction=lambda name: artifact,
                 resolve_pdf=cache_pdf,
                 save=lambda value: save_catalog(value, owner),
                 persist_chart=(lambda result, region_key: _persist_chart_read(session, document, result, region_key)) if postgres_runtime else None,
@@ -1710,7 +1724,8 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
         # evidence and charts entirely. Use them when they can answer: a
         # matching number, or a chart on the retrieved pages; otherwise keep
         # the text answer.
-        probe_extraction = extraction_with_evidence_revisions(document, with_chart_batches(document, _load_extraction_artifact(document["extraction_name"])))
+        artifact = _load_extraction_artifact(document["extraction_name"])
+        probe_extraction = extraction_with_evidence_revisions(document, with_chart_batches(document, artifact), artifact)
         context_page_numbers = {int(item["page"]) for item in context_pages}
         probe = resolve_evidence(question_plan, probe_extraction, context_page_numbers)
         structured = probe["status"] == "resolved" or (
@@ -1718,8 +1733,8 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
             and any(int(region["page_number"]) in context_page_numbers for region in probe_extraction.get("chart_regions", []))
         )
     if structured:
-        base_extraction = with_chart_batches(document, _load_extraction_artifact(document["extraction_name"]))
-        extraction = extraction_with_evidence_revisions(document, base_extraction)
+        artifact = _load_extraction_artifact(document["extraction_name"])
+        extraction = extraction_with_evidence_revisions(document, with_chart_batches(document, artifact), artifact)
         resolution = resolve_evidence(question_plan, extraction, {int(item["page"]) for item in context_pages})
         trace.append(
             trace_event(

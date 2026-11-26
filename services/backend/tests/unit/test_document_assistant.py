@@ -9,6 +9,18 @@ from report_qa.application.document_assistant import AssistantError, run_assista
 REPO = Path(__file__).resolve().parents[4]
 
 
+
+def overlay_of(artifact):
+    """The main overlay for answers over ``artifact``, as /messages passes it."""
+    from report_qa.api.main import extraction_with_evidence_revisions
+
+    return lambda document, extraction: extraction_with_evidence_revisions(document, extraction, artifact)
+
+
+def ready(artifact):
+    """Document fields of a ready reading of ``artifact``."""
+    return {"extraction_status": "ready", "extraction_run_id": artifact["evidence_batch"]["extraction_run_id"]}
+
 def evidences():
     return [
         {
@@ -365,7 +377,7 @@ def test_step_limit_raises_with_tool_feedback():
 
 def test_chart_batch_is_persisted_and_current_revision_is_exposed(tmp_path, monkeypatch):
     from report_qa.api import document_assistant_flow as flow
-    from report_qa.api.main import extraction_with_evidence_revisions, snapshot_answer_revision
+    from report_qa.api.main import snapshot_answer_revision
 
     base = json.loads((REPO / "examples/tien-extraction/output/document.json").read_text())
     path = tmp_path / "base.json"
@@ -390,14 +402,14 @@ def test_chart_batch_is_persisted_and_current_revision_is_exposed(tmp_path, monk
     }
     read = Mock(return_value={"status": "completed", "evidence_batch": batch, "raw_output": "B | 26"})
     monkeypatch.setattr(flow, "read_chart_region", read)
-    doc = {"id": "doc", "extraction_name": "base.json", "storage_name": "source.pdf"}
+    doc = {"id": "doc", "extraction_name": "base.json", "storage_name": "source.pdf", **ready(base)}
     session = {"messages": []}
     catalog = {"sessions": {"test": session}}
 
     def ask(*actions):
         return flow.answer_document(
             session, doc, "B?", "trace", [], catalog,
-            overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision,
+            overlay=overlay_of(base), snapshot=snapshot_answer_revision,
             complete=sequence(*actions),
         )["assistant_message"]
 
@@ -423,7 +435,7 @@ def test_chart_read_with_a_failed_visual_check_is_retried_on_the_next_question(t
     # A provider 503 during the visual check used to be cached, leaving every
     # value of that chart unverified for all later questions.
     from report_qa.api import document_assistant_flow as flow
-    from report_qa.api.main import extraction_with_evidence_revisions, snapshot_answer_revision
+    from report_qa.api.main import snapshot_answer_revision
 
     base = json.loads((REPO / "examples/tien-extraction/output/document.json").read_text())
     path = tmp_path / "base.json"
@@ -438,13 +450,13 @@ def test_chart_read_with_a_failed_visual_check_is_retried_on_the_next_question(t
         {"status": "completed", "evidence_batch": empty_batch, "raw_output": "B | 26", "visual_check_error": None},
     ])
     monkeypatch.setattr(flow, "read_chart_region", read)
-    doc = {"id": "doc", "extraction_name": "base.json", "storage_name": "source.pdf"}
+    doc = {"id": "doc", "extraction_name": "base.json", "storage_name": "source.pdf", **ready(base)}
     session = {"messages": []}
 
     def ask():
         flow.answer_document(
             session, doc, "B?", "trace", [], {"sessions": {"test": session}},
-            overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision,
+            overlay=overlay_of(base), snapshot=snapshot_answer_revision,
             complete=sequence({"action": "read_chart", "chart_region_key": region},
                               {"action": "answer", "answer": "Không đọc được.", "not_found": True}),
         )
@@ -459,7 +471,7 @@ def test_value_withheld_by_a_failed_check_is_filled_in_when_the_chart_is_read_ag
     # The first read stored the key with no value; the verified re-read used
     # the same key, but the empty first value stayed current forever.
     from report_qa.api import document_assistant_flow as flow
-    from report_qa.api.main import extraction_with_evidence_revisions, snapshot_answer_revision
+    from report_qa.api.main import snapshot_answer_revision
 
     base = json.loads((REPO / "examples/tien-extraction/output/document.json").read_text())
     path = tmp_path / "base.json"
@@ -484,13 +496,13 @@ def test_value_withheld_by_a_failed_check_is_filled_in_when_the_chart_is_read_ag
         {"status": "completed", "evidence_batch": batch("77", "valid"), "raw_output": "E | 77", "visual_check_error": None},
     ])
     monkeypatch.setattr(flow, "read_chart_region", read)
-    doc = {"id": "doc", "extraction_name": "base.json", "storage_name": "source.pdf"}
+    doc = {"id": "doc", "extraction_name": "base.json", "storage_name": "source.pdf", **ready(base)}
     session = {"messages": []}
 
     def ask(*actions):
         return flow.answer_document(
             session, doc, "E?", "trace", [], {"sessions": {"test": session}},
-            overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision, complete=sequence(*actions),
+            overlay=overlay_of(base), snapshot=snapshot_answer_revision, complete=sequence(*actions),
         )["assistant_message"]
 
     ask({"action": "read_chart", "chart_region_key": region}, {"action": "answer", "answer": "Chưa xác minh.", "not_found": True})
@@ -540,7 +552,7 @@ def test_each_history_turn_is_bounded():
 @pytest.mark.parametrize("check_error", [None, "HTTP 503"])
 def test_durable_storage_keeps_only_chart_reads_whose_check_passed(monkeypatch, check_error):
     from report_qa.api import document_assistant_flow as flow
-    from report_qa.api.main import extraction_with_evidence_revisions, snapshot_answer_revision
+    from report_qa.api.main import snapshot_answer_revision
 
     region = {"chart_region_key": "r1", "page_number": 1, "bbox": [0.1, 0.1, 0.9, 0.9], "text": ""}
     value = {
@@ -557,10 +569,11 @@ def test_durable_storage_keeps_only_chart_reads_whose_check_passed(monkeypatch, 
         {"action": "answer", "answer": "A", "evidence_keys": ["chart-a"], "sources": [{"page": 1, "quote": "Doanh thu theo vùng"}]},
     ])
     persist, save = Mock(), Mock()
+    extraction = {"pages": [{"page": 1, "text": "Doanh thu theo vùng"}], "evidence_batch": {"evidences": [], "extraction_run_id": "run-1"}, "chart_regions": [region]}
     result = flow.answer_document(
-        {"messages": []}, {"id": "d", "version_id": "v", "storage_name": "d.pdf", "extraction_name": "d.json"}, "A?", "t", [], {},
-        overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision, complete=lambda *args, **kwargs: json.dumps(next(actions)),
-        load_extraction=lambda name: {"pages": [{"page": 1, "text": "Doanh thu theo vùng"}], "evidence_batch": {"evidences": []}, "chart_regions": [region]},
+        {"messages": []}, {"id": "d", "version_id": "v", "storage_name": "d.pdf", "extraction_name": "d.json", **ready(extraction)}, "A?", "t", [], {},
+        overlay=overlay_of(extraction), snapshot=snapshot_answer_revision, complete=lambda *args, **kwargs: json.dumps(next(actions)),
+        load_extraction=lambda name: extraction,
         resolve_pdf=lambda name: Path(name), save=save, persist_chart=persist,
     )
     assert read.call_args.args[2] == "v"
@@ -678,10 +691,10 @@ def test_a_percent_change_is_not_flagged_as_typed_by_hand():
 @pytest.mark.parametrize("change", ["reextract", "edit", None])
 def test_an_answer_whose_inputs_changed_while_it_ran_is_stored_as_needing_update(change):
     from report_qa.api import document_assistant_flow as flow
-    from report_qa.api.main import extraction_with_evidence_revisions, snapshot_answer_revision
+    from report_qa.api.main import snapshot_answer_revision
 
-    extraction = {"pages": [{"page": 1, "text": "x"}], "evidence_batch": {"evidences": [_row("a", "valid", "table")]}, "chart_regions": []}
-    document = {"id": "doc", "extraction_name": "x", "storage_name": "x"}
+    extraction = {"pages": [{"page": 1, "text": "x"}], "evidence_batch": {"evidences": [_row("a", "valid", "table")], "extraction_run_id": "run-1"}, "chart_regions": []}
+    document = {"id": "doc", "extraction_name": "x", "storage_name": "x", **ready(extraction)}
     session = {"messages": []}
     answer = json.dumps({"action": "answer", "answer": "100", "evidence_keys": ["a"]})
 
@@ -695,7 +708,7 @@ def test_an_answer_whose_inputs_changed_while_it_ran_is_stored_as_needing_update
 
     message = flow.answer_document(
         session, document, "q", "trace", [], {"sessions": {}},
-        overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision, complete=complete,
+        overlay=overlay_of(extraction), snapshot=snapshot_answer_revision, complete=complete,
         load_extraction=lambda name: extraction, resolve_pdf=lambda name: name, save=lambda catalog: None,
     )["assistant_message"]
     assert session["messages"][-1]["needs_update"] is (change is not None)
@@ -716,20 +729,20 @@ def test_a_python_number_without_a_data_source_does_not_trace_the_answer():
 
 def test_rows_stated_by_an_accepted_quote_become_answer_inputs_so_an_edit_flags_the_answer():
     from report_qa.api import document_assistant_flow as flow
-    from report_qa.api.main import extraction_with_evidence_revisions, mark_answers_needing_update, snapshot_answer_revision
+    from report_qa.api.main import mark_answers_needing_update, snapshot_answer_revision
 
     page = "Doanh thu quý 2 đạt 130 tỷ đồng. Chi phí là 1.130 tỷ đồng."
     rows = [{**_row("rev", "valid", "table"), "raw_text": "130", "numeric_value": "130"},
             {**_row("cost", "valid", "table"), "raw_text": "1.130", "numeric_value": "1130"},
             {**_row("other", "valid", "table"), "raw_text": "130", "numeric_value": "130", "page_number": 2}]
-    extraction = {"pages": [{"page": 1, "text": page}, {"page": 2, "text": "x"}], "evidence_batch": {"evidences": rows}, "chart_regions": []}
-    document = {"id": "doc", "extraction_name": "x", "storage_name": "x"}
+    extraction = {"pages": [{"page": 1, "text": page}, {"page": 2, "text": "x"}], "evidence_batch": {"evidences": rows, "extraction_run_id": "run-1"}, "chart_regions": []}
+    document = {"id": "doc", "extraction_name": "x", "storage_name": "x", **ready(extraction)}
     session = {"messages": []}
     answer = {"action": "answer", "answer": "Doanh thu quý 2 là 130 tỷ đồng.",
               "sources": [{"page": 1, "quote": "Doanh thu quý 2 đạt 130 tỷ đồng."}]}
     message = flow.answer_document(
         session, document, "Doanh thu quý 2?", "trace", [], {"sessions": {}},
-        overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision, complete=sequence(answer),
+        overlay=overlay_of(extraction), snapshot=snapshot_answer_revision, complete=sequence(answer),
         load_extraction=lambda name: extraction, resolve_pdf=lambda name: name, save=lambda catalog: None,
     )["assistant_message"]
     assert [i["evidence_key"] for i in message["answer_inputs"]] == ["rev"]
