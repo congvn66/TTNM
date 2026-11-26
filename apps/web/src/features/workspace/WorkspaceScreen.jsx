@@ -7,6 +7,7 @@ import { EvidenceList, ScriptCard } from "./ToolAnswer.jsx";
 import { Icon } from "./Icon.jsx";
 import { EvidenceDrawer } from "./EvidenceDrawer.jsx";
 import { formatNumber } from "./format.js";
+import { quoteBoxes } from "./pdfHighlight.js";
 
 const SESSION_KEY = "sourcelens-active-session";
 const DOCUMENT_KEY = "sourcelens-active-document";
@@ -146,20 +147,6 @@ function normalizedBbox(value) {
   return [x0, y0, x1, y1];
 }
 
-// PDF.js represents affine transforms as [a, b, c, d, e, f]. Keeping this
-// tiny operation local avoids pulling the whole PDF.js runtime into the
-// initial bundle just to derive a citation box from the already-rendered text.
-function multiplyTransform(first, second) {
-  return [
-    first[0] * second[0] + first[2] * second[1],
-    first[1] * second[0] + first[3] * second[1],
-    first[0] * second[2] + first[2] * second[3],
-    first[1] * second[2] + first[3] * second[3],
-    first[0] * second[4] + first[2] * second[5] + first[4],
-    first[1] * second[4] + first[3] * second[5] + first[5],
-  ];
-}
-
 function presentationAnswer(message) {
   if (message?.status === "processing" || message?.structured_answer?.presentation === "processing_v1") return { pending: true };
   if (message?.structured_answer && message.mode === "deterministic_text_retrieval") {
@@ -286,6 +273,8 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
   const [citationQuote, setCitationQuote] = useState("");
   const [citationBbox, setCitationBbox] = useState(null);
   const dragRef = useRef(null);
+  // Set by a new citation; cleared once its highlight is scrolled into view.
+  const centerHighlightRef = useRef(false);
 
   useEffect(() => {
     let disposed = false;
@@ -317,6 +306,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
   useEffect(() => {
     if (!pdf || !canvasRef.current) return undefined;
     let cancelled = false;
+    setTextItems([]);
     pdf.getPage(page).then((pdfPage) => {
       if (cancelled) return;
       const viewport = pdfPage.getViewport({ scale, rotation });
@@ -326,7 +316,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
       canvas.height = Math.floor(viewport.height * ratio);
       canvas.style.width = `${viewport.width}px`;
       canvas.style.height = `${viewport.height}px`;
-      setTextViewport({ width: viewport.width, height: viewport.height, transform: viewport.transform, rotation, scale });
+      setTextViewport({ width: viewport.width, height: viewport.height, transform: viewport.transform, rotation, scale, page });
       if (rotation === 0) pdfPage.getTextContent().then((content) => setTextItems(content.items.filter((item) => item.str?.trim()))).catch(() => setTextItems([]));
       else setTextItems([]);
       const context = canvas.getContext("2d");
@@ -342,32 +332,28 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
     setCitationQuote(evidenceQuote || "");
     setCitationBbox(normalizedBbox(evidenceBbox));
     setPage(Math.min(Math.max(1, citationPage), pdf.numPages));
-    viewportRef.current?.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    centerHighlightRef.current = true;
   }, [citationPage, evidenceQuote, evidenceBbox, pdf]);
 
-  const compact = (value) => String(value ?? "").normalize("NFKC").replace(/\s+/g, "").toLocaleLowerCase("vi");
-  const compactItems = textItems.map((item) => compact(item.str));
-  const joinedItems = compactItems.join("");
-  const quoteCompact = compact(citationQuote);
-  const quoteStart = quoteCompact ? joinedItems.indexOf(quoteCompact) : -1;
-  const itemRanges = [];
-  let itemCursor = 0;
-  compactItems.forEach((value) => { itemRanges.push([itemCursor, itemCursor + value.length]); itemCursor += value.length; });
-  const derivedBoxes = textViewport ? textItems.flatMap((item, index) => {
-    const transformed = multiplyTransform(textViewport.transform, item.transform || [1, 0, 0, 1, 0, 0]);
-    const fontSize = Math.max(6, Math.hypot(transformed[2], transformed[3]));
-    const [rangeStart, rangeEnd] = itemRanges[index] || [0, 0];
-    const hit = quoteStart >= 0 && rangeEnd > quoteStart && rangeStart < quoteStart + quoteCompact.length;
-    if (!hit) return [];
-    const left = Math.max(0, Math.min(1, transformed[4] / textViewport.width));
-    const top = Math.max(0, Math.min(1, (transformed[5] - fontSize) / textViewport.height));
-    const right = Math.max(left, Math.min(1, (transformed[4] + Math.max(2, Number(item.width || 0) * textViewport.scale)) / textViewport.width));
-    const bottom = Math.max(top, Math.min(1, (transformed[5] + Math.max(6, fontSize * .18)) / textViewport.height));
-    return [[left, top, right, bottom]];
-  }) : [];
-  const derivedBox = derivedBoxes.length ? derivedBoxes.reduce((box, item) => [Math.min(box[0], item[0]), Math.min(box[1], item[1]), Math.max(box[2], item[2]), Math.max(box[3], item[3])]) : null;
-  // evidence-hit is the legacy text-span marker; evidence-box is now normalized and scale invariant.
-  const evidenceBoxes = rotation === 0 ? (citationBbox ? [citationBbox] : derivedBox ? [derivedBox] : []) : [];
+  const derivedBoxes = textViewport ? quoteBoxes(textItems, textViewport, citationQuote) : [];
+  // The quote found in the page text is the most exact place; the stored box
+  // covers numbers (no quote) and pages whose text cannot be matched.
+  const evidenceBoxes = rotation === 0 ? (derivedBoxes.length ? derivedBoxes : citationBbox ? [citationBbox] : []) : [];
+  const highlightKey = evidenceBoxes.map((box) => box.join(",")).join(";");
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const box = viewport?.querySelector(".evidence-box");
+    // Wait until the cited page itself is laid out.
+    if (!centerHighlightRef.current || !box || textViewport?.page !== page) return;
+    centerHighlightRef.current = false;
+    const boxRect = box.getBoundingClientRect();
+    const viewRect = viewport.getBoundingClientRect();
+    viewport.scrollTo({
+      top: viewport.scrollTop + boxRect.top - viewRect.top - (viewport.clientHeight - boxRect.height) / 2,
+      left: viewport.scrollLeft + boxRect.left - viewRect.left - (viewport.clientWidth - boxRect.width) / 2,
+      behavior: "smooth",
+    });
+  }, [highlightKey, page, textViewport]);
   const textLayer = textViewport && <div className="pdf-text-layer" aria-hidden="true" style={{ width: textViewport.width, height: textViewport.height, left: "50%", top: 30, transform: "translateX(-50%)" }}><div className="evidence-box-layer">{evidenceBoxes.map((box, index) => <span className="evidence-box" key={`${box.join("-")}-${index}`} style={{ left: `${box[0] * 100}%`, top: `${box[1] * 100}%`, width: `${(box[2] - box[0]) * 100}%`, height: `${(box[3] - box[1]) * 100}%` }} />)}</div></div>;
 
   const fitWidth = useCallback(async () => {
@@ -396,7 +382,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
       onWheel={(event) => { if (!event.ctrlKey) return; event.preventDefault(); setScale((value) => Math.max(.35, Math.min(2.5, value + (event.deltaY < 0 ? .1 : -.1)))); }}>
       {loading && <div className="reader-loading" role="status">Đang mở tài liệu…</div>}
       {error && <div className="reader-error" role="alert">Không thể render PDF: {error}</div>}
-      <div className="canvas-mat"><canvas ref={canvasRef} />{textLayer}</div>
+      <div className="canvas-mat"><canvas key={document.id} ref={canvasRef} />{textLayer}</div>
     </div>
   </section>;
 }
