@@ -4,12 +4,15 @@
 
 const DECIMAL = /^-?\d+(\.\d+)?$/;
 
+// A number shows the digits it has: trailing zeros of the fraction add
+// nothing ("5400.20" is 5.400,2), the rest are kept as they are.
 export function formatNumber(value) {
   if (value === null || value === undefined || value === "") return "";
   const text = String(value).trim();
   if (!DECIMAL.test(text)) return text;
   const negative = text.startsWith("-");
-  const [integer, fraction] = text.replace("-", "").split(".");
+  const [integer, rawFraction] = text.replace("-", "").split(".");
+  const fraction = rawFraction?.replace(/0+$/, "");
   const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return `${negative ? "-" : ""}${grouped}${fraction ? `,${fraction}` : ""}`;
 }

@@ -6,6 +6,10 @@ it("formats canonical decimals in Vietnamese style", () => {
   expect(formatNumber("17.05")).toBe("17,05");
   expect(formatNumber("-1234567.5")).toBe("-1.234.567,5");
   expect(formatNumber("21.350 tỷ")).toBe("21.350 tỷ");
+  expect(formatNumber("5400.20")).toBe("5.400,2");
+  expect(formatNumber("41.90")).toBe("41,9");
+  expect(formatNumber("1120.00")).toBe("1.120");
+  expect(formatNumber("42.03")).toBe("42,03");
 });
 
 it("compares numbers, not spellings", () => {

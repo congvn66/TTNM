@@ -152,3 +152,15 @@ it("says in Vietnamese next to the field what is missing and sends nothing", asy
   expect(within(drawer).getByLabelText("Lý do sửa").getAttribute("aria-invalid")).toBe("true");
   expect(requestMock.mock.calls.some(([path]) => path.includes("/revisions"))).toBe(false);
 });
+
+it("shows every value in Vietnamese style and a row without a number as what was read", async () => {
+  mockApi([[`${base}/evidences`, async () => ({ evidences: [
+    row("k1", { current_numeric_value: "5400.20", original_numeric_value: "5400.20" }),
+    row("k2", { current_numeric_value: null, original_numeric_value: null, raw_text: "42.03", data_status: "ambiguous", table_locator: null, chart_read: { category_label: "2025", series_label: "Tỷ lệ" } }),
+  ] })]]);
+  const { drawer } = await openDrawer();
+  expect(within(drawer).getByText("5.400,2")).toBeTruthy();
+  expect(within(drawer).queryByText("42.03")).toBeNull();
+  expect(within(drawer).getByText("Đã đọc: “42.03”")).toBeTruthy();
+  expect(within(drawer).getByRole("button", { name: /2025 · Tỷ lệ: chưa có số/ })).toBeTruthy();
+});

@@ -16,8 +16,10 @@ function isEdited(evidence) {
   return numbersDiffer(evidence.current_numeric_value, evidence.original_numeric_value);
 }
 
+// The value is always a number in Vietnamese style. A row without one shows
+// "—"; what was read (PDF text or a chart reading) is shown as a quote below.
 function displayValue(evidence) {
-  return formatNumber(evidence.current_numeric_value) || evidence.raw_text || "Chưa đọc được";
+  return formatNumber(evidence.current_numeric_value);
 }
 
 function RevisionHistory({ history }) {
@@ -159,11 +161,12 @@ export function EvidenceDrawer({ data, basePath, onClose, onFocus, onSaved, onRe
       const status = edited ? "" : dataStatusLabel(evidence.data_status);
       const hasHistory = (evidence.revision_count ?? 0) > 1;
       return <article className="evidence-record" key={evidence.evidence_key}>
-        <button type="button" className="evidence-record-main" onClick={() => onFocus(evidence)} aria-label={`${name}: ${displayValue(evidence)}, trang ${evidence.page_number}. Mở vị trí trong PDF`}>
+        <button type="button" className="evidence-record-main" onClick={() => onFocus(evidence)} aria-label={`${name}: ${displayValue(evidence) || "chưa có số"}, trang ${evidence.page_number}. Mở vị trí trong PDF`}>
           <span>Trang {evidence.page_number} · {evidence.method_label}</span>
-          <b>{displayValue(evidence)}</b>
+          <b>{displayValue(evidence) || "—"}</b>
           <small className="evidence-record-label">{label || "Số trong văn bản, chưa có nhãn"}</small>
           {edited && <small>Đã sửa · số gốc trong PDF: {formatNumber(evidence.original_numeric_value) || evidence.raw_text}</small>}
+          {evidence.current_numeric_value == null && evidence.raw_text && <small>Đã đọc: “{evidence.raw_text}”</small>}
           {status && <small className="evidence-record-status">{status}</small>}
         </button>
         {editingKey === evidence.evidence_key
