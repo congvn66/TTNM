@@ -1405,20 +1405,23 @@ def _record_reread_value(state: dict[str, Any], item: dict[str, Any], value: str
 
 
 def extraction_with_evidence_revisions(document: dict[str, Any], extraction: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
-    """Overlay the current revisions onto ``extraction``: ``artifact``, the reading's artifact, with or without its chart reads."""
+    """Overlay the current revisions onto ``extraction``: ``artifact``, the reading's artifact, with or without its chart reads.
+
+    A row with a revision is a new dict; neither input is changed.
+    """
     with catalog_lock:
-        state = json.loads(json.dumps(ensure_document_evidence_state(document, artifact)))
-    result = json.loads(json.dumps(extraction))
-    for evidence in (result.get("evidence_batch") or {}).get("evidences", []):
-        item = state["items"].get(evidence["evidence_key"])
-        if item is None:
-            continue
-        current = item["revisions"][-1]
-        evidence["numeric_value"] = current["numeric_value"]
-        evidence["current_revision_id"] = current["id"]
-        if current.get("action") == "edit":
-            evidence["data_status"] = "valid"
-    return result
+        items = ensure_document_evidence_state(document, artifact)["items"]
+        current = {key: (item["revisions"][-1]["numeric_value"], item["revisions"][-1]["id"], item["revisions"][-1].get("action"))
+                   for key, item in items.items()}
+    evidences = []
+    for evidence in (extraction.get("evidence_batch") or {}).get("evidences", []):
+        if evidence["evidence_key"] in current:
+            value, revision_id, action = current[evidence["evidence_key"]]
+            evidence = {**evidence, "numeric_value": value, "current_revision_id": revision_id}
+            if action == "edit":
+                evidence["data_status"] = "valid"
+        evidences.append(evidence)
+    return {**extraction, "evidence_batch": {**(extraction.get("evidence_batch") or {}), "evidences": evidences}}
 
 
 def snapshot_answer_revision(assistant_message: dict[str, Any]) -> None:

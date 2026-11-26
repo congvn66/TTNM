@@ -79,16 +79,18 @@ def fit_context(context: dict, question: str, budget: int = MAX_CONTEXT_CHARS) -
 
 
 def with_chart_batches(document, extraction):
-    """Base Docling evidence plus every on-demand chart batch, newest first."""
-    result = json.loads(json.dumps(extraction))
-    evidences = result["evidence_batch"]["evidences"]
+    """Base Docling evidence plus every on-demand chart batch, newest first.
+
+    The rows are those of the inputs, not copies: neither is changed.
+    """
+    evidences = list(extraction["evidence_batch"]["evidences"])
     seen = {e["evidence_key"] for e in evidences}
     for record in reversed(document.get("chart_extractions", [])):
         for e in record["evidence_batch"]["evidences"]:
             if e["evidence_key"] not in seen:
                 evidences.append(e)
                 seen.add(e["evidence_key"])
-    return result
+    return {**extraction, "evidence_batch": {**extraction["evidence_batch"], "evidences": evidences}}
 
 
 def _citation(evidence):
