@@ -223,3 +223,74 @@ it("closes confirmation notices by itself but keeps errors until closed", async 
     expect(screen.queryByText("Không thể tạo phiên.")).toBeNull();
   } finally { vi.useRealTimers(); }
 });
+
+it("keeps a failed question with its retry when another question is sent", async () => {
+  const doc = { id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: "ready" };
+  const session = { id: "chat", title: "My session", documents: [doc], messages: [] };
+  const keys = [];
+  requestMock.mockImplementation(async (path, options) => {
+    if (path === "/api/v1/sessions") return { sessions: [session] };
+    if (path === "/api/v1/sessions/chat") return { session };
+    if (path.endsWith("/messages") && options?.method === "POST") {
+      const { question } = JSON.parse(options.body);
+      keys.push([question, options.headers["Idempotency-Key"]]);
+      if (question === "First") throw Object.assign(new Error("Dịch vụ AI đang bận hoặc tạm thời không phản hồi. Hãy thử lại sau ít phút."), { code: "AI_PROVIDER_UNAVAILABLE" });
+      return { user_message: { id: `u-${keys.length}`, role: "user", document_id: "doc", body: question }, assistant_message: { id: `a-${keys.length}`, role: "assistant", document_id: "doc", status: "completed", body: `Answer to ${question}` } };
+    }
+    return { jobs: [] };
+  });
+  const view = render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  const composer = view.container.querySelector("#chat-question");
+  await waitFor(() => expect(composer.disabled).toBe(false));
+  fireEvent.change(composer, { target: { value: "First" } });
+  fireEvent.keyDown(composer, { key: "Enter" });
+  await screen.findByText(/Dịch vụ AI đang bận/);
+  expect(screen.getAllByText(/Dịch vụ AI đang bận/)).toHaveLength(1);
+  expect(view.container.querySelector(".toast")).toBeNull();
+  await waitFor(() => expect(composer.disabled).toBe(false));
+  fireEvent.change(composer, { target: { value: "Second" } });
+  fireEvent.keyDown(composer, { key: "Enter" });
+  await screen.findByText("Answer to Second");
+  expect(screen.getByText("First")).toBeTruthy();
+  fireEvent.click(view.container.querySelector(".message.assistant.failed .retry-answer-button"));
+  await waitFor(() => expect(keys).toHaveLength(3));
+  expect(keys[2]).toEqual(keys[0]);
+});
+
+it("sends the question that was still waiting before a reload again with the same key", async () => {
+  const doc = { id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: "ready" };
+  const session = { id: "chat", title: "My session", documents: [doc], messages: [] };
+  sessionStorage.setItem("sourcelens-pending-question-v1", JSON.stringify({ session_id: "chat", document_id: "doc", question: "Still running?", key: "key-1", sent_at: Date.now() }));
+  let release;
+  const posted = [];
+  requestMock.mockImplementation(async (path, options) => {
+    if (path === "/api/v1/sessions") return { sessions: [session] };
+    if (path === "/api/v1/sessions/chat") return { session };
+    if (path.endsWith("/messages") && options?.method === "POST") {
+      posted.push(options.headers["Idempotency-Key"]);
+      await new Promise((resolve) => { release = resolve; });
+      return { user_message: { id: "u", role: "user", document_id: "doc", body: "Still running?" }, assistant_message: { id: "a", role: "assistant", document_id: "doc", status: "completed", body: "Saved answer" } };
+    }
+    return { jobs: [] };
+  });
+  const view = render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  await screen.findByText("Still running?");
+  expect(view.container.querySelector(".typing-indicator")).toBeTruthy();
+  await waitFor(() => expect(posted).toEqual(["key-1"]));
+  await act(async () => release());
+  await screen.findByText("Saved answer");
+  expect(sessionStorage.getItem("sourcelens-pending-question-v1")).toBeNull();
+});
+
+it("opens a conversation at its newest message", async () => {
+  const doc = { id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: "ready" };
+  const session = { id: "chat", title: "My session", documents: [doc], messages: [
+    { id: "q", role: "user", document_id: "doc", body: "Old question" },
+    { id: "a", role: "assistant", document_id: "doc", reply_to_message_id: "q", body: "Newest answer" },
+  ] };
+  requestMock.mockImplementation(async (path) => path === "/api/v1/sessions" ? { sessions: [{ ...session, messages: [] }] } : path === "/api/v1/sessions/chat" ? { session } : { jobs: [] });
+  const view = render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  await screen.findByText("Newest answer");
+  const body = view.container.querySelector(".chat-body");
+  await waitFor(() => expect(Element.prototype.scrollTo).toHaveBeenCalledWith({ top: body.scrollHeight, behavior: "instant" }));
+});

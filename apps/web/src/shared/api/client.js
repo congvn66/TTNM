@@ -19,7 +19,7 @@ export const API = (
 
 const ERROR_MESSAGES = {
   PDF_ENCRYPTED: "PDF này được đặt mật khẩu nên không đọc được. Hãy gỡ mật khẩu rồi tải lên lại.",
-  AI_PROVIDER_UNAVAILABLE: "Không kết nối được tới dịch vụ AI. Kiểm tra mạng hoặc thử lại sau.",
+  AI_PROVIDER_UNAVAILABLE: "Dịch vụ AI đang bận hoặc tạm thời không phản hồi. Hãy thử lại sau ít phút.",
   AI_PROVIDER_TIMEOUT: "Dịch vụ AI phản hồi quá lâu. Bạn có thể thử lại câu hỏi.",
   AI_MODEL_UNAVAILABLE: "Mô hình AI hiện không khả dụng. Kiểm tra lại cấu hình model.",
   AI_PROVIDER_HTTP_ERROR: "Dịch vụ AI từ chối yêu cầu. Kiểm tra API key và giới hạn sử dụng.",

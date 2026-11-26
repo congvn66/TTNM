@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { API, request } from "../../shared/api/client.js";
@@ -26,6 +26,28 @@ function readSessionSnapshot() {
   } catch {
     return null;
   }
+}
+
+// The question whose POST is still in flight. JSON mode answers inside the
+// request and saves nothing until it ends, so after a reload only this tab
+// knows the question exists. Re-sending it with the same Idempotency-Key waits
+// for the running request and returns its saved answer instead of a new one.
+const PENDING_QUESTION_KEY = "sourcelens-pending-question-v1";
+const PENDING_QUESTION_TTL_MS = 10 * 60_000;
+
+function readPendingQuestion() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(PENDING_QUESTION_KEY) || "null");
+    if (!value?.question || !value.key || Date.now() - Number(value.sent_at) > PENDING_QUESTION_TTL_MS) return null;
+    return value;
+  } catch { return null; }
+}
+
+function writePendingQuestion(value) {
+  try {
+    if (value) sessionStorage.setItem(PENDING_QUESTION_KEY, JSON.stringify(value));
+    else sessionStorage.removeItem(PENDING_QUESTION_KEY);
+  } catch { /* storage disabled: a reload then loses only the unanswered question */ }
 }
 
 function writeSessionSnapshot(sessions) {
@@ -67,7 +89,7 @@ const ERROR_COPY = {
   PDF_TOO_MANY_PAGES: "Tài liệu vượt quá số trang cho phép.",
   EXTRACTION_NOT_READY: "Tài liệu đang được chuẩn bị. Bạn có thể đặt câu hỏi khi tài liệu sẵn sàng.",
   AI_PROVIDER_TIMEOUT: "AI phản hồi quá lâu. Bạn có thể thử gửi lại câu hỏi.",
-  AI_PROVIDER_UNAVAILABLE: "Không kết nối được tới dịch vụ AI. Kiểm tra mạng hoặc thử lại sau.",
+  AI_PROVIDER_UNAVAILABLE: "Dịch vụ AI đang bận hoặc tạm thời không phản hồi. Hãy thử lại sau ít phút.",
   AI_MODEL_UNAVAILABLE: "Mô hình AI hiện không khả dụng. Kiểm tra lại cấu hình model.",
   AI_PROVIDER_HTTP_ERROR: "Dịch vụ AI từ chối yêu cầu. Kiểm tra API key và giới hạn sử dụng.",
   AI_NOT_CONFIGURED: "Chưa cấu hình nhà cung cấp AI cho môi trường này.",
@@ -201,6 +223,28 @@ function StructuredAnswer({ answer, fallback, onCitation, evidenceByKey }) {
     {answer.tables?.map((table, index) => <section className="answer-section" key={`${table.title}-${index}`}><h4>{table.title}</h4><div className="answer-table-wrap"><table className="answer-table"><thead><tr>{table.columns?.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{table.rows?.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div></section>)}
     {warnings.length > 0 && <div className="answer-warnings"><strong>Lưu ý</strong><ul>{warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}
   </div>;
+}
+
+function ChatMessage({ message, busy, evidenceByKey, onCitation, onStop, onRetry, onEditQuestion, onCopy }) {
+  const isUser = message.role === "user";
+  const failed = message.failed || message.status === "failed";
+  const processing = !isUser && message.status === "processing";
+  const done = !isUser && message.body && !message.pending && !failed && !processing;
+  return <article data-message-id={message.id} className={`message ${message.role} ${failed ? "failed" : ""}`}>
+    <span className="message-avatar" aria-hidden="true">{isUser ? "B" : "S"}</span>
+    <div>
+      <small>{isUser ? "Bạn" : "Trợ lý SourceLens"}</small>
+      {!isUser && message.failed
+        ? <div className="answer-failure" role="alert"><Icon name="refresh" size={14} /><span>{message.body}</span></div>
+        : <StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} evidenceByKey={evidenceByKey} onCitation={onCitation} />}
+      {processing && <button className="retry-answer-button" type="button" onClick={() => onStop(message)}>Dừng trả lời</button>}
+      {failed && !isUser && <button className="retry-answer-button" type="button" onClick={() => onRetry(message)} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}
+      {isUser && !message.pending && <button className="message-icon-button" type="button" aria-label="Sửa câu hỏi" title="Sửa câu hỏi" onClick={() => onEditQuestion(message.body)}><Icon name="edit" size={14} /></button>}
+      {done && <button className="message-icon-button" type="button" aria-label="Sao chép câu trả lời" title="Sao chép câu trả lời" onClick={() => onCopy(message.body)}><Icon name="copy" size={14} /></button>}
+      {message.needs_update && <div className="answer-status-note stale-answer"><Icon name="refresh" size={13} /><span>Dữ liệu nguồn đã thay đổi; câu trả lời này cần được cập nhật.</span></div>}
+      {!message.structured_answer?.evidence?.length && message.citations?.map((citation, index) => <button className="citation" type="button" key={index} onClick={() => onCitation(citation.page, citation.quote ?? "", citation.bbox)}><Icon name="link" size={12} /> Trang {citation.page}</button>)}
+    </div>
+  </article>;
 }
 
 function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceBbox, onReextract, reextractDisabled }) {
@@ -464,7 +508,6 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const [bootError, setBootError] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState("info");
-  const [retryQuestion, setRetryQuestion] = useState("");
   const [search, setSearch] = useState("");
   const [citationPage, setCitationPage] = useState(null);
   const [citationQuote, setCitationQuote] = useState("");
@@ -486,7 +529,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const uploadQueryConsumedRef = useRef(false);
 
   const showNotice = useCallback((message, kind = "info") => { setNotice(userFacingError(message)); setNoticeKind(kind); }, []);
-  const clearNotice = useCallback(() => { setNotice(""); setRetryQuestion(""); }, []);
+  const clearNotice = useCallback(() => setNotice(""), []);
   // Errors stay until the user closes them; other notices are confirmations.
   useEffect(() => {
     if (!notice || noticeKind === "error") return undefined;
@@ -683,19 +726,32 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     return () => { disposed = true; window.clearTimeout(timer); };
   }, [activeSession?.id, answerProcessing, refreshSessionDetail, showNotice]);
   const requestInFlightRef = useRef(false);
-  const forceChatScrollRef = useRef(false);
-  const retryMetaRef = useRef(null);
+  const chatBodyRef = useRef(null);
+  const chatViewRef = useRef({ scope: null, count: 0, answer: null });
+  const [chatAnnouncement, setChatAnnouncement] = useState("");
+  const chatScope = `${activeSession?.id}:${activeDocument?.id}`;
+  const lastMessage = messages.at(-1);
+  const lastAnswer = [...messages].reverse().find((message) => message.role === "assistant");
+  const lastAnswerState = lastAnswer && !lastAnswer.pending && lastAnswer.status !== "processing" ? `${lastAnswer.id}:${lastAnswer.failed || lastAnswer.status === "failed" ? "failed" : "done"}` : null;
 
-  useEffect(() => {
-    const node = document.querySelector(".chat-body");
-    if (!node) return undefined;
-    const nearBottom = node.scrollHeight - node.scrollTop - node.clientHeight < 120;
-    if (!forceChatScrollRef.current && !nearBottom) return undefined;
-    const force = forceChatScrollRef.current;
-    const frame = window.requestAnimationFrame(() => node.scrollTo({ top: node.scrollHeight, behavior: force ? "smooth" : "auto" }));
-    forceChatScrollRef.current = false;
-    return () => window.cancelAnimationFrame(frame);
-  }, [messages.length, messages.at(-1)?.id, messages.at(-1)?.body, messages.at(-1)?.status, activeSession?.id, activeDocument?.id]);
+  // A conversation opens at its newest turn; a new question scrolls to the
+  // bottom; a finished answer scrolls to its own first line.
+  useLayoutEffect(() => {
+    const node = chatBodyRef.current;
+    const view = chatViewRef.current;
+    if (!node) return;
+    const opened = view.scope !== chatScope || (view.count === 0 && messages.length > 0);
+    const previousAnswer = view.answer;
+    Object.assign(view, { scope: chatScope, count: messages.length, answer: lastAnswerState });
+    if (opened) { node.scrollTo({ top: node.scrollHeight, behavior: "instant" }); return; }
+    if (lastAnswerState && lastAnswerState !== previousAnswer) {
+      const article = node.querySelector(`[data-message-id="${CSS.escape(lastAnswer.id)}"]`);
+      node.scrollTo({ top: Math.max(0, (article?.offsetTop ?? node.scrollHeight) - 12), behavior: "smooth" });
+      setChatAnnouncement(lastAnswerState.endsWith("failed") ? "Chưa tạo được câu trả lời." : `Câu trả lời mới: ${presentationAnswer(lastAnswer)?.answer ?? lastAnswer.body ?? ""}`);
+    } else if (lastMessage?.role === "user" || lastMessage?.pending) {
+      node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+    }
+  }, [chatScope, messages.length, lastMessage?.id, lastAnswerState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function createSession() {
     if (busy) return;
@@ -803,48 +859,73 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     } catch (error) { showNotice(error.message, "error"); } finally { setBusy(false); if (uploadRef.current) uploadRef.current.value = ""; }
   }
 
-  async function submitQuestion(questionInput) {
+  // scope/idempotencyKey/replaces are set when re-sending a question that
+  // was already sent once (a retry, or the in-flight question after a reload).
+  async function submitQuestion(questionInput, { scope: givenScope, idempotencyKey = crypto.randomUUID(), replaces = [] } = {}) {
     const question = questionInput?.trim();
-    const idempotencyKey = retryMetaRef.current?.question === question ? retryMetaRef.current.key : crypto.randomUUID();
-    if (!question || requestInFlightRef.current || busy || !activeDocument || !activeSession) return;
-    if (activeDocument.extraction_status === "failed") {
+    const scope = givenScope ?? (activeSession && activeDocument ? { session_id: activeSession.id, document_id: activeDocument.id } : null);
+    if (!question || !scope || requestInFlightRef.current || busy) return;
+    const scopeDocument = sessions.find((session) => session.id === scope.session_id)?.documents.find((document) => document.id === scope.document_id);
+    if (scopeDocument?.extraction_status === "failed") {
       showNotice(`Tài liệu chưa thể đọc nên chưa thể trả lời. ${canReextract ? "Bấm Trích xuất lại ở thanh trên PDF." : "Hãy thử xử lý lại tài liệu trong Trung tâm tác vụ."}`, "error");
       return;
     }
     requestInFlightRef.current = true;
-    forceChatScrollRef.current = true;
     const userId = crypto.randomUUID();
     const pendingId = crypto.randomUUID();
-    const scope = { session_id: activeSession.id, document_id: activeDocument.id };
-    setPendingMessages((current) => [...current.filter((message) => !message.failed), { id: userId, role: "user", body: question, ...scope, pending: true }, { id: pendingId, role: "assistant", body: "", structured_answer: { pending: true }, ...scope, pending: true }]);
-    setQuery(""); setRetryQuestion(""); setBusy(true); clearNotice();
+    setPendingMessages((current) => [...current.filter((message) => !replaces.includes(message.id)), { id: userId, role: "user", body: question, ...scope, pending: true }, { id: pendingId, role: "assistant", body: "", structured_answer: { pending: true }, ...scope, pending: true }]);
+    if (!givenScope) setQuery("");
+    setBusy(true);
+    writePendingQuestion({ ...scope, question, key: idempotencyKey, sent_at: Date.now() });
     try {
-      const result = await request(`/api/v1/sessions/${activeSession.id}/messages`, { method: "POST", body: JSON.stringify({ document_id: activeDocument.id, question }), headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey } });
+      const result = await request(`/api/v1/sessions/${scope.session_id}/messages`, { method: "POST", body: JSON.stringify({ document_id: scope.document_id, question }), headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey } });
       if (result.job) setActiveJobs((current) => [result.job, ...current.filter((job) => job.id !== result.job.id)]);
       // The API has accepted the turn; show its durable message IDs now and
       // release the composer while the background answer job is still running.
       setPendingMessages((current) => current.map((message) => message.id === userId
         ? { ...result.user_message, ...scope, pending: false }
         : message.id === pendingId ? { ...result.assistant_message, ...scope, pending: false } : message));
+      writePendingQuestion(null);
       requestInFlightRef.current = false;
       setBusy(false);
-      retryMetaRef.current = null;
       const firstCitation = result.assistant_message?.citations?.[0];
       if (firstCitation?.page) { setCitationPage(firstCitation.page); setCitationQuote(firstCitation.quote ?? ""); setCitationBbox(normalizedBbox(firstCitation.bbox)); }
-      try { await refreshSessionDetail(activeSession.id); }
+      try { await refreshSessionDetail(scope.session_id); }
       catch (refreshError) {
         showNotice(`Đã nhận câu trả lời nhưng chưa tải lại lịch sử: ${refreshError.message}`, "error");
       }
     } catch (error) {
-      // Keep a failed turn in the transcript. Removing it made a rejected or
-      // unreachable request look like the whole conversation had reset.
+      // The failed turn stays in the transcript with its own retry; the error
+      // is shown there, not again in a toast. The retry reuses the key so a
+      // request that did finish on the server is not answered twice.
+      writePendingQuestion(null);
       setPendingMessages((current) => current.map((message) => message.id === userId
         ? { ...message, pending: false, failed: true, status: "failed" }
-        : message.id === pendingId ? { ...message, body: error.message, pending: false, failed: true, status: "failed", structured_answer: null } : message));
-      retryMetaRef.current = { question, key: idempotencyKey };
-      setRetryQuestion(question); showNotice(error.message, "error");
+        : message.id === pendingId ? { ...message, body: userFacingError(error), pending: false, failed: true, status: "failed", structured_answer: null, retry: { question, idempotencyKey, scope, replaces: [userId, pendingId] } } : message));
     } finally { requestInFlightRef.current = false; setBusy(false); }
   }
+
+  function retryAnswer(message) {
+    if (message.retry) {
+      const { question, ...options } = message.retry;
+      submitQuestion(question, options);
+      return;
+    }
+    // A failed answer saved by the server: ask its question again.
+    const question = messages.find((item) => item.id === message.reply_to_message_id);
+    if (question?.role === "user") submitQuestion(question.body);
+  }
+
+  // After a reload, send the question this tab was still waiting for again.
+  const resumedRef = useRef(false);
+  useEffect(() => {
+    if (resumedRef.current || booting || !sessions.length) return;
+    resumedRef.current = true;
+    const pending = readPendingQuestion();
+    const known = pending && sessions.some((session) => session.id === pending.session_id && session.documents.some((document) => document.id === pending.document_id));
+    if (!known) { writePendingQuestion(null); return; }
+    submitQuestion(pending.question, { scope: { session_id: pending.session_id, document_id: pending.document_id }, idempotencyKey: pending.key });
+  }, [booting, sessions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function ask(event) { event.preventDefault(); await submitQuestion(query); }
 
@@ -863,6 +944,15 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   }
 
   const closeEvidence = useCallback(() => setEvidenceOpen(false), []);
+
+  // Shows a cited place in the PDF. On narrow screens the reader sits above
+  // the chat, so bring it into view when it is off screen.
+  const readerRef = useRef(null);
+  function openCitation(page, quote = "", bbox = null) {
+    setCitationPage(page); setCitationQuote(quote ?? ""); setCitationBbox(normalizedBbox(bbox));
+    const rect = readerRef.current?.getBoundingClientRect();
+    if (rect && (rect.top < 0 || rect.bottom > window.innerHeight)) readerRef.current.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
 
   async function openEvidence() {
     if (!documentReady) return;
@@ -938,6 +1028,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
 
   return <div className="app-shell">
     <a className="skip-link" href="#main-content">Bỏ qua điều hướng</a>
+    <a className="skip-link" href="#chat-question">Đến ô đặt câu hỏi</a>
     <header className="topbar">
       <div className="brand"><span>S</span><div><strong>SourceLens</strong><small>Document intelligence</small></div></div>
       <div className="topbar-context"><span>WORKSPACE</span><strong>{activeDocument?.file_name ?? "Thư viện tài liệu"}</strong></div>
@@ -953,16 +1044,17 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     </header>
     <main className="workspace" id="main-content">
       <SessionBrowser sessions={sessions} filteredSessions={filteredSessions} activeSession={activeSession} activeDocument={activeDocument} booting={booting} search={search} onSearch={setSearch} busy={busy} onSelectSession={(session) => { setActiveSessionId(session.id); setActiveDocumentId(session.documents[0]?.id ?? null); }} onSelectDocument={setActiveDocumentId} onCreate={createSession} onUpload={() => uploadRef.current?.click()} onDialog={setResourceDialog} onNavigate={onNavigate} />
-      <section className="reader-column"><PdfViewer document={activeDocument} sessionId={activeSession?.id} citationPage={citationPage} evidenceQuote={citationQuote} evidenceBbox={citationBbox} onReextract={canReextract ? reextractDocument : undefined} reextractDisabled={busy} />{notice && <div className={`toast ${noticeKind}`} role={noticeKind === "error" ? "alert" : "status"} aria-live="polite"><span>{notice}</span>{retryQuestion && <button onClick={() => submitQuestion(retryQuestion)} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}<button className="toast-close" aria-label="Đóng thông báo" onClick={clearNotice}><Icon name="close" size={13} /></button></div>}</section>
+      <section className="reader-column" ref={readerRef}><PdfViewer document={activeDocument} sessionId={activeSession?.id} citationPage={citationPage} evidenceQuote={citationQuote} evidenceBbox={citationBbox} onReextract={canReextract ? reextractDocument : undefined} reextractDisabled={busy} />{notice && <div className={`toast ${noticeKind}`} role={noticeKind === "error" ? "alert" : "status"}><span>{notice}</span><button type="button" className="toast-close" aria-label="Đóng thông báo" onClick={clearNotice}><Icon name="close" size={13} /></button></div>}</section>
       <aside className="chat-column">
         <header className="chat-header"><div className="ai-avatar">S</div><div><h2>Trợ lý tài liệu</h2><span>{activeDocument ? activeDocument.file_name : "Chưa chọn tài liệu"}</span></div><span className="mode-badge">{modeLabel}</span></header>
-        <div className="chat-body">
+        <div className="chat-body" ref={chatBodyRef}>
+          <p className="visually-hidden" aria-live="polite">{chatAnnouncement}</p>
           {!messages.length && <div className="welcome"><div className="welcome-mark"><Icon name="spark" size={18} /></div><h3>Bắt đầu với tài liệu của bạn</h3><p>Đặt câu hỏi để nhận câu trả lời có dẫn nguồn, trích dẫn theo trang và cấu trúc rõ ràng.</p>{activeDocument?.extraction_status === "ready" && <button onClick={() => setQuery("Tóm tắt nội dung chính của tài liệu")}>Tóm tắt tài liệu</button>}</div>}
-          {messages.map((message, index) => <article key={message.id} className={`message ${message.role} ${message.failed || message.status === "failed" ? "failed" : ""}`}><span className="message-avatar">{message.role === "user" ? "B" : "S"}</span><div><small>{message.role === "user" ? "Bạn" : "Trợ lý SourceLens"}</small><StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} evidenceByKey={evidenceByKey} onCitation={(page, quote, bbox) => { setCitationPage(page); setCitationQuote(quote); setCitationBbox(normalizedBbox(bbox)); }} />{message.role === "assistant" && message.status === "processing" && <button className="retry-answer-button" type="button" onClick={() => stopAnswer(message)}>Dừng trả lời</button>}{(message.failed || message.status === "failed") && message.role === "assistant" && <button className="retry-answer-button" type="button" onClick={() => { const previous = messages.find((item) => item.id === message.reply_to_message_id) ?? messages[index - 1]; if (previous?.role === "user") submitQuestion(previous.body); }} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}{message.role === "user" && !message.pending && <button className="message-icon-button" type="button" aria-label="Sửa câu hỏi" title="Sửa câu hỏi" onClick={() => { setQuery(message.body); document.querySelector('.chat-composer textarea')?.focus(); }}><Icon name="edit" size={14} /></button>}{message.role === "assistant" && message.body && !message.pending && !message.failed && message.status !== "failed" && message.status !== "processing" && <button className="message-icon-button" type="button" aria-label="Sao chép câu trả lời" title="Sao chép câu trả lời" onClick={async () => { try { await navigator.clipboard.writeText(message.body); showNotice("Đã sao chép."); } catch { showNotice("Không thể sao chép.", "error"); } }}><Icon name="copy" size={14} /></button>}{message.needs_update && <div className="answer-status-note stale-answer"><Icon name="refresh" size={13} /><span>Dữ liệu nguồn đã thay đổi; câu trả lời này cần được cập nhật.</span></div>}{!message.structured_answer?.evidence?.length && message.citations?.map((citation, citationIndex) => <button className="citation" key={citationIndex} onClick={() => { setCitationPage(citation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(citation.bbox)); }}><Icon name="link" size={12} /> Trang {citation.page}{citation.bbox ? " · vùng trích dẫn" : ""}</button>)}</div></article>)}
+          {messages.map((message) => <ChatMessage key={message.id} message={message} busy={busy} evidenceByKey={evidenceByKey} onCitation={openCitation} onStop={stopAnswer} onRetry={retryAnswer} onEditQuestion={(text) => { setQuery(text); document.getElementById("chat-question")?.focus(); }} onCopy={async (text) => { try { await navigator.clipboard.writeText(text); showNotice("Đã sao chép."); } catch { showNotice("Không thể sao chép.", "error"); } }} />)}
         </div>
-        <form className="chat-composer" onSubmit={ask}><textarea aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Thêm tài liệu để bắt đầu" : activeDocument.extraction_status === "ready" ? "Đặt câu hỏi về tài liệu…" : activeDocument.extraction_status === "failed" ? canReextract ? "Chưa thể đọc tài liệu, bấm Trích xuất lại" : "Chưa thể đọc tài liệu — mở Trung tâm tác vụ để thử lại" : "Đặt câu hỏi — trợ lý sẽ trả lời khi tài liệu sẵn sàng…"} disabled={!activeDocument || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Trợ lý sẵn sàng" : activeDocument?.extraction_status === "failed" ? "Tài liệu chưa đọc được" : activeDocument?.extraction_status === "queued" || activeDocument?.extraction_status === "processing" ? "Câu hỏi sẽ được xử lý sau khi đọc tài liệu" : "Chưa sẵn sàng"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status === "failed" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form>
+        <form className="chat-composer" onSubmit={ask}><textarea id="chat-question" aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Thêm tài liệu để bắt đầu" : activeDocument.extraction_status === "ready" ? "Đặt câu hỏi về tài liệu…" : activeDocument.extraction_status === "failed" ? canReextract ? "Chưa thể đọc tài liệu, bấm Trích xuất lại" : "Chưa thể đọc tài liệu — mở Trung tâm tác vụ để thử lại" : "Đặt câu hỏi — trợ lý sẽ trả lời khi tài liệu sẵn sàng…"} disabled={!activeDocument || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Trợ lý sẵn sàng" : activeDocument?.extraction_status === "failed" ? "Tài liệu chưa đọc được" : activeDocument?.extraction_status === "queued" || activeDocument?.extraction_status === "processing" ? "Câu hỏi sẽ được xử lý sau khi đọc tài liệu" : "Chưa sẵn sàng"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status === "failed" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form>
       </aside>
-      <EvidenceDrawer data={evidenceOpen ? activeEvidence : null} basePath={evidencePath} onClose={closeEvidence} onReload={() => loadEvidence().catch(() => {})} onSaved={evidenceSaved} onFocus={(evidence) => { setCitationPage(evidence.page_number); setCitationQuote(""); setCitationBbox(normalizedBbox(evidence.bbox)); }} />
+      <EvidenceDrawer data={evidenceOpen ? activeEvidence : null} basePath={evidencePath} onClose={closeEvidence} onReload={() => loadEvidence().catch(() => {})} onSaved={evidenceSaved} onFocus={(evidence) => openCitation(evidence.page_number, "", evidence.bbox)} />
       <ResourceDialog dialog={resourceDialog} busy={busy} onClose={() => setResourceDialog(null)} onConfirm={confirmResourceAction} />
       <JobCenterDrawer jobs={jobsOpen ? activeJobs : null} busy={busy} onClose={() => setJobsOpen(false)} onAction={handleJobAction} />
     </main>
