@@ -40,6 +40,7 @@ from .library import router as library_router
 from .auth import DEMO_OWNER_ID, owner_id_for_request, router as auth_router, settings_router as auth_settings_router
 from .devices import router as auth_sessions_router
 from .extraction_slots import ExtractionSlots
+from .number_input import AmbiguousNumberError, display_number, document_number_locale, read_typed_number
 from report_qa.config import settings
 from report_qa.infrastructure.postgres import postgres_health
 from report_qa.infrastructure.integrations import readiness as integration_readiness
@@ -339,9 +340,18 @@ class SessionQuestionRequest(StorableRequest):
 
 
 class EvidenceRevisionCreateRequest(StorableRequest):
-    numeric_value: str = Field(min_length=1, max_length=80)
+    """A new value as typed by the user (input_text) or as an exact decimal string (numeric_value)."""
+
+    input_text: str | None = Field(default=None, min_length=1, max_length=80)
+    numeric_value: str | None = Field(default=None, min_length=1, max_length=80)
     reason: str = Field(min_length=3, max_length=1000)
     expected_revision_id: str = Field(min_length=1, max_length=80)
+
+    @model_validator(mode="after")
+    def _one_value(self) -> "EvidenceRevisionCreateRequest":
+        if (self.input_text is None) == (self.numeric_value is None):
+            raise ValueError("send exactly one of input_text or numeric_value")
+        return self
 
 
 # Response envelopes keep the OpenAPI surface useful without freezing the
@@ -1144,10 +1154,11 @@ def list_evidence_revisions(session_id: str, document_id: str, evidence_key: str
     "/api/v1/sessions/{session_id}/documents/{document_id}/evidences/{evidence_key}/revisions",
     tags=["sessions"], summary="Append a corrected value and preserve old value/history", responses={**OPENAPI_COMMON_ERRORS, 409: {"description": "Revision đã bị thay đổi bởi thao tác khác."}},
 )
-def create_evidence_revision(session_id: str, document_id: str, evidence_key: str, payload: EvidenceRevisionCreateRequest, request: Request) -> dict[str, Any]:
+def create_evidence_revision(session_id: str, document_id: str, evidence_key: str, payload: EvidenceRevisionCreateRequest, request: Request, dry_run: bool = False) -> dict[str, Any]:
     owner_id = owner_id_for_request(request)
     session = get_session(session_id, owner_id)
     document, extraction = _ready_document(session, document_id)
+    locale = document_number_locale(extraction)
     # The conflict check and the append are one critical section so two
     # concurrent edits cannot both pass expected_revision_id.
     with catalog_lock:
@@ -1158,13 +1169,12 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
         current = item["revisions"][-1]
         if current["id"] != payload.expected_revision_id:
             raise HTTPException(status_code=409, detail={"code": "EVIDENCE_REVISION_CONFLICT", "message": "Số liệu đã được sửa bởi thao tác khác; hãy tải lại lịch sử trước khi sửa tiếp."})
-        try:
-            numeric_value = validate_decimal_text(payload.numeric_value)
-        except Exception as exc:
-            raise HTTPException(status_code=422, detail={"code": "INVALID_DECIMAL", "message": "Giá trị phải là chuỗi thập phân chính xác, ví dụ 58 hoặc 58.25."}) from exc
+        numeric_value = _requested_value(payload, locale)
         # Compare numbers, not spellings: "1300" -> "1300.0" is not a change.
         if current["numeric_value"] is not None and Decimal(numeric_value) == Decimal(current["numeric_value"]):
             raise HTTPException(status_code=422, detail={"code": "VALUE_UNCHANGED", "message": "Giá trị mới trùng giá trị hiện tại; không tạo lịch sử rỗng."})
+        if dry_run:
+            return {"parsed_value": numeric_value, "display": display_number(numeric_value, locale), "locale": locale}
         revision = {
             "id": str(uuid4()), "revision_no": len(item["revisions"]) + 1, "action": "edit", "created_at": utc_now(),
             "numeric_value": numeric_value, "old_numeric_value": current["numeric_value"], "previous_revision_id": current["id"],
@@ -1194,7 +1204,26 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
             raise HTTPException(status_code=404, detail={"code": "EVIDENCE_NOT_FOUND", "message": "Không tìm thấy số liệu trong database."}) from exc
     trace_id = trace_id_for(request)
     flow_log("EVIDENCE_REVISION_APPENDED", trace_id=trace_id, session_id=session_id, document_id=document_id, evidence_key=evidence_key, old_value=current["numeric_value"], new_value=numeric_value, affected_answer_count=len(affected))
-    return {"document_id": document_id, "evidence_key": evidence_key, "data_revision": state["data_revision"], "revision": revision, "affected_message_ids": affected, "recalculation_required": bool(affected), "trace_id": trace_id}
+    return {"document_id": document_id, "evidence_key": evidence_key, "data_revision": state["data_revision"], "revision": revision, "display": display_number(numeric_value, locale), "affected_message_ids": affected, "recalculation_required": bool(affected), "trace_id": trace_id}
+
+
+def _requested_value(payload: EvidenceRevisionCreateRequest, locale: str | None) -> str:
+    """The exact decimal string the request asks for; a 422 when it is not one number."""
+    if payload.numeric_value is not None:
+        try:
+            return validate_decimal_text(payload.numeric_value)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail={"code": "INVALID_DECIMAL", "message": "Giá trị phải là chuỗi thập phân chính xác, ví dụ 58 hoặc 58.25."}) from exc
+    try:
+        return read_typed_number(payload.input_text, locale)
+    except AmbiguousNumberError as exc:
+        raise HTTPException(status_code=422, detail={
+            "code": "NUMBER_FORMAT_AMBIGUOUS",
+            "message": f"Không rõ dấu phân cách trong \"{payload.input_text}\" là hàng nghìn hay thập phân. Hãy nhập số không có dấu phân cách hàng nghìn, ví dụ 21500 hoặc 21,5.",
+            "readings": exc.readings,
+        }) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_DECIMAL", "message": "Không đọc được số từ giá trị đã nhập, ví dụ hợp lệ: 21500 hoặc 21,5."}) from exc
 
 
 def normalize_search_text(value: str) -> str:

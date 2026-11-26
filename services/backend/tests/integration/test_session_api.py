@@ -1128,3 +1128,49 @@ def test_at_most_the_configured_number_of_extractions_run_at_once(monkeypatch) -
         assert {item["extraction_status"] for item in api_main.catalog["sessions"][created["id"]]["documents"]} == {"ready"}
     finally:
         cleanup_session(created["id"])
+
+
+def _document_with_numbers(monkeypatch, *numbers):
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(*numbers))
+    monkeypatch.delenv("PDF_NUMBER_LOCALE", raising=False)
+    created = client.post("/api/v1/sessions", json={"title": "Typed numbers"}).json()["session"]
+    document_id = _upload(created["id"], "Doanh thu.")
+    base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+    rows = {row["evidence_key"]: row for row in client.get(f"{base}/evidences").json()["evidences"]}
+    return created["id"], base, rows
+
+
+def test_typed_number_is_read_in_the_documents_number_format(monkeypatch) -> None:
+    session_id, base, rows = _document_with_numbers(monkeypatch, ("total", "1.234.567", "1234567", 1), ("target", "21,5", "21.5", 1))
+    try:
+        body = {"input_text": "21.500", "reason": "Đối chiếu PDF", "expected_revision_id": rows["target"]["current_revision_id"]}
+        preview = client.post(f"{base}/evidences/target/revisions?dry_run=true", json=body)
+        assert preview.status_code == 200, preview.text
+        assert preview.json() == {"parsed_value": "21500", "display": "21.500", "locale": "vi"}
+        assert client.get(f"{base}/evidences/target/revisions").json()["revisions"][-1]["action"] == "initialize"
+        stale = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "expected_revision_id": "stale"})
+        assert stale.status_code == 409
+
+        saved = client.post(f"{base}/evidences/target/revisions", json=body)
+        assert saved.status_code == 200, saved.text
+        assert (saved.json()["revision"]["numeric_value"], saved.json()["display"]) == ("21500", "21.500")
+        old_client = client.post(f"{base}/evidences/total/revisions", json={"numeric_value": "1234568", "reason": "Đối chiếu PDF", "expected_revision_id": rows["total"]["current_revision_id"]})
+        assert (old_client.status_code, old_client.json()["display"]) == (200, "1.234.568")
+    finally:
+        cleanup_session(session_id)
+
+
+def test_typed_number_that_the_unknown_format_cannot_decide_is_refused(monkeypatch) -> None:
+    session_id, base, rows = _document_with_numbers(monkeypatch, ("target", "100", "100", 1))
+    try:
+        body = {"input_text": "1.250", "reason": "Đối chiếu PDF", "expected_revision_id": rows["target"]["current_revision_id"]}
+        refused = client.post(f"{base}/evidences/target/revisions", json=body)
+        assert refused.status_code == 422
+        assert refused.json()["detail"]["code"] == "NUMBER_FORMAT_AMBIGUOUS"
+        assert refused.json()["detail"]["readings"] == ["1250", "1.250"]
+        decided = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": "21,5"})
+        assert decided.json() == {"parsed_value": "21.5", "display": "21.5", "locale": None}
+        both = client.post(f"{base}/evidences/target/revisions", json={**body, "numeric_value": "1250"})
+        assert both.status_code == 422
+    finally:
+        cleanup_session(session_id)
