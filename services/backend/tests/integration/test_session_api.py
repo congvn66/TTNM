@@ -930,7 +930,9 @@ def test_reextracting_a_ready_document_archives_the_old_result_and_keeps_edits()
         previous = rerun.json()["previous_extraction"]
         assert (previous["status"], previous["extraction_run_id"]) == ("ready", old_run_id)
         assert api_main.extraction_path(previous["artifact"]).exists()  # archived, not overwritten
-        assert answer["id"] in rerun.json()["affected_message_ids"]
+        assert rerun.json()["affected_message_ids"] == []  # judged when the new reading is ready
+        history = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"]
+        assert answer["id"] in history[-1]["affected_message_ids"]  # it used 100; the carried-over edit says 110
         after = next(row for row in client.get(f"{base}/evidences").json()["evidences"] if row["evidence_key"] == item["evidence_key"])
         assert (after["original_numeric_value"], after["current_numeric_value"]) == ("100", "110")
     finally:
@@ -1263,6 +1265,54 @@ def test_edits_stay_pending_through_failed_readings_until_a_reading_is_ready(mon
         assert [(entry["status"], entry["edits_carried_over"], [item["code"] for item in entry["edits_not_carried_over"]]) for entry in history] == [
             ("ready", [], ["NEW_READING_FAILED"]), ("failed", [], ["NEW_READING_FAILED"]), ("failed", ["kept"], [])]
         assert api_main.catalog["sessions"][created["id"]]["documents"][0]["pending_edits"] == []
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_reextraction_flags_only_answers_whose_values_changed(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("a", "100", "100", 1), ("b", "200", "200", 1), ("c", "300", "300", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Stale answers"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        rows = {row["evidence_key"]: row for row in client.get(f"{base}/evidences").json()["evidences"]}
+        # "c" is edited and then put back to its printed value: not an edit any more.
+        first = client.post(f"{base}/evidences/c/revisions", json={"numeric_value": "310", "reason": "Thử", "expected_revision_id": rows["c"]["current_revision_id"]})
+        client.post(f"{base}/evidences/c/revisions", json={"numeric_value": "300.0", "reason": "Trả lại", "expected_revision_id": first.json()["revision"]["id"]})
+        session = api_main.catalog["sessions"][created["id"]]
+        answers = {name: {"id": name, "role": "assistant", "document_id": document_id, "answer_inputs": [{"evidence_key": key, "value": value}]}
+                   for name, key, value in (("uses-a", "a", "100"), ("uses-b", "b", "200"), ("uses-c", "c", "300"))}
+        session["messages"].extend(answers.values())
+
+        same = client.post(f"{base}/extraction")
+        assert same.json()["previous_extraction"]["user_edits"] == []
+        entry = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"][-1]
+        assert (entry["affected_message_ids"], entry["edits_carried_over"]) == ([], [])
+        assert not any(message.get("needs_update") for message in answers.values())
+
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("a", "100", "100", 1), ("b", "250", "250", 1)))
+        client.post(f"{base}/extraction")
+        entry = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"][-1]
+        assert sorted(entry["affected_message_ids"]) == ["uses-b", "uses-c"]
+        assert [name for name, message in answers.items() if message.get("needs_update")] == ["uses-b", "uses-c"]
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_an_edit_the_new_reading_already_has_is_not_carried_over(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("misread", "18.240", "18.24", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Fixed by the new reading"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        row = client.get(f"{base}/evidences").json()["evidences"][0]
+        client.post(f"{base}/evidences/misread/revisions", json={"numeric_value": "18240", "reason": "Đối chiếu PDF", "expected_revision_id": row["current_revision_id"]})
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("misread", "18.240", "18240", 1)))
+        client.post(f"{base}/extraction")
+        entry = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"][-1]
+        assert (entry["edits_carried_over"], entry["edits_not_carried_over"]) == ([], [])
+        revisions = client.get(f"{base}/evidences/misread/revisions").json()["revisions"]
+        assert [r["action"] for r in revisions] == ["initialize"]
     finally:
         cleanup_session(created["id"])
 

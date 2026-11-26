@@ -689,6 +689,8 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
         if artifact is not None:
             _publish_reading(document, extraction["extraction_name"], artifact)
         _carry_over_edits(document, artifact)
+        if artifact is not None and document.get("extraction_history"):
+            document["extraction_history"][-1]["affected_message_ids"] = _flag_answers_whose_inputs_changed(session, document)
         session["updated_at"] = utc_now()
     try:
         save_catalog(catalog, owner)
@@ -1000,13 +1002,16 @@ def _evidence_location(evidence: dict[str, Any]) -> dict[str, Any]:
 
 
 def _user_edits(document: dict[str, Any], artifact: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Numbers whose current value is a user edit, with where each one sat in this reading."""
+    """Numbers whose current value is a user edit that differs from the reading, with where each one sat in it.
+
+    A number edited back to its value in the reading is not an edit.
+    """
     reading = with_chart_batches(document, artifact or {"evidence_batch": {"evidences": []}})
     evidences = {item["evidence_key"]: item for item in reading["evidence_batch"]["evidences"]}
     edits = []
     for key, item in ((document.get("evidence_state") or {}).get("items") or {}).items():
         current = item["revisions"][-1]
-        if current.get("action") != "edit":
+        if current.get("action") != "edit" or _same_number(current["numeric_value"], item["original_numeric_value"]):
             continue
         edits.append({
             "evidence_key": key, "numeric_value": current["numeric_value"], "reason": current.get("reason"),
@@ -1040,6 +1045,8 @@ def _carry_over_edits(document: dict[str, Any], artifact: dict[str, Any] | None)
             code = "NOT_IN_NEW_READING"
         elif edit["location"] != _evidence_location(evidences[key]):
             code = "LOCATION_CHANGED"
+        elif _same_number(items[key]["revisions"][-1]["numeric_value"], edit["numeric_value"]):
+            continue  # the new reading has the edited value: nothing to carry over
         else:
             _append_carried_edit(document, items[key], edit)
             carried.append(key)
@@ -1053,14 +1060,34 @@ def _carry_over_edits(document: dict[str, Any], artifact: dict[str, Any] | None)
 
 def _append_carried_edit(document: dict[str, Any], item: dict[str, Any], edit: dict[str, Any]) -> None:
     current = item["revisions"][-1]
-    if current["numeric_value"] is not None and Decimal(current["numeric_value"]) == Decimal(edit["numeric_value"]):
-        return  # the new reading already has the edited value
     revision = {
         "id": str(uuid4()), "revision_no": len(item["revisions"]) + 1, "action": "edit", "created_at": utc_now(),
         "numeric_value": edit["numeric_value"], "old_numeric_value": current["numeric_value"], "previous_revision_id": current["id"],
         "reason": edit["reason"], "carried_over_from_revision_id": edit["revision_id"],
     }
     _append_edit(document, item["evidence_key"], revision)
+
+
+def _same_number(left: str | None, right: str | None) -> bool:
+    """Equal as numbers: "1300" and "1300.0" are the same value."""
+    return left == right if left is None or right is None else Decimal(left) == Decimal(right)
+
+
+def _flag_answers_whose_inputs_changed(session: dict[str, Any], document: dict[str, Any]) -> list[str]:
+    """Mark the document's answers that used a value the current reading changed or no longer has. Call under catalog_lock."""
+    items = document["evidence_state"]["items"]
+    affected = []
+    for message in session.get("messages", []):
+        if message.get("role") != "assistant" or message.get("document_id") != document["id"]:
+            continue
+        changed = any(
+            item.get("evidence_key") not in items or not _same_number(item.get("value"), items[item["evidence_key"]]["revisions"][-1]["numeric_value"])
+            for item in message.get("answer_inputs") or []
+        )
+        if changed:
+            message["needs_update"] = True
+            affected.append(message["id"])
+    return affected
 
 
 def _append_edit(document: dict[str, Any], evidence_key: str, revision: dict[str, Any]) -> None:
@@ -1080,8 +1107,9 @@ def _append_edit(document: dict[str, Any], evidence_key: str, revision: dict[str
     description=(
         "Chay lai extraction bang extractor hien tai. Lan doc cu (artifact, so lieu, bieu do da doc) duoc luu tru; "
         "so lieu duoc dung lai tu lan doc moi. So da sua chi duoc giu khi lan doc moi co cung key, cung vi tri va cung "
-        "chu in; ket qua nam o extraction_history[-1].edits_carried_over / edits_not_carried_over. Cau tra loi cu "
-        "duoc danh dau needs_update. Tra 409 neu tai lieu dang duoc trich xuat."
+        "chu in; ket qua nam o extraction_history[-1].edits_carried_over / edits_not_carried_over. Khi lan doc moi san sang, "
+        "chi cau tra loi dung mot so da doi (hoac khong con) moi duoc danh dau needs_update; danh sach nam o "
+        "extraction_history[-1].affected_message_ids. Tra 409 neu tai lieu dang duoc trich xuat."
     ),
     responses=OPENAPI_COMMON_ERRORS,
 )
@@ -1101,14 +1129,9 @@ def rerun_document_extraction(session_id: str, document_id: str, request: Reques
         if document.get("extraction_status") in {"queued", "processing"}:
             raise user_error(409, "EXTRACTION_IN_PROGRESS")
         previous = _archive_extraction(document, artifact)
-        affected = []
-        if previous["status"] == "ready":
-            # Their inputs came from the archived extraction; keep the
-            # snapshots and flag them for recalculation.
-            for message in session["messages"]:
-                if message.get("role") == "assistant" and message.get("document_id") == document_id and message.get("answer_inputs"):
-                    message["needs_update"] = True
-                    affected.append(message["id"])
+        # Answers are compared with the new reading once it is ready (see
+        # complete_document_extraction); nothing has changed yet.
+        affected: list[str] = []
         document.update({"extraction_status": "queued", "page_count": None, "numeric_evidence_count": 0, "extraction_error": None})
         session["updated_at"] = utc_now()
         save_catalog(catalog)
