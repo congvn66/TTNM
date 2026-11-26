@@ -38,16 +38,17 @@ it("never shows a Python literal or a Decimal", () => {
   expect(withoutDecimalRepr("tong = Decimal('39590')")).toBe("tong = 39590");
 });
 
-it("labels script result rows from the API, or from the one Data row they copy", () => {
-  const inputs = [{ evidence_key: "ev-1", label: "Miền Bắc · Quý 2/2026", value: "21350" }, { evidence_key: "ev-2", label: "Miền Bắc · Quý 1/2026", value: "18240" }];
-  expect(scriptResultRows({ inputs, result: "{}", result_rows: [
+it("labels script result rows with the API's label, else the script's name", () => {
+  expect(scriptResultRows({ result: "{}", result_rows: [
     { label: "Chênh lệch Miền Bắc", name: "bac_diff", value: "3110", source_keys: ["ev-1", "ev-2"] },
-    { name: "dt_bac_q2", value: "21350", source_keys: ["ev-1"] },
-    { name: "total", value: "39590", source_keys: ["ev-1", "ev-2"] },
+    { label: "Miền Bắc · Quý 2/2026", name: "dt_bac_q2", value: "21350", source_keys: ["ev-1"] },
+    { label: "tong_ca_nam", name: "tong_ca_nam", value: "39590", source_keys: ["ev-1", "ev-2"] },
+    { name: "total", value: "1", source_keys: [] },
   ] })).toEqual([
     { name: "Chênh lệch Miền Bắc", value: "3.110" },
     { name: "Miền Bắc · Quý 2/2026", value: "21.350" },
-    { name: "total", value: "39.590" },
+    { name: "Tong ca nam", value: "39.590" },
+    { name: "total", value: "1" },
   ]);
   expect(scriptResultRows({ result: '{"x": "1"}' })).toEqual([{ name: "x", value: "1" }]);
 });

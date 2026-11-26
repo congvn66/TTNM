@@ -122,21 +122,17 @@ export function resultRows(result) {
 }
 
 /**
- * The rows of an executed script. The API's result_rows name each value and
- * the Data keys it came from; a value copied from one Data row takes that
- * row's label. Without result_rows the result text is split into rows.
+ * The rows of an executed script. The API names each row: label is the Data
+ * row's label when the value is copied from that row, else the script's name.
+ * Without result_rows the result text is split into rows.
  */
 export function scriptResultRows(formula) {
   const rows = Array.isArray(formula?.result_rows) ? formula.result_rows : [];
   if (!rows.length) return resultRows(formula?.result);
-  const inputs = new Map((formula.inputs ?? []).map((input) => [input.evidence_key, input]));
-  return rows.map((row) => {
-    const keys = Array.isArray(row.source_keys) ? row.source_keys : [];
-    const source = keys.length === 1 ? inputs.get(keys[0]) : null;
-    const copied = source && !numbersDiffer(row.value, source.value);
-    const name = row.label || (copied ? readableLabel(source.label) : "") || readableLabel(row.name);
-    return { name, value: formatNumber(withoutDecimalRepr(row.value ?? "")) };
-  });
+  return rows.map((row) => ({
+    name: readableLabel(row.label) || readableLabel(row.name),
+    value: formatNumber(withoutDecimalRepr(row.value ?? "")),
+  }));
 }
 
 /** Calculations with the same code and result are one calculation. */
