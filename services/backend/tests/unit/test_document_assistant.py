@@ -882,3 +882,32 @@ def test_cited_rows_must_lie_inside_a_period_the_question_names(question, keys, 
     rows = {r["evidence_key"]: r for r in [_period_row("q2-25", "35911", "Q2/25"), _period_row("q1-26", "52901", "Q1/26"),
                                            _period_row("q2-26", "55159", "Q2/26"), _period_row("f26", "199829", "2026F")]}
     assert [r["key"] for r in _Turn.wrong_period_rows(question, [rows[k] for k in keys])] == wrong
+
+
+def _chart_context():
+    pages = [{"page": 1, "text": "Doanh thu thuần theo khu vực."},
+             {"page": 2, "text": "Số đơn hàng tăng mạnh từ tháng 4. Biểu đồ số đơn hàng theo tháng."},
+             {"page": 3, "text": "Kế hoạch mở cửa hàng."}]
+    regions = [{"chart_region_key": f"chart-{n}", "page_number": n, "read": False} for n in (2, 3)]
+    return {"pages": pages, "evidences": evidences(), "chart_regions": regions, "history": []}
+
+
+def test_not_found_is_sent_back_while_a_chart_on_a_relevant_page_is_unread():
+    # TC2/SS3: the model said "báo cáo không cung cấp" in one step; the orders chart on page 2 was never read.
+    read_chart = Mock(side_effect=RuntimeError("DePlot down"))
+    complete = sequence(
+        {"action": "answer", "answer": "Báo cáo không có số đơn hàng theo tháng.", "not_found": True},
+        {"action": "read_chart", "chart_region_key": "chart-2"},
+        {"action": "answer", "answer": "Chưa đọc được biểu đồ số đơn hàng.", "not_found": True},
+    )
+    result = run_assistant("Số đơn hàng tháng 4 là bao nhiêu?", _chart_context(), complete=complete, read_chart=read_chart)
+    rejected = json.loads(complete.call_args_list[1].args[1])["tool_results"][0]
+    assert rejected["chart_region_keys"] == ["chart-2"]  # page 3 is not relevant to the question
+    assert result["not_found"] is True  # a tried read (even a failed one) lets not_found through
+
+
+def test_relevant_pages_use_the_page_ranking_of_fit_context():
+    from report_qa.application.document_assistant import relevant_pages
+
+    assert relevant_pages(_chart_context(), "Số đơn hàng tháng 4?") == {2}
+    assert relevant_pages(_chart_context(), "Trang 3 nói gì về số đơn hàng?") == {2, 3}

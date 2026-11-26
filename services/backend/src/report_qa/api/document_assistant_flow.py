@@ -1,8 +1,6 @@
 """Persist document-aware assistant answers using the local session runtime."""
 
 import json
-import math
-import re
 from uuid import uuid4
 
 from report_qa.api.ai_provider import MAX_ANSWER_CHARS, ProviderError, planner_client
@@ -19,6 +17,8 @@ from report_qa.application.document_assistant import (
     answer_timeout_seconds,
     data_rows,
     evidence_label,
+    named_pages,
+    page_relevance,
     run_assistant,
     stated_quantities,
     with_time_budget,
@@ -28,8 +28,6 @@ from report_qa.application.text_evidence import quote_bbox
 from report_qa.application.text_safety import storable
 
 MAX_CONTEXT_CHARS = 300_000
-_WORD = re.compile(r"\w+")
-_NAMED_PAGES = re.compile(r"\b(?:trang|page)\s*(\d+)(?:\s*(?:-|–|đến|to)\s*(\d+))?", re.IGNORECASE)
 
 
 def _size(value) -> int:
@@ -40,20 +38,6 @@ def _model_view(context) -> dict:
     """What the model is sent about the document (the payload's document part)."""
     return {"pages": context["pages"], "data": data_rows(context["evidences"]),
             "chart_regions": context["chart_regions"], "history": context["history"]}
-
-
-def _words(text) -> set[str]:
-    return set(_WORD.findall(str(text).casefold()))
-
-
-def named_pages(question: str) -> set[int]:
-    """Pages the question names: "trang 5", "page 3", "trang 2-4"."""
-    pages = set()
-    for match in _NAMED_PAGES.finditer(question):
-        first = int(match.group(1))
-        last = int(match.group(2) or first)
-        pages.update(range(first, min(last, first + 50) + 1))
-    return pages
 
 
 def fit_context(context: dict, question: str, budget: int = MAX_CONTEXT_CHARS) -> dict:
@@ -71,19 +55,12 @@ def fit_context(context: dict, question: str, budget: int = MAX_CONTEXT_CHARS) -
         history.pop(0)
     if _size(_model_view({**context, "history": history})) <= budget:
         return context if len(history) == len(context["history"]) else {**context, "history": history}
-    page_words = {p["page"]: _words(p.get("text", "")) for p in context["pages"]}
-    query = _words(question) | set().union(*(_words(t["text"]) for t in context["history"][-2:]))
-    pages_with = {w: sum(w in found for found in page_words.values()) for w in query}
-    total = len(page_words)
-
-    def relevance(page):
-        return sum(math.log((1 + total) / pages_with[w]) for w in query & page_words[page["page"]])
-
+    scores = page_relevance(context["pages"], question, context["history"])
     named = named_pages(question)
     room = budget - _size({"pages": [], "data": [], "chart_regions": [], "history": [],
                            "omitted_pages": [p["page"] for p in context["pages"]]})
     kept = set()
-    for page in sorted(context["pages"], key=lambda p: (p["page"] not in named, -relevance(p), p["page"])):
+    for page in sorted(context["pages"], key=lambda p: (p["page"] not in named, -scores[p["page"]], p["page"])):
         rows = [e for e in context["evidences"] if e["page_number"] == page["page"]]
         charts = [r for r in context["chart_regions"] if r.get("page_number") == page["page"]]
         cost = _size(page) + _size(data_rows(rows)) + _size(charts) + 3  # separators between items
