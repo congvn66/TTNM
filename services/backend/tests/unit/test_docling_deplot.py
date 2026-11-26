@@ -488,3 +488,19 @@ def test_a_cell_unit_comes_from_its_headers_or_the_table_note_not_nearby_prose()
     assert unit_after("đạt 33 nghìn đơn", 6, "33") == "THOUSAND"
     assert unit_after("là 220 tỷ đồng.", 6, "220") == "VND_BILLION"
     assert unit_after("đạt 33 đơn", 6, "33") is None
+
+
+def test_a_page_without_text_is_reported_in_readable_vietnamese(tmp_path):
+    import pymupdf
+
+    path = tmp_path / "scan.pdf"
+    with pymupdf.open() as pdf:
+        pdf.new_page(width=600, height=400)
+        pdf.save(path)
+    converter = Mock()
+    converter.convert.return_value = SimpleNamespace(status="ConversionStatus.SUCCESS",
+                                                     document=SimpleNamespace(export_to_dict=lambda: {"tables": [], "pictures": [], "texts": []}))
+    ocr = Mock(available=lambda: (False, "OCR_UNAVAILABLE"))
+    warnings = extract_docling_artifact(path, "version", locale="vi", converter=converter, ocr_engine=ocr)["evidence_batch"]["warnings"]
+    # The message was stored double-encoded ("khÃ´ng cÃ³ lá»›p chá»¯").
+    assert warnings[0]["message"] == "Trang 1 không có lớp chữ; chưa trích xuất số từ trang này."

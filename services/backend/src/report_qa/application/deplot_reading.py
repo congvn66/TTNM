@@ -225,7 +225,7 @@ class DeplotChartReader:
                     warnings.append(
                         {
                             "code": "CHART_PROVIDER_UNAVAILABLE",
-                            "message": "DePlot khÃ´ng sáºµn sÃ ng; khÃ´ng publish giÃ¡ trá»‹ chart chÆ°a kiá»ƒm chá»©ng.",
+                            "message": "DePlot không sẵn sàng; không publish giá trị chart chưa kiểm chứng.",
                             "evidence_key": None,
                         }
                     )

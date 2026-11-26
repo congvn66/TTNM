@@ -142,12 +142,12 @@ def extract_docling_artifact(
                     except Exception as exc:
                         warn(
                             type(exc).__name__ or "OCR_FAILED",
-                            f"KhÃ´ng Ä‘á»c Ä‘Æ°á»£c trang {number} báº±ng OCR.",
+                            f"Không đọc được trang {number} bằng OCR.",
                         )
                 else:
                     warn(
                         code or "OCR_UNAVAILABLE",
-                        f"Trang {number} khÃ´ng cÃ³ lá»›p chá»¯; chÆ°a trÃ­ch xuáº¥t sá»‘ tá»« trang nÃ y.",
+                        f"Trang {number} không có lớp chữ; chưa trích xuất số từ trang này.",
                     )
             pages.append({"page": number, "text": page_text})
             page_years[number] = single_year(page_text)
@@ -334,7 +334,7 @@ def extract_docling_artifact(
                     if matches:
                         warn(
                             "OCR_MULTIPLE_NUMBERS",
-                            "OCR token chá»©a nhiá»u sá»‘; khÃ´ng Ä‘Æ°a vÃ o phÃ©p tÃ­nh.",
+                            "OCR token chứa nhiều số; không đưa vào phép tính.",
                         )
                     continue
                 match = matches[0]
