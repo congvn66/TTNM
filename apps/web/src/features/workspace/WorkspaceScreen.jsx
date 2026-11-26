@@ -29,26 +29,82 @@ function readSessionSnapshot() {
   }
 }
 
-// The question whose POST is still in flight. JSON mode answers inside the
-// request and saves nothing until it ends, so after a reload only this tab
-// knows the question exists. Re-sending it with the same Idempotency-Key waits
-// for the running request and returns its saved answer instead of a new one.
-const PENDING_QUESTION_KEY = "sourcelens-pending-question-v1";
-const PENDING_QUESTION_TTL_MS = 10 * 60_000;
+// Questions the server has not saved yet: the one still being sent and the
+// ones that failed. JSON mode answers inside the request and saves nothing
+// until it ends, so after a reload only this tab knows them. Each keeps its
+// Idempotency-Key, so sending it again returns the answer the server may have
+// saved meanwhile, and the question it was asked after, so it keeps its place.
+// After a reload a question still being sent is sent again while it is young;
+// any other one comes back as a failed question with its retry button.
+const UNSAVED_QUESTIONS_KEY = "sourcelens-unsaved-questions-v1";
+const RESEND_AFTER_RELOAD_MS = 10 * 60_000;
 
-function readPendingQuestion() {
+function readUnsavedQuestions() {
   try {
-    const value = JSON.parse(sessionStorage.getItem(PENDING_QUESTION_KEY) || "null");
-    if (!value?.question || !value.key || Date.now() - Number(value.sent_at) > PENDING_QUESTION_TTL_MS) return null;
-    return value;
-  } catch { return null; }
+    const value = JSON.parse(sessionStorage.getItem(UNSAVED_QUESTIONS_KEY) || "[]");
+    return Array.isArray(value) ? value.filter((item) => item?.id && item.question && item.key && item.session_id && item.document_id) : [];
+  } catch { return []; }
 }
 
-function writePendingQuestion(value) {
+function updateUnsavedQuestions(change) {
   try {
-    if (value) sessionStorage.setItem(PENDING_QUESTION_KEY, JSON.stringify(value));
-    else sessionStorage.removeItem(PENDING_QUESTION_KEY);
-  } catch { /* storage disabled: a reload then loses only the unanswered question */ }
+    const next = change(readUnsavedQuestions());
+    if (next.length) sessionStorage.setItem(UNSAVED_QUESTIONS_KEY, JSON.stringify(next));
+    else sessionStorage.removeItem(UNSAVED_QUESTIONS_KEY);
+  } catch { /* storage disabled: a reload then loses only the unsaved questions */ }
+}
+
+/** The two chat messages of a question that was not saved. */
+function failedTurn(item) {
+  const scope = { session_id: item.session_id, document_id: item.document_id };
+  return [
+    { id: item.id, role: "user", body: item.question, ...scope, after_question_id: item.after ?? null, pending: false, failed: true, status: "failed" },
+    { id: item.answer_id, role: "assistant", reply_to_message_id: item.id, body: item.error || CLIENT_ERRORS.unknown, ...scope, pending: false, failed: true, status: "failed", structured_answer: null,
+      retry: { question: item.question, idempotencyKey: item.key, scope, after: item.after ?? null, replaces: [item.id, item.answer_id] } },
+  ];
+}
+
+/**
+ * Chat order: saved questions in server order, each followed by its replies.
+ * A question not saved yet sits right after the question that was last when
+ * it was sent; one without such a question goes last.
+ */
+function orderConversation(saved, unsaved) {
+  const all = [...saved, ...unsaved];
+  const replies = new Map();
+  for (const message of all) {
+    if (message.role === "assistant" && message.reply_to_message_id) replies.set(message.reply_to_message_id, [...(replies.get(message.reply_to_message_id) ?? []), message]);
+  }
+  const questionIds = new Set(all.filter((message) => message.role === "user").map((message) => message.id));
+  const unsavedAfter = new Map();
+  for (const message of unsaved) {
+    if (message.role !== "user") continue;
+    const anchor = questionIds.has(message.after_question_id) ? message.after_question_id : "end";
+    unsavedAfter.set(anchor, [...(unsavedAfter.get(anchor) ?? []), message]);
+  }
+  // A question's turn runs until the next question, so replies without a
+  // link (older data) stay with it; unsaved questions follow the whole turn.
+  const ordered = [];
+  let openTurn = null;
+  const closeTurn = () => {
+    const question = openTurn;
+    openTurn = null;
+    (unsavedAfter.get(question) ?? []).forEach(place);
+  };
+  function place(message) {
+    if (message.role === "assistant" && questionIds.has(message.reply_to_message_id)) return;
+    if (message.role === "user") closeTurn();
+    ordered.push(message);
+    if (message.role !== "user") return;
+    ordered.push(...(replies.get(message.id) ?? []));
+    openTurn = message.id;
+  }
+  saved.forEach(place);
+  closeTurn();
+  (unsavedAfter.get("end") ?? []).forEach(place);
+  closeTurn();
+  unsaved.filter((message) => message.role !== "user").forEach(place);
+  return ordered;
 }
 
 function writeSessionSnapshot(sessions) {
@@ -672,22 +728,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   // A polling response can arrive before the POST handler's own refresh. Merge
   // by stable server ID so the accepted turn never vanishes or appears twice.
   const persistedIds = new Set(persistedMessages.map((message) => message.id));
-  const combinedMessages = [...persistedMessages, ...pendingForActive.filter((message) => !persistedIds.has(message.id))];
-  // A legacy snapshot may have replies separated from their questions. Use
-  // the persisted reply link, while retaining the order of question turns.
-  const repliesByQuestion = new Map();
-  for (const message of combinedMessages) {
-    if (message.role === "assistant" && message.reply_to_message_id) {
-      const replies = repliesByQuestion.get(message.reply_to_message_id) ?? [];
-      replies.push(message);
-      repliesByQuestion.set(message.reply_to_message_id, replies);
-    }
-  }
-  const questionIds = new Set(combinedMessages.filter((message) => message.role === "user").map((message) => message.id));
-  const messages = combinedMessages.flatMap((message) => {
-    if (message.role === "assistant" && questionIds.has(message.reply_to_message_id)) return [];
-    return message.role === "user" ? [message, ...(repliesByQuestion.get(message.id) ?? [])] : [message];
-  });
+  const messages = orderConversation(persistedMessages, pendingForActive.filter((message) => !persistedIds.has(message.id)));
   useEffect(() => {
     if (!persistedMessages.length) return;
     const persistedIds = new Set(persistedMessages.map((message) => message.id));
@@ -851,9 +892,9 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     } catch (error) { showNotice(error.message, "error"); } finally { setBusy(false); if (uploadRef.current) uploadRef.current.value = ""; }
   }
 
-  // scope/idempotencyKey/replaces are set when re-sending a question that
-  // was already sent once (a retry, or the in-flight question after a reload).
-  async function submitQuestion(questionInput, { scope: givenScope, idempotencyKey = crypto.randomUUID(), replaces = [] } = {}) {
+  // scope/idempotencyKey/after/replaces are set when re-sending a question
+  // that was already sent once (a retry, or an unsaved question after a reload).
+  async function submitQuestion(questionInput, { scope: givenScope, idempotencyKey = crypto.randomUUID(), after, replaces = [] } = {}) {
     const question = questionInput?.trim();
     const scope = givenScope ?? (activeSession && activeDocument ? { session_id: activeSession.id, document_id: activeDocument.id } : null);
     if (!question || !scope || requestInFlightRef.current || busy) return;
@@ -863,12 +904,18 @@ function App({ user = null, onSignOut = null, onNavigate }) {
       return;
     }
     requestInFlightRef.current = true;
-    const userId = crypto.randomUUID();
-    const pendingId = crypto.randomUUID();
-    setPendingMessages((current) => [...current.filter((message) => !replaces.includes(message.id)), { id: userId, role: "user", body: question, ...scope, pending: true }, { id: pendingId, role: "assistant", body: "", structured_answer: { pending: true }, ...scope, pending: true }]);
+    const unsaved = {
+      id: crypto.randomUUID(), answer_id: crypto.randomUUID(), ...scope, question, key: idempotencyKey, sent_at: Date.now(),
+      after: after !== undefined ? after : [...messages].reverse().find((message) => message.role === "user")?.id ?? null,
+    };
+    const userId = unsaved.id;
+    const pendingId = unsaved.answer_id;
+    setPendingMessages((current) => [...current.filter((message) => !replaces.includes(message.id)),
+      { id: userId, role: "user", body: question, ...scope, after_question_id: unsaved.after, pending: true },
+      { id: pendingId, role: "assistant", reply_to_message_id: userId, body: "", structured_answer: { pending: true }, ...scope, pending: true }]);
     if (!givenScope) setQuery("");
     setBusy(true);
-    writePendingQuestion({ ...scope, question, key: idempotencyKey, sent_at: Date.now() });
+    updateUnsavedQuestions((items) => [...items.filter((item) => !replaces.includes(item.id)), unsaved]);
     try {
       const result = await request(`/api/v1/sessions/${scope.session_id}/messages`, { method: "POST", body: JSON.stringify({ document_id: scope.document_id, question }), headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey } });
       if (result.job) setActiveJobs((current) => [result.job, ...current.filter((job) => job.id !== result.job.id)]);
@@ -877,7 +924,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
       setPendingMessages((current) => current.map((message) => message.id === userId
         ? { ...result.user_message, ...scope, pending: false }
         : message.id === pendingId ? { ...result.assistant_message, ...scope, pending: false } : message));
-      writePendingQuestion(null);
+      updateUnsavedQuestions((items) => items.filter((item) => item.id !== userId));
       requestInFlightRef.current = false;
       setBusy(false);
       const firstCitation = result.assistant_message?.citations?.[0];
@@ -887,13 +934,14 @@ function App({ user = null, onSignOut = null, onNavigate }) {
         showNotice(`Đã nhận câu trả lời nhưng chưa tải lại lịch sử: ${refreshError.message}`, "error");
       }
     } catch (error) {
-      // The failed turn stays in the transcript with its own retry; the error
-      // is shown there, not again in a toast. The retry reuses the key so a
-      // request that did finish on the server is not answered twice.
-      writePendingQuestion(null);
-      setPendingMessages((current) => current.map((message) => message.id === userId
-        ? { ...message, pending: false, failed: true, status: "failed" }
-        : message.id === pendingId ? { ...message, body: userFacingError(error), pending: false, failed: true, status: "failed", structured_answer: null, retry: { question, idempotencyKey, scope, replaces: [userId, pendingId] } } : message));
+      // The failed turn stays in the transcript, in its place and across a
+      // reload, with its own retry; the error is shown there, not in a toast.
+      // The retry reuses the key so a request that did finish on the server
+      // is not answered twice.
+      const failed = { ...unsaved, error: userFacingError(error) };
+      updateUnsavedQuestions((items) => items.map((item) => item.id === userId ? failed : item));
+      const [failedQuestion, failedAnswer] = failedTurn(failed);
+      setPendingMessages((current) => current.map((message) => message.id === userId ? failedQuestion : message.id === pendingId ? failedAnswer : message));
     } finally { requestInFlightRef.current = false; setBusy(false); }
   }
 
@@ -908,15 +956,20 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     if (question?.role === "user") submitQuestion(question.body);
   }
 
-  // After a reload, send the question this tab was still waiting for again.
+  // After a reload, bring back the questions the server has not saved: send
+  // a young one that was still being sent again, show the others as failed.
   const resumedRef = useRef(false);
   useEffect(() => {
     if (resumedRef.current || booting || !sessions.length) return;
     resumedRef.current = true;
-    const pending = readPendingQuestion();
-    const known = pending && sessions.some((session) => session.id === pending.session_id && session.documents.some((document) => document.id === pending.document_id));
-    if (!known) { writePendingQuestion(null); return; }
-    submitQuestion(pending.question, { scope: { session_id: pending.session_id, document_id: pending.document_id }, idempotencyKey: pending.key });
+    const known = (item) => sessions.some((session) => session.id === item.session_id && session.documents.some((document) => document.id === item.document_id));
+    const items = readUnsavedQuestions().filter(known);
+    updateUnsavedQuestions(() => items);
+    const resend = items.find((item) => !item.error && Date.now() - Number(item.sent_at) < RESEND_AFTER_RELOAD_MS);
+    const failed = items.filter((item) => item !== resend).map((item) => item.error ? item : { ...item, error: "Câu hỏi chưa được gửi xong trước khi tải lại trang. Hãy thử lại." });
+    updateUnsavedQuestions((current) => current.map((item) => failed.find((entry) => entry.id === item.id) ?? item));
+    if (failed.length) setPendingMessages((current) => [...current, ...failed.flatMap(failedTurn)]);
+    if (resend) submitQuestion(resend.question, { scope: { session_id: resend.session_id, document_id: resend.document_id }, idempotencyKey: resend.key, after: resend.after ?? null, replaces: [resend.id] });
   }, [booting, sessions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function ask(event) { event.preventDefault(); await submitQuestion(query); }

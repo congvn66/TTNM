@@ -257,10 +257,53 @@ it("keeps a failed question with its retry when another question is sent", async
   expect(keys[2]).toEqual(keys[0]);
 });
 
+it("keeps a failed question in its place in the conversation and after a reload", async () => {
+  const doc = { id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: "ready" };
+  const saved = [
+    { id: "q0", role: "user", document_id: "doc", body: "Zero" },
+    { id: "a0", role: "assistant", document_id: "doc", reply_to_message_id: "q0", body: "Answer to Zero" },
+  ];
+  const session = () => ({ id: "chat", title: "My session", documents: [doc], messages: [...saved] });
+  const keys = [];
+  requestMock.mockImplementation(async (path, options) => {
+    if (path === "/api/v1/sessions") return { sessions: [session()] };
+    if (path === "/api/v1/sessions/chat") return { session: session() };
+    if (path.endsWith("/messages") && options?.method === "POST") {
+      const { question } = JSON.parse(options.body);
+      keys.push(options.headers["Idempotency-Key"]);
+      if (question === "First") throw Object.assign(new Error("Máy chủ AI đang bận."), { code: "AI_PROVIDER_UNAVAILABLE" });
+      const turn = [{ id: `u-${question}`, role: "user", document_id: "doc", body: question }, { id: `a-${question}`, role: "assistant", document_id: "doc", reply_to_message_id: `u-${question}`, status: "completed", body: `Answer to ${question}` }];
+      saved.push(...turn);
+      return { user_message: turn[0], assistant_message: turn[1] };
+    }
+    return { jobs: [] };
+  });
+  const bubbles = (container) => [...container.querySelectorAll(".chat-body article")].map((node) => node.querySelector("p, .answer-failure span")?.textContent);
+  let view = render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  let composer = view.container.querySelector("#chat-question");
+  await waitFor(() => expect(composer.disabled).toBe(false));
+  fireEvent.change(composer, { target: { value: "First" } });
+  fireEvent.keyDown(composer, { key: "Enter" });
+  await screen.findByText("Máy chủ AI đang bận.");
+  await waitFor(() => expect(composer.disabled).toBe(false));
+  fireEvent.change(composer, { target: { value: "Second" } });
+  fireEvent.keyDown(composer, { key: "Enter" });
+  await screen.findByText("Answer to Second");
+  await waitFor(() => expect(bubbles(view.container)).toEqual(["Zero", "Answer to Zero", "First", "Máy chủ AI đang bận.", "Second", "Answer to Second"]));
+
+  cleanup();
+  view = render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  await screen.findByText("Máy chủ AI đang bận.");
+  await waitFor(() => expect(bubbles(view.container)).toEqual(["Zero", "Answer to Zero", "First", "Máy chủ AI đang bận.", "Second", "Answer to Second"]));
+  fireEvent.click(view.container.querySelector(".message.assistant.failed .retry-answer-button"));
+  await waitFor(() => expect(keys).toHaveLength(3));
+  expect(keys[2]).toEqual(keys[0]);
+});
+
 it("sends the question that was still waiting before a reload again with the same key", async () => {
   const doc = { id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: "ready" };
   const session = { id: "chat", title: "My session", documents: [doc], messages: [] };
-  sessionStorage.setItem("sourcelens-pending-question-v1", JSON.stringify({ session_id: "chat", document_id: "doc", question: "Still running?", key: "key-1", sent_at: Date.now() }));
+  sessionStorage.setItem("sourcelens-unsaved-questions-v1", JSON.stringify([{ id: "local-q", answer_id: "local-a", session_id: "chat", document_id: "doc", question: "Still running?", key: "key-1", sent_at: Date.now(), after: null }]));
   let release;
   const posted = [];
   requestMock.mockImplementation(async (path, options) => {
@@ -279,7 +322,7 @@ it("sends the question that was still waiting before a reload again with the sam
   await waitFor(() => expect(posted).toEqual(["key-1"]));
   await act(async () => release());
   await screen.findByText("Saved answer");
-  expect(sessionStorage.getItem("sourcelens-pending-question-v1")).toBeNull();
+  expect(sessionStorage.getItem("sourcelens-unsaved-questions-v1")).toBeNull();
 });
 
 it("opens a conversation at its newest message", async () => {
