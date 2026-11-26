@@ -101,7 +101,7 @@ def test_numbers_traced_to_results_rows_quotes_and_question_are_accepted(answer)
     row = {"evidence_key": "k", "numeric_value": "1250500", "raw_text": "1.250.500",
            "table_locator": {"row_header": "Miền Bắc", "column_header": "Q2/2026"}}
     assert untraced_numbers(answer, question="So với 2025 thì sao?", evidences=[row],
-                            quotes=["Miền Nam chiếm 30% doanh thu."], results=["0.170547"]) == []
+                            quotes=["Miền Nam chiếm 30% doanh thu."], results=[{"value": "0.170547", "keys": []}]) == []
 
 
 @pytest.mark.parametrize("answer", [
@@ -130,6 +130,36 @@ def test_digits_inside_labels_and_uncited_page_refs_are_not_sources():
                             cited_pages={5}) == ["4 tỷ"]
     assert untraced_numbers("Doanh thu là 10 (trang 7).", question="?", evidences=[row], quotes=[], results=[],
                             cited_pages={5}) == ["7"]
+
+
+@pytest.mark.parametrize("locale", ["vi", None])
+def test_answer_numbers_are_read_in_the_number_format_of_their_source(locale):
+    # "1.250 tỷ" passed for 1.25 because the en reading of the answer was tried too.
+    from report_qa.application.document_assistant import untraced_numbers
+
+    small = {"evidence_key": "s", "numeric_value": "1.25", "raw_text": "1,25"}
+    large = {"evidence_key": "l", "numeric_value": "1250", "raw_text": "1.250"}
+
+    def check(answer, row, quotes=()):
+        return untraced_numbers(answer, question="?", evidences=[row] if row else [], quotes=list(quotes), results=[],
+                                locale=locale)
+
+    assert check("Doanh thu là 1.250 tỷ đồng.", small) == ["1.250 tỷ"]
+    assert check("Doanh thu là 1,250 tỷ đồng.", large) == ["1,250 tỷ"]
+    assert check("Doanh thu là 1,25 tỷ đồng.", small) == []
+    assert check("Doanh thu là 1.250 tỷ đồng.", large) == []
+    assert check("Doanh thu là 1.250 tỷ đồng.", None, ["Doanh thu đạt 1,25 tỷ đồng."]) == ["1.250 tỷ"]
+
+
+def test_a_number_read_two_ways_traces_only_when_the_source_fixes_the_format():
+    from report_qa.application.document_assistant import untraced_numbers
+
+    result = [{"value": "1250", "keys": []}]  # a python result has no printed text of its own
+    assert untraced_numbers("Tổng là 1.250.", question="?", evidences=[], quotes=[], results=result) == ["1.250"]
+    assert untraced_numbers("Tổng là 1.250.", question="?", evidences=[], quotes=[], results=result, locale="vi") == []
+    printed = [{"evidence_key": "k", "numeric_value": "1000", "raw_text": "1.000"}]
+    assert untraced_numbers("Tổng là 1.250.", question="?", evidences=[], quotes=[], rows=printed,
+                            results=[{"value": "1250", "keys": ["k"]}]) == []
 
 
 def test_a_number_from_an_uncited_row_is_not_traced():
@@ -652,8 +682,10 @@ def test_an_answer_past_its_budget_fails_with_a_vietnamese_message(monkeypatch):
 
 
 def test_formula_result_rows_take_the_data_label_of_a_value_read_unchanged():
-    rows = [{**_row("a", "valid", "table"), "numeric_value": "18240", "table_locator": {"row_header": "Miền Bắc", "column_header": "Quý 1/2026"}},
-            {**_row("b", "valid", "table"), "numeric_value": "21350", "table_locator": {"row_header": "Miền Bắc", "column_header": "Quý 2/2026"}}]
+    rows = [{**_row("a", "valid", "table"), "numeric_value": "18240", "raw_text": "18.240",
+             "table_locator": {"row_header": "Miền Bắc", "column_header": "Quý 1/2026"}},
+            {**_row("b", "valid", "table"), "numeric_value": "21350", "raw_text": "21.350",
+             "table_locator": {"row_header": "Miền Bắc", "column_header": "Quý 2/2026"}}]
     answer = _tools_answer(rows, {"action": "python", "code": "result = {'dt_bac_q2': value('b'), 'total': value('a') + value('b')}"},
                            {"action": "answer", "answer": "Quý 2 là 21.350, tổng 39.590.", "evidence_keys": ["a", "b"]})
     assert answer["formulas"][0]["result_rows"] == [

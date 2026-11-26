@@ -6,6 +6,7 @@ import re
 from uuid import uuid4
 
 from report_qa.api.ai_provider import MAX_ANSWER_CHARS, ProviderError, planner_client
+from report_qa.api.number_input import document_number_locale
 from report_qa.api.session_storage import (
     catalog_lock,
     document_path,
@@ -269,6 +270,8 @@ def answer_document(
             for region in current.get("chart_regions", [])
         ],
         "history": _history(session, document["id"]),
+        # Answer numbers are read in the document's number format (not sent to the model).
+        "number_locale": document_number_locale(current),
     }
     context = fit_context(context, question)
     trace.append({

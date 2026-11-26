@@ -15,7 +15,8 @@ import time
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from report_qa.api.ai_provider import MAX_ANSWER_CHARS, ProviderError, _json_from_content
-from report_qa.application.numeric_extraction import quantities
+from report_qa.api.number_input import LOCALES
+from report_qa.application.numeric_extraction import decimal_text, quantities
 from report_qa.application.python_calculator import run_calculation
 from report_qa.application.text_evidence import match_quote, suggest_quote
 
@@ -140,20 +141,17 @@ _SCALE = {"%": Decimal("0.01"), "nghìn": Decimal(10**3), "ngàn": Decimal(10**3
 _PAGE_WORD = re.compile(r"(?:\btrang|\bpage)\s+$", re.IGNORECASE)
 
 
-def _readings(numeral: str) -> set[tuple[Decimal, int]]:
-    """(value, decimals written) for each way vi ("1.250,5") or en ("1,250.5") separators read it."""
-    readings = set()
-    for point, group in ((".", ","), (",", ".")):
-        whole, _, fraction = numeral.partition(point)
-        groups = whole.split(group)
-        if (fraction and not fraction.isdigit()) or any(len(g) != 3 for g in groups[1:]):
-            continue
-        readings.add((Decimal("".join(groups) + ("." + fraction if fraction else "")), len(fraction)))
-    return readings
+def _reading(numeral, number_format: str) -> tuple[Decimal, int] | None:
+    """(value, decimals written) of a numeral in one number format, or None if that format cannot read it."""
+    try:
+        text = decimal_text(str(numeral), number_format)
+    except ValueError:
+        return None
+    return Decimal(text), len(text.partition(".")[2])
 
 
 def _written_numbers(text, cited_pages=frozenset()):
-    """(text as written, readings, scale or None) for every quantity in a text.
+    """(text as written, numeral, scale or None) for every quantity in a text.
 
     Only quantities count (numeric_extraction.quantities): not periods,
     dates, durations or digits glued to letters. "trang 5" is a page
@@ -167,20 +165,28 @@ def _written_numbers(text, cited_pages=frozenset()):
             continue
         word = None if token.endswith("%") else _SCALE_WORD.match(text, match.start() + len(token))
         scale = _SCALE["%"] if token.endswith("%") else _SCALE[word.group(1).casefold()] if word else None
-        yield token + (word.group() if word else ""), _readings(numeral), scale
+        yield token + (word.group() if word else ""), numeral, scale
 
 
-def _text_values(text) -> set[Decimal]:
-    """Every value a text can mean: each reading, with and without its scale word."""
-    values = set()
-    for _, readings, scale in _written_numbers(text):
-        for number, _ in readings:
-            values.update({number, number * scale} if scale else {number})
-    return values
+def row_formats(row: dict, locale: str | None) -> frozenset[str]:
+    """Number formats a Data row is printed in: the document's when known.
+
+    Otherwise the formats that read the row's printed PDF text as its value
+    ("18.240" -> 18240 is vi); a chart read (DePlot text, not PDF print) or a
+    row whose text does not read as its value can be either format.
+    """
+    if locale:
+        return frozenset({locale})
+    value, raw = row.get("numeric_value"), row.get("raw_text")
+    if row.get("source_type") != "chart" and value is not None and raw:
+        found = frozenset(f for f in LOCALES if (r := _reading(raw, f)) and r[0] == Decimal(str(value)))
+        if found:
+            return found
+    return frozenset(LOCALES)
 
 
-def untraced_numbers(answer: str, *, question: str, evidences: list[dict], quotes: list[str], results: list[str],
-                     cited_pages=frozenset()) -> list[str]:
+def untraced_numbers(answer: str, *, question: str, evidences: list[dict], quotes: list[str], results: list[dict],
+                     rows: list[dict] = (), locale: str | None = None, cited_pages=frozenset()) -> list[str]:
     """Quantities written in the answer that no trusted source contains, in answer order.
 
     Trusted sources are the question, the cited Data rows (current value and
@@ -188,35 +194,59 @@ def untraced_numbers(answer: str, *, question: str, evidences: list[dict], quote
     results that derive from Data rows. Only quantities are checked, in the
     answer and in every source: periods, dates, durations, digits inside a
     label token ("Q4/2024") and references to a cited page are not
-    quantities. A written number is traced when one of its vi/en readings,
-    taken as is or with its scale word (%, nghìn, triệu, tỷ), equals a trusted
-    value rounded to the decimals written: "17,05%" traces to 17.0547 and to
-    0.170547. Signs are ignored because Vietnamese writes them as words (giảm 5%).
+    quantities.
+
+    A written number is read in the number format of the source it is
+    compared with: the document's format (locale) when it is known;
+    otherwise the source's own format (row_formats; a quote is read in the
+    same format as the answer; a python result in its input rows' formats).
+    When a source allows both formats and they read the written number
+    differently ("1.250"), it does not trace to that source. It is traced
+    when that value, taken as is or with its scale word (%, nghìn, triệu,
+    tỷ), equals a trusted value rounded to the decimals written: "17,05%"
+    traces to 17.0547 and to 0.170547. Signs are ignored because Vietnamese
+    writes them as words (giảm 5%).
     """
-    trusted = {Decimal(number) for number in results}
-    trusted |= _text_values(question)
+    every = frozenset({locale}) if locale else frozenset(LOCALES)
+    by_key = {row["evidence_key"]: row for row in rows}
+    trusted: list[tuple[Decimal, frozenset]] = []
+
+    def add_text(text):
+        for _, numeral, scale in _written_numbers(text):
+            for number_format in every:
+                reading = _reading(numeral, number_format)
+                if reading:
+                    trusted.extend((value, frozenset({number_format})) for value in {reading[0], reading[0] * (scale or 1)})
+
+    for result in results:
+        formats = frozenset(every).intersection(*(row_formats(by_key[k], locale) for k in result["keys"] if k in by_key))
+        trusted.append((Decimal(result["value"]), formats or every))
+    add_text(question)
     for evidence in evidences:
         if evidence.get("numeric_value") is not None:
-            trusted.add(Decimal(str(evidence["numeric_value"])))
-        trusted |= _text_values(evidence.get("raw_text"))
+            trusted.append((Decimal(str(evidence["numeric_value"])), row_formats(evidence, locale)))
+        add_text(evidence.get("raw_text"))
     for quote in quotes:
-        trusted |= _text_values(quote)
-    trusted = {abs(value) for value in trusted if value.is_finite()}
+        add_text(quote)
+    trusted = [(abs(value), formats) for value, formats in trusted if value.is_finite()]
 
-    def traced(readings, scale):
-        for written, decimals in readings:
+    def traced(numeral, scale):
+        for value, formats in trusted:
+            readings = {r for f in formats if (r := _reading(numeral, f))}
+            if len({number for number, _ in readings}) != 1:
+                continue
+            (written, decimals), = readings
             step = Decimal(1).scaleb(-decimals)
-            for value in trusted:
-                for factor in (Decimal(1), scale) if scale else (Decimal(1),):
-                    try:
-                        if (value / factor).quantize(step, rounding=ROUND_HALF_UP) == written:
-                            return True
-                    except InvalidOperation:  # far too large for the precision written
-                        continue
+            for factor in (Decimal(1), scale) if scale else (Decimal(1),):
+                try:
+                    if (value / factor).quantize(step, rounding=ROUND_HALF_UP) == written:
+                        return True
+                except InvalidOperation:  # far too large for the precision written
+                    continue
         return False
 
     written = _written_numbers(answer, frozenset(cited_pages))
-    return list(dict.fromkeys(text for text, readings, scale in written if not traced(readings, scale)))
+    return list(dict.fromkeys(text for text, numeral, scale in written if not traced(numeral, scale)))
 
 
 def result_rows(rows: list[dict], by_key: dict) -> list[dict]:
@@ -389,7 +419,9 @@ class _Turn:
         cited = [by_key[k] for k in keys]
         untraced = untraced_numbers(
             answer, question=question, evidences=cited,
-            quotes=[s["quote"] for s in sources], results=[n for c in succeeded for n in c["result"]["traced_numbers"]],
+            quotes=[s["quote"] for s in sources],
+            results=[{"value": n, "keys": c["result"]["used_evidence_keys"]} for c in succeeded for n in c["result"]["traced_numbers"]],
+            rows=self.context["evidences"], locale=self.context.get("number_locale"),
             cited_pages={e["page_number"] for e in cited} | {s["page"] for s in sources} | set(pages),
         ) if kind == "answer" else []
         if untraced:
