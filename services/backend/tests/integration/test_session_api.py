@@ -1004,3 +1004,15 @@ def test_extraction_failure_logs_the_traceback_and_stores_a_stable_code(monkeypa
 def test_object_storage_errors_are_readable_vietnamese() -> None:
     response = api_main.object_storage_error_handler(None, api_main.ObjectStorageError("down"))
     assert json.loads(response.body)["detail"]["message"] == "Cloudflare R2 tạm thời không sẵn sàng; hãy thử lại sau."
+
+
+def test_session_payload_leaves_number_state_to_the_evidence_endpoints() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Small payload"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        assert client.get(f"/api/v1/sessions/{created['id']}/documents/{document_id}/evidences").json()["evidences"]
+        assert "evidence_state" in api_main.catalog["sessions"][created["id"]]["documents"][0]
+        document = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]
+        assert "evidence_state" not in document and "chart_extractions" not in document
+    finally:
+        cleanup_session(created["id"])

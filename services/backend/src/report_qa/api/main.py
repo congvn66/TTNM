@@ -44,7 +44,7 @@ from report_qa.infrastructure.integrations import readiness as integration_readi
 from report_qa.infrastructure.integrations import runtime_capabilities
 from report_qa.infrastructure.postgres.runtime_store import PostgresRuntimeStore
 from report_qa.infrastructure.postgres.job_queue import PostgresJobQueue
-from .session_storage import EXTRACTION_ROOT, UPLOAD_ROOT, catalog_lock, document_path, extraction_path, load_catalog, save_catalog as disk_save_catalog, utc_now
+from .session_storage import EXTRACTION_ROOT, NUMBER_STATE_FIELDS, UPLOAD_ROOT, catalog_lock, document_path, extraction_path, load_catalog, save_catalog as disk_save_catalog, utc_now
 from .object_storage_runtime import (
     ObjectStorageError,
     cache_extraction,
@@ -447,6 +447,15 @@ def readiness_probe() -> JSONResponse:
     return JSONResponse(status_code=200 if state == "ready" else 503, content=body)
 
 
+# Storage names are server-side; number state is large and has its own
+# endpoints (/evidences), so the session payload stays metadata only.
+PRIVATE_DOCUMENT_FIELDS = {"storage_name", "extraction_name", *NUMBER_STATE_FIELDS}
+
+
+def public_document(document: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in document.items() if key not in PRIVATE_DOCUMENT_FIELDS}
+
+
 def public_session(session: dict[str, Any]) -> dict[str, Any]:
     result = {key: value for key, value in session.items() if key not in {"owner_id", "documents", "request_keys"}}
     # Keep the public contract self-healing for documents created by an older
@@ -454,7 +463,7 @@ def public_session(session: dict[str, Any]) -> dict[str, Any]:
     # file_url; the reader can still address the immutable stored PDF by id.
     public_documents = []
     for document in session.get("documents", []):
-        item = {key: value for key, value in document.items() if key not in {"storage_name", "extraction_name"}}
+        item = public_document(document)
         item.setdefault(
             "file_url",
             f"/api/v1/sessions/{session['id']}/documents/{document['id']}/file",
@@ -590,7 +599,7 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
         sha256=record["sha256"],
         extraction_status="queued",
     )
-    return {key: value for key, value in record.items() if key not in {"storage_name", "extraction_name"}}
+    return public_document(record)
 
 
 def complete_document_extraction(session_id: str, document_id: str, trace_id: str | None = None, owner_id: str | UUID | None = None) -> None:
@@ -850,7 +859,7 @@ def update_session_document(session_id: str, document_id: str, payload: Document
     if not postgres_runtime:
         save_catalog(catalog, owner_id)
     flow_log("DOCUMENT_RENAMED", trace_id=trace_id_for(request), session_id=session_id, document_id=document_id)
-    return {"session_id": session_id, "document": {key: value for key, value in document.items() if key not in {"storage_name", "extraction_name"}}}
+    return {"session_id": session_id, "document": public_document(document)}
 
 
 @app.delete(
@@ -933,10 +942,10 @@ def rerun_document_extraction(session_id: str, document_id: str, request: Reques
         document.update({"extraction_status": "queued", "page_count": None, "numeric_evidence_count": 0, "extraction_error": None})
         session["updated_at"] = utc_now()
         save_catalog(catalog)
-        public_document = json.loads(json.dumps({key: value for key, value in document.items() if key not in {"storage_name", "extraction_name"}}))
+        document_payload = json.loads(json.dumps(public_document(document)))
     flow_log("EXTRACTION_RERUN_QUEUED", trace_id=trace_id, session_id=session_id, document_id=document_id, previous_status=previous["status"], affected_answer_count=len(affected))
     background_tasks.add_task(_extract_in_background, session_id, document_id, trace_id)
-    return {"session_id": session_id, "document": public_document, "previous_extraction": previous, "affected_message_ids": affected, "trace_id": trace_id}
+    return {"session_id": session_id, "document": document_payload, "previous_extraction": previous, "affected_message_ids": affected, "trace_id": trace_id}
 
 
 @app.get(
