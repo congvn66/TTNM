@@ -535,3 +535,50 @@ def test_rows_stated_by_an_accepted_quote_become_answer_inputs_so_an_edit_flags_
     assert [i["evidence_key"] for i in message["answer_inputs"]] == ["rev"]
     revision = message["answer_inputs"][0]["evidence_revision_id"]
     assert mark_answers_needing_update(session, "doc", "rev", revision) == [message["id"]]
+
+
+def _long_document(pages=60):
+    text = "Báo cáo hoạt động kinh doanh trong kỳ. " * 200
+    page_list = [{"page": n, "text": text} for n in range(1, pages + 1)]
+    page_list[41]["text"] += " Lợi nhuận gộp mảng thép xây dựng đạt 77 tỷ đồng."
+    rows = [{**_row(f"ev-{n}", "valid", "table"), "page_number": n} for n in range(1, pages + 1)]
+    regions = [{"chart_region_key": f"chart-{n}", "page_number": n, "bbox": [0, 0, 1, 1], "text": ""} for n in range(1, pages + 1)]
+    return {"pages": page_list, "evidence_batch": {"evidences": rows}, "chart_regions": regions}
+
+
+def test_a_long_document_sends_the_relevant_and_named_pages_and_lists_the_rest():
+    from report_qa.api import document_assistant_flow as flow
+
+    extraction = _long_document()
+    sent = []
+
+    def complete(system, user):
+        sent.append(json.loads(user))
+        return json.dumps({"action": "answer", "answer": "Lợi nhuận gộp mảng thép là 77 tỷ đồng.",
+                           "sources": [{"page": 42, "quote": "Lợi nhuận gộp mảng thép xây dựng đạt 77 tỷ đồng."}]})
+
+    message = flow.answer_document(
+        {"messages": []}, {"id": "doc", "extraction_name": "x", "storage_name": "x"},
+        "Lợi nhuận gộp mảng thép? Xem cả trang 7.", "trace", [], {"sessions": {}},
+        overlay=lambda document, value: value, snapshot=lambda m: None, complete=complete,
+        load_extraction=lambda name: extraction, resolve_pdf=lambda name: name, save=lambda catalog: None,
+    )["assistant_message"]
+    document = sent[0]["document"]
+    pages = [p["page"] for p in document["pages"]]
+    assert len(json.dumps(document, ensure_ascii=False)) <= flow.MAX_CONTEXT_CHARS
+    assert 7 in pages and 42 in pages and 0 < len(pages) < 60
+    assert sorted(pages + document["omitted_pages"]) == list(range(1, 61))
+    assert {r["page"] for r in document["data"]} == set(pages)
+    assert {r["page_number"] for r in document["chart_regions"]} == set(pages)
+    assert message["citations"][0]["page"] == 42
+
+
+def test_history_is_dropped_oldest_first_and_a_short_document_is_sent_whole():
+    from report_qa.api.document_assistant_flow import fit_context
+
+    history = [{"role": "user", "text": f"turn {i} " + "x" * 1000} for i in range(8)]
+    context = {"pages": [{"page": 1, "text": "a" * 500}], "evidences": [], "chart_regions": [], "history": history}
+    assert fit_context(context, "q", budget=100_000) is context
+    fitted = fit_context(context, "q", budget=2_700)
+    assert [t["text"][:6] for t in fitted["history"]] == ["turn 6", "turn 7"] and fitted["pages"] == context["pages"]
+    assert "omitted_pages" not in fitted
