@@ -3,6 +3,28 @@ import { request } from "../../shared/api/client.js";
 
 const initialForm = { email: "", password: "", display_name: "" };
 
+const PASSWORD_MIN_LENGTH = 8;
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+$/;
+
+// The fields of each mode, checked here so the messages are Vietnamese and sit
+// next to their field (the browser's own messages follow the browser language).
+function formErrors(mode, form) {
+  const errors = {};
+  if (mode === "register" && form.display_name.trim().length < 2) errors.display_name = "Hãy nhập tên hiển thị, ít nhất 2 ký tự.";
+  if (mode !== "reset") {
+    if (!form.email.trim()) errors.email = "Hãy nhập email.";
+    else if (!EMAIL_SHAPE.test(form.email.trim())) errors.email = "Email chưa đúng dạng, ví dụ ten@congty.vn.";
+  }
+  if (mode === "reset" && !form.token.trim()) errors.token = "Hãy dán mã đặt lại trong email.";
+  if (mode === "login" && !form.password) errors.password = "Hãy nhập mật khẩu.";
+  if ((mode === "register" || mode === "reset") && form.password.length < PASSWORD_MIN_LENGTH) errors.password = `Mật khẩu cần ít nhất ${PASSWORD_MIN_LENGTH} ký tự.`;
+  return errors;
+}
+
+function FieldError({ id, children }) {
+  return children ? <span className="auth-field-error" id={id}>{children}</span> : null;
+}
+
 function AuthMark() {
   return <div className="auth-mark" aria-hidden="true"><span>S</span></div>;
 }
@@ -15,6 +37,7 @@ export default function AuthGate({ children }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     let active = true;
@@ -47,11 +70,15 @@ export default function AuthGate({ children }) {
   const switchMode = (nextMode) => {
     const nextPath = nextMode === "forgot" ? "/forgot-password" : nextMode === "reset" ? "/reset-password" : "/login";
     window.history.replaceState({}, "", nextPath);
-    setMode(nextMode); setError(""); setSuccess("");
+    setMode(nextMode); setError(""); setSuccess(""); setFieldErrors({});
   };
 
   const submit = async (event) => {
     event.preventDefault();
+    const errors = formErrors(mode, form);
+    setFieldErrors(errors);
+    const firstInvalid = Object.keys(errors)[0];
+    if (firstInvalid) { event.currentTarget.elements.namedItem(firstInvalid)?.focus(); return; }
     setBusy(true); setError("");
     try {
       if (mode === "forgot") {
@@ -69,15 +96,23 @@ export default function AuthGate({ children }) {
     } finally { setBusy(false); }
   };
 
+  const fieldErrorId = (name) => `auth-${name}-error`;
+  // Value, change handler and error state of one form field.
+  const field = (name) => ({
+    name, value: form[name], "aria-required": true, "aria-invalid": Boolean(fieldErrors[name]),
+    "aria-describedby": fieldErrors[name] ? fieldErrorId(name) : undefined,
+    onChange: (event) => { setForm({ ...form, [name]: event.target.value }); setFieldErrors((current) => ({ ...current, [name]: "" })); },
+  });
+
   return <main className="auth-gate">
     <section className="auth-card">
       <div className="auth-brand"><AuthMark /><div><strong>SourceLens</strong><span>Evidence-first workspace</span></div></div>
       <div className="auth-copy"><p className="auth-eyebrow">{mode === "login" ? "Chào mừng trở lại" : mode === "register" ? "Tạo workspace riêng" : mode === "forgot" ? "Khôi phục tài khoản" : "Đặt lại mật khẩu"}</p><h1>{mode === "login" ? "Đăng nhập vào tài liệu của bạn" : mode === "register" ? "Bắt đầu với SourceLens" : mode === "forgot" ? "Lấy lại quyền truy cập" : "Chọn mật khẩu mới"}</h1><p className="auth-muted">{mode === "forgot" ? "Nhập email đã đăng ký. Chúng tôi sẽ gửi hướng dẫn an toàn nếu tìm thấy tài khoản." : mode === "reset" ? "Mật khẩu mới sẽ đăng xuất các phiên đang hoạt động để bảo vệ tài khoản." : "Tổ chức PDF, hỏi AI có căn cứ và giữ lại mọi nguồn dẫn theo từng phiên."}</p></div>
-      <form className="auth-form" onSubmit={submit}>
-        {mode === "register" && <label>Tên hiển thị<input value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} placeholder="Nguyễn Văn A" minLength={2} required /></label>}
-        {mode !== "reset" && <label>Email<input type="email" autoComplete="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="you@example.com" required /></label>}
-        {mode === "reset" && <label>Mã đặt lại<input value={form.token} onChange={(event) => setForm({ ...form, token: event.target.value })} placeholder="Dán mã trong email" required /></label>}
-        {mode !== "forgot" && <label>Mật khẩu<input type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder="Tối thiểu 8 ký tự" minLength={8} required /></label>}
+      <form className="auth-form" onSubmit={submit} noValidate>
+        {mode === "register" && <label>Tên hiển thị<input {...field("display_name")} placeholder="Nguyễn Văn A" /></label>}<FieldError id={fieldErrorId("display_name")}>{fieldErrors.display_name}</FieldError>
+        {mode !== "reset" && <label>Email<input {...field("email")} type="email" autoComplete="email" placeholder="you@example.com" /></label>}<FieldError id={fieldErrorId("email")}>{fieldErrors.email}</FieldError>
+        {mode === "reset" && <label>Mã đặt lại<input {...field("token")} placeholder="Dán mã trong email" /></label>}<FieldError id={fieldErrorId("token")}>{fieldErrors.token}</FieldError>
+        {mode !== "forgot" && <label>Mật khẩu<input {...field("password")} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder={`Tối thiểu ${PASSWORD_MIN_LENGTH} ký tự`} /></label>}<FieldError id={fieldErrorId("password")}>{fieldErrors.password}</FieldError>
         {error && <div className="auth-error" role="alert">{error}</div>}
         {success && <div className="auth-success" role="status">{success}</div>}
         <button className="auth-primary" type="submit" disabled={busy}>{busy ? "Đang xử lý…" : mode === "login" ? "Đăng nhập" : mode === "register" ? "Tạo tài khoản" : mode === "forgot" ? "Gửi hướng dẫn" : "Đặt lại mật khẩu"}</button>

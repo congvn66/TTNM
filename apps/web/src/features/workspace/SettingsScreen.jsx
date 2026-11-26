@@ -161,6 +161,7 @@ function SecuritySettings() {
   async function save(event) {
     event.preventDefault();
     setError("");
+    if (!form.current_password) { setError("Hãy nhập mật khẩu hiện tại."); return; }
     if (form.new_password.length < 8) { setError("Mật khẩu mới cần ít nhất 8 ký tự."); return; }
     if (form.new_password !== form.confirm_password) { setError("Hai mật khẩu mới chưa khớp."); return; }
     setStatus("saving");
@@ -181,12 +182,12 @@ function SecuritySettings() {
 
   return <>
     <div className="settings-heading"><div><span className="settings-eyebrow">SECURITY</span><h1>Bảo mật</h1><p>Kiểm soát cách tài khoản được bảo vệ khi làm việc với dữ liệu.</p></div></div>
-    <form className="settings-card settings-form security-card" onSubmit={save}>
+    <form className="settings-card settings-form security-card" onSubmit={save} noValidate>
       <div className="settings-card-header"><div><h2>Đổi mật khẩu</h2><p>Phiên hiện tại vẫn được giữ, các phiên đăng nhập khác sẽ bị thu hồi.</p></div><span className="settings-info-icon"><Icon name="lock" size={17} /></span></div>
       <div className="settings-fields">
-        <label>Mật khẩu hiện tại<input type="password" autoComplete="current-password" value={form.current_password} onChange={(event) => setForm({ ...form, current_password: event.target.value })} required /></label>
-        <label>Mật khẩu mới<input type="password" autoComplete="new-password" minLength={8} value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} required /><small className="settings-help">Tối thiểu 8 ký tự.</small></label>
-        <label>Xác nhận mật khẩu mới<input type="password" autoComplete="new-password" minLength={8} value={form.confirm_password} onChange={(event) => setForm({ ...form, confirm_password: event.target.value })} required /></label>
+        <label>Mật khẩu hiện tại<input type="password" autoComplete="current-password" value={form.current_password} onChange={(event) => setForm({ ...form, current_password: event.target.value })} aria-required="true" /></label>
+        <label>Mật khẩu mới<input type="password" autoComplete="new-password" value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} aria-required="true" /><small className="settings-help">Tối thiểu 8 ký tự.</small></label>
+        <label>Xác nhận mật khẩu mới<input type="password" autoComplete="new-password" value={form.confirm_password} onChange={(event) => setForm({ ...form, confirm_password: event.target.value })} aria-required="true" /></label>
       </div>
       {error && <div className="settings-error" role="alert">{error}</div>}
       {status === "success" && <div className="settings-success" role="status"><Icon name="check" size={15} /> Đã đổi mật khẩu.</div>}

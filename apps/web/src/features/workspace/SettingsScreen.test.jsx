@@ -22,4 +22,13 @@ describe("Settings security scene", () => {
     await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Đã đổi mật khẩu"));
     expect(requestMock).toHaveBeenCalledWith("/api/v1/auth/change-password", expect.objectContaining({ method: "POST" }));
   });
+
+  it("asks for the current password in Vietnamese instead of the browser's message", async () => {
+    requestMock.mockResolvedValue({ sessions: [] });
+    render(<ThemeProvider><SettingsScreen section="security" user={{ display_name: "Reader", email: "reader@example.com" }} onNavigate={vi.fn()} /></ThemeProvider>);
+    expect(document.querySelector("form.security-card").noValidate).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Cập nhật mật khẩu" }));
+    expect(screen.getByRole("alert").textContent).toBe("Hãy nhập mật khẩu hiện tại.");
+    expect(requestMock).not.toHaveBeenCalledWith("/api/v1/auth/change-password", expect.anything());
+  });
 });
