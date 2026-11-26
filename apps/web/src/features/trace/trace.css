@@ -82,7 +82,7 @@
 .trace-event small { margin-top: 2px; color: var(--muted); font-size: 7px; }
 .trace-event em { margin-top: 2px; color: var(--ink-soft); font-size: 7px; font-style: normal; }
 
-.audit-drawer, .evidence-drawer { position: absolute; z-index: 10; inset: 74px 18px 18px; display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 14px; background: rgba(255, 255, 255, .99); color: var(--ink-soft); box-shadow: 0 24px 64px rgba(24, 24, 27, .18); }
+.audit-drawer, .evidence-drawer { position: absolute; z-index: 10; inset: 74px 18px 18px; display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface); color: var(--ink-soft); box-shadow: 0 24px 64px rgba(24, 24, 27, .18); }
 .evidence-drawer { z-index: 11; }
 .audit-drawer-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 15px 17px 13px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .audit-kicker { display: block; color: var(--gold-dark); font-size: 7px; font-weight: 850; letter-spacing: .14em; }
@@ -138,7 +138,7 @@
 .evidence-edit-form textarea { min-height: 56px; resize: vertical; }
 .evidence-edit-form > div { display: flex; justify-content: flex-end; gap: 6px; }
 .evidence-edit-form button { border: 1px solid var(--border-strong); border-radius: 7px; padding: 6px 8px; background: var(--surface); color: var(--ink-soft); font-size: 8px; }
-.evidence-edit-form button[type=submit] { border-color: var(--ink); background: var(--ink); color: #fff; }
+.evidence-edit-form button[type=submit] { border-color: var(--inverse-bg); background: var(--inverse-bg); color: var(--inverse-fg); }
 .evidence-empty { padding: 18px; color: var(--muted); font-size: 10px; text-align: center; }
 
 @media (max-width: 1020px) {

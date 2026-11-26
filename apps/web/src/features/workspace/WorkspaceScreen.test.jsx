@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 const { requestMock } = vi.hoisted(() => ({ requestMock: vi.fn() }));
 vi.mock("../../shared/api/client.js", () => ({ API: "http://localhost:8000", request: requestMock }));
 vi.mock("pdfjs-dist", () => ({ GlobalWorkerOptions: {}, getDocument: () => ({ promise: Promise.reject(new Error("preview unavailable in test")), destroy: vi.fn() }) }));
@@ -166,4 +166,35 @@ it.each([["json", true], ["postgres", false]])("offers re-extraction only where 
   if (!offered) { expect(screen.queryByText("Trích xuất lại")).toBeNull(); return; }
   fireEvent.click(await screen.findByText("Trích xuất lại"));
   await waitFor(() => expect(requestMock).toHaveBeenCalledWith("/api/v1/sessions/chat/documents/doc/extraction", { method: "POST" }));
+});
+
+it("closes confirmation notices by itself but keeps errors until closed", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const session = { id: "chat", title: "My session", documents: [], messages: [] };
+    let creates = 0;
+    requestMock.mockImplementation(async (path, options) => {
+      if (path === "/api/v1/sessions" && options?.method === "POST") {
+        creates++;
+        if (creates > 1) throw new Error("Không thể tạo phiên.");
+        return { session: { id: "new", title: "Phiên 2", documents: [], messages: [] } };
+      }
+      if (path === "/api/v1/sessions") return { sessions: [session] };
+      if (path.startsWith("/api/v1/sessions/")) return { session: path.endsWith("new") ? { id: "new", title: "Phiên 2", documents: [], messages: [] } : session };
+      return { jobs: [] };
+    });
+    render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+    const create = await screen.findByRole("button", { name: "Tạo phiên làm việc mới" });
+    await waitFor(() => expect(create.disabled).toBe(false));
+    fireEvent.click(create);
+    await screen.findByText("Đã tạo phiên làm việc mới.");
+    await act(async () => { vi.advanceTimersByTime(7000); });
+    expect(screen.queryByText("Đã tạo phiên làm việc mới.")).toBeNull();
+    fireEvent.click(create);
+    await screen.findByText("Không thể tạo phiên.");
+    await act(async () => { vi.advanceTimersByTime(20000); });
+    expect(screen.getByText("Không thể tạo phiên.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Đóng thông báo" }));
+    expect(screen.queryByText("Không thể tạo phiên.")).toBeNull();
+  } finally { vi.useRealTimers(); }
 });

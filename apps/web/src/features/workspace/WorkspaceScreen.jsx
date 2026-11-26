@@ -9,6 +9,7 @@ const SESSION_KEY = "sourcelens-active-session";
 const DOCUMENT_KEY = "sourcelens-active-document";
 const SESSION_SNAPSHOT_KEY = "sourcelens-session-snapshot-v1";
 const SESSION_SNAPSHOT_TTL_MS = 60_000;
+const NOTICE_TIMEOUT_MS = 6_000;
 
 function readSessionSnapshot() {
   try {
@@ -517,6 +518,12 @@ function App({ user = null, onSignOut = null, onNavigate }) {
 
   const showNotice = useCallback((message, kind = "info") => { setNotice(userFacingError(message)); setNoticeKind(kind); }, []);
   const clearNotice = useCallback(() => { setNotice(""); setRetryQuestion(""); }, []);
+  // Errors stay until the user closes them; other notices are confirmations.
+  useEffect(() => {
+    if (!notice || noticeKind === "error") return undefined;
+    const timer = window.setTimeout(clearNotice, NOTICE_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice, noticeKind, clearNotice]);
 
   useEffect(() => {
     const onRequest = (event) => setRequestMetrics((current) => [event.detail, ...current].slice(0, 40));
