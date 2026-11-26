@@ -3,7 +3,7 @@
 import json
 from uuid import uuid4
 
-from report_qa.api.ai_provider import ProviderError, planner_client
+from report_qa.api.ai_provider import MAX_ANSWER_CHARS, ProviderError, planner_client
 from report_qa.api.session_storage import (
     catalog_lock,
     document_path,
@@ -111,7 +111,12 @@ def _history(session, document_id):
                 turns.pop()
             continue
         if message.get("document_id") == document_id:
-            turns.append({"role": message["role"], "text": message.get("body", "")})
+            # No stored turn may crowd the document out of the context; an
+            # answer within the answer cap is kept whole.
+            text = message.get("body", "")
+            if len(text) > MAX_ANSWER_CHARS:
+                text = text[:MAX_ANSWER_CHARS] + "…"
+            turns.append({"role": message["role"], "text": text})
     return turns[-8:]
 
 

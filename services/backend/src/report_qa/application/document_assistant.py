@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 
-from report_qa.api.ai_provider import ProviderError, _json_from_content
+from report_qa.api.ai_provider import MAX_ANSWER_CHARS, ProviderError, _json_from_content
 from report_qa.application.python_calculator import run_calculation
 from report_qa.application.text_evidence import match_quote, suggest_quote
 
@@ -202,6 +202,9 @@ class _Turn:
         answer = action.get("answer")
         if not isinstance(answer, str) or not answer.strip():
             self.reject("answer must be a non-empty string")
+            return None
+        if len(answer) > MAX_ANSWER_CHARS:
+            self.reject(f"answer must be at most {MAX_ANSWER_CHARS} characters; shorten it")
             return None
         options = action.get("options")
         options = options if isinstance(options, list) else []

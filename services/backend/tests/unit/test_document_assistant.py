@@ -301,6 +301,24 @@ def test_history_skips_a_queued_question_and_its_placeholder():
     assert [turn["text"] for turn in _history(session, "d")] == ["q1", "a1"]
 
 
+def test_an_over_long_answer_is_sent_back_to_the_model():
+    complete = sequence(
+        {"action": "answer", "answer": "x" * 12001, "evidence_keys": ["b"]},
+        {"action": "answer", "answer": "Q2 là 130.", "evidence_keys": ["b"]},
+    )
+    result = run_assistant("Q2?", context(), complete=complete, read_chart=Mock())
+    assert result["answer"] == "Q2 là 130."
+    assert "12000" in result["tool_results"][0]["error"]
+
+
+def test_each_history_turn_is_bounded():
+    from report_qa.api.document_assistant_flow import _history
+
+    session = {"messages": [{"role": "user", "document_id": "d", "body": "q"}, {"role": "assistant", "document_id": "d", "body": "a" * 1_000_000}]}
+    turns = _history(session, "d")
+    assert turns[0]["text"] == "q" and len(turns[1]["text"]) <= 12001
+
+
 @pytest.mark.parametrize("check_error", [None, "HTTP 503"])
 def test_durable_storage_keeps_only_chart_reads_whose_check_passed(monkeypatch, check_error):
     from report_qa.api import document_assistant_flow as flow

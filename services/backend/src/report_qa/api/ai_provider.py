@@ -45,6 +45,7 @@ def _load_local_env() -> None:
 
 
 logger = logging.getLogger(__name__)
+MAX_ANSWER_CHARS = 12000
 
 
 class ProviderError(RuntimeError):
@@ -111,7 +112,7 @@ def _validated_pages(value: Any, allowed_pages: set[int]) -> list[int]:
 def validate_answer(payload: dict[str, Any], allowed_pages: set[int], *, provider: str, model: str, raw_response: str) -> ProviderAnswer:
     """Backward-compatible validator for the original two-field fixture."""
     answer_text = payload.get("answer_text")
-    if not isinstance(answer_text, str) or not answer_text.strip() or len(answer_text) > 12000:
+    if not isinstance(answer_text, str) or not answer_text.strip() or len(answer_text) > MAX_ANSWER_CHARS:
         raise ProviderError("AI_INVALID_OUTPUT", "answer_text must be a non-empty bounded string")
     return ProviderAnswer(answer_text=answer_text.strip(), cited_pages=_validated_pages(payload.get("cited_pages"), allowed_pages), provider=provider, model=model, response_sha256=hashlib.sha256(raw_response.encode("utf-8")).hexdigest())
 
@@ -153,7 +154,7 @@ def _lower_schema(value: Any) -> Any:
 OPENROUTER_RESPONSE_SCHEMA: dict[str, Any] = _lower_schema(GEMINI_RESPONSE_SCHEMA)
 
 
-def _string(value: Any, field: str, *, max_len: int = 12000) -> str:
+def _string(value: Any, field: str, *, max_len: int = MAX_ANSWER_CHARS) -> str:
     if not isinstance(value, str) or len(value) > max_len:
         raise ProviderError("AI_INVALID_OUTPUT", f"{field} must be a bounded string")
     return value.strip()
@@ -553,4 +554,4 @@ def planner_client() -> PlannerChatClient | None:
         return None
 
 
-__all__ = ["PLANNER_PROVIDERS", "PlannerChatClient", "planner_client", "planner_mode", "GEMINI_RESPONSE_SCHEMA", "OPENROUTER_RESPONSE_SCHEMA", "GeminiProvider", "OpenRouterProvider", "ProviderAnswer", "ProviderError", "_json_from_content", "live_provider", "provider_mode", "validate_answer", "validate_structured_answer"]
+__all__ = ["MAX_ANSWER_CHARS", "PLANNER_PROVIDERS", "PlannerChatClient", "planner_client", "planner_mode", "GEMINI_RESPONSE_SCHEMA", "OPENROUTER_RESPONSE_SCHEMA", "GeminiProvider", "OpenRouterProvider", "ProviderAnswer", "ProviderError", "_json_from_content", "live_provider", "provider_mode", "validate_answer", "validate_structured_answer"]
