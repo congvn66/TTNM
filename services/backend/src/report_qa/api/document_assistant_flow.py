@@ -86,6 +86,22 @@ def _formula(record, by_key):
     }
 
 
+def _calculation_summary(calculations):
+    if not calculations:
+        return ""
+    if any(record["result"].get("manual_numbers") for record in calculations):
+        return "Phép tính được chạy bằng script Python; có số được gõ tay trong script, không lấy từ bảng Dữ liệu."
+    return "Phép tính được chạy bằng script Python trên giá trị hiện tại của bảng Dữ liệu."
+
+
+def _unverified_warning(evidences):
+    if not evidences:
+        return []
+    if all(e.get("source_type") == "chart" for e in evidences):
+        return ["Một số giá trị biểu đồ chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
+    return ["Một số giá trị chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
+
+
 def _history(session, document_id):
     """Recent finished turns; a queued question and its placeholder are not history."""
     turns = []
@@ -197,14 +213,12 @@ def answer_document(
     structured = {
         "presentation": "document_assistant",
         "answer": result["answer"],
-        "summary": "Phép tính được chạy bằng script Python trên giá trị hiện tại của bảng Dữ liệu."
-        if result["calculations"] else "",
+        "summary": _calculation_summary(result["calculations"]),
         "sections": [],
         "formulas": [_formula(record, by_key) for record in result["calculations"]],
         "tables": [],
         "claims": [],
-        "warnings": ["Một số giá trị biểu đồ chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
-        if result["unverified_keys"] else [],
+        "warnings": _unverified_warning([by_key[k] for k in result["unverified_keys"]]),
         "cited_pages": sorted({c["page"] for c in citations}),
         "evidence": citations,
         "not_found": result["not_found"],

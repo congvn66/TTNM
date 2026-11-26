@@ -388,3 +388,35 @@ def test_a_database_error_while_saving_a_chart_shows_no_database_details(monkeyp
     with pytest.raises(RuntimeError) as error:
         main._persist_chart_read({"id": identifier}, {"id": identifier}, {"evidence_batch": {"trigger": {"question_plan_id": "q"}}}, "r1")
     assert str(error.value) == "CHART_EVIDENCE_PERSISTENCE_FAILED"
+
+
+def _tools_answer(evidence_rows, *actions):
+    from report_qa.api import document_assistant_flow as flow
+
+    extraction = {"pages": [{"page": 1, "text": "Revenue excludes tax."}], "evidence_batch": {"evidences": evidence_rows}, "chart_regions": []}
+    return flow.answer_document(
+        {"messages": []}, {"id": "doc", "extraction_name": "x", "storage_name": "x"}, "q", "trace", [], {"sessions": {}},
+        overlay=lambda document, value: value, snapshot=lambda message: None, complete=sequence(*actions),
+        load_extraction=lambda name: extraction, resolve_pdf=lambda name: name, save=lambda catalog: None,
+    )["assistant_message"]["structured_answer"]
+
+
+def _row(key, status, source):
+    return {**evidences()[0], "evidence_key": key, "data_status": status, "source_type": source, "bbox": [0, 0, 1, 1], "method_label": "bảng"}
+
+
+def test_unverified_warning_names_charts_only_when_every_unverified_value_is_from_a_chart():
+    table = _tools_answer([_row("t", "ambiguous", "table")], {"action": "answer", "answer": "100", "evidence_keys": ["t"]})
+    chart = _tools_answer([_row("c", "ambiguous", "chart")], {"action": "answer", "answer": "100", "evidence_keys": ["c"]})
+    assert table["warnings"] == ["Một số giá trị chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
+    assert chart["warnings"] == ["Một số giá trị biểu đồ chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
+
+
+def test_summary_does_not_claim_data_table_values_when_the_script_typed_numbers():
+    rows = [_row("a", "valid", "table")]
+    typed = _tools_answer(rows, {"action": "python", "code": "result = value('a') + 37", "explanation": "x"},
+                          {"action": "answer", "answer": "137", "evidence_keys": ["a"]})
+    read = _tools_answer(rows, {"action": "python", "code": "result = value('a') * 2", "explanation": "x"},
+                         {"action": "answer", "answer": "200", "evidence_keys": ["a"]})
+    assert "gõ tay" in typed["summary"]
+    assert read["summary"] == "Phép tính được chạy bằng script Python trên giá trị hiện tại của bảng Dữ liệu."
