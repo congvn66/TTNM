@@ -957,10 +957,14 @@ def delete_session_document(session_id: str, document_id: str, request: Request)
     return {"deleted": True, "document_id": document_id, "storage": "soft_deleted"}
 
 
-def _archive_extraction(document: dict[str, Any]) -> dict[str, Any]:
-    """Record the current reading in the history: its artifact, its number log and the user's edits.
+def _archive_extraction(document: dict[str, Any], artifact: dict[str, Any] | None) -> dict[str, Any]:
+    """Record the current reading in the history and keep the user's edits pending. Call under catalog_lock.
 
-    The document then has no number state until the new reading is ready.
+    ``artifact`` is the current reading's artifact (None when it is not ready).
+    The edits of a ready reading become the document's pending edits; a
+    reading that never became ready leaves the pending edits as they are.
+    Either way they wait for the next ready reading (see _carry_over_edits).
+    The document then has no number state until that reading is ready.
     """
     entry = {
         "status": document.get("extraction_status"), "error": document.get("extraction_error"),
@@ -969,16 +973,14 @@ def _archive_extraction(document: dict[str, Any]) -> dict[str, Any]:
         "user_edits": [], "edits_carried_over": None, "edits_not_carried_over": None,
     }
     run_id = document.get("extraction_run_id")
-    if run_id:
+    if run_id and artifact is not None:
         # The artifact stays where it is: it is this reading's own file.
         entry.update(extraction_run_id=run_id, artifact=document["extraction_name"])
-        artifact = _base_extraction_or_none(document)
-        record_chart_reads(document)
-        if artifact is not None and run_id_of(artifact) == run_id:
-            ensure_document_evidence_state(document, artifact)
-            entry["user_edits"] = _user_edits(document, artifact)
+        ensure_document_evidence_state(document, artifact)
+        document["pending_edits"] = _user_edits(document, artifact)
         if number_state_path(number_log_name(document["id"], run_id)).exists():
             entry["number_state"] = number_log_name(document["id"], run_id)
+    entry["user_edits"] = json.loads(json.dumps(document.get("pending_edits") or []))
     document.pop("evidence_state", None)
     document.update({"extraction_run_id": None, "number_event_count": 0, "number_log": [], "chart_extractions": []})
     document.setdefault("extraction_history", []).append(entry)
@@ -1014,20 +1016,23 @@ def _user_edits(document: dict[str, Any], artifact: dict[str, Any] | None) -> li
 
 
 def _carry_over_edits(document: dict[str, Any], artifact: dict[str, Any] | None) -> None:
-    """Re-apply the archived user edits to the new reading. Call under catalog_lock.
+    """Re-apply the pending user edits to the reading that just finished. Call under catalog_lock.
 
     An edit is carried over only when the new reading has the same key at the
     same location with the same printed text; every other edit is listed as
-    not carried over. A failed reading carries over nothing.
+    not carried over, in the last history entry. A ready reading uses up the
+    pending edits; a failed reading reports them all as NEW_READING_FAILED and
+    keeps them pending for the next reading.
     """
     history = document.get("extraction_history") or []
     if not history or history[-1].get("edits_carried_over") is not None:
         return
     entry = history[-1]
+    edits = document.get("pending_edits") or []
     evidences = {item["evidence_key"]: item for item in (artifact or {}).get("evidence_batch", {}).get("evidences", [])}
     items = (document.get("evidence_state") or {}).get("items") or {}
     carried, not_carried = [], []
-    for edit in entry.get("user_edits") or []:
+    for edit in edits:
         key = edit["evidence_key"]
         if artifact is None:
             code = "NEW_READING_FAILED"
@@ -1042,6 +1047,8 @@ def _carry_over_edits(document: dict[str, Any], artifact: dict[str, Any] | None)
         not_carried.append({"evidence_key": key, "numeric_value": edit["numeric_value"], "code": code})
     entry["edits_carried_over"] = carried
     entry["edits_not_carried_over"] = not_carried
+    if artifact is not None:
+        document["pending_edits"] = []
 
 
 def _append_carried_edit(document: dict[str, Any], item: dict[str, Any], edit: dict[str, Any]) -> None:
@@ -1053,12 +1060,12 @@ def _append_carried_edit(document: dict[str, Any], item: dict[str, Any], edit: d
         "numeric_value": edit["numeric_value"], "old_numeric_value": current["numeric_value"], "previous_revision_id": current["id"],
         "reason": edit["reason"], "carried_over_from_revision_id": edit["revision_id"],
     }
-    _append_edit(document, item["evidence_key"], revision, edit["location"])
+    _append_edit(document, item["evidence_key"], revision)
 
 
-def _append_edit(document: dict[str, Any], evidence_key: str, revision: dict[str, Any], location: dict[str, Any] | None) -> None:
+def _append_edit(document: dict[str, Any], evidence_key: str, revision: dict[str, Any]) -> None:
     """Add a user's edit to the current reading. Call under catalog_lock."""
-    event = edit_event(evidence_key, revision, location)
+    event = edit_event(evidence_key, revision)
     if postgres_runtime:
         # The database stores the revision (see create_evidence_revision).
         apply_event(document["evidence_state"], event)
@@ -1085,13 +1092,15 @@ def rerun_document_extraction(session_id: str, document_id: str, request: Reques
         raise user_error(409, "REEXTRACTION_NOT_SUPPORTED")
     session = get_session(session_id, owner_id)
     trace_id = trace_id_for(request)
+    document = next((item for item in session["documents"] if item["id"] == document_id), None)
+    if document is None:
+        raise user_error(404, "DOCUMENT_NOT_FOUND")
+    # Read outside the lock; _archive_extraction checks it is still the current reading.
+    artifact = _base_extraction_or_none(document) if document.get("extraction_status") == "ready" else None
     with catalog_lock:
-        document = next((item for item in session["documents"] if item["id"] == document_id), None)
-        if document is None:
-            raise user_error(404, "DOCUMENT_NOT_FOUND")
         if document.get("extraction_status") in {"queued", "processing"}:
             raise user_error(409, "EXTRACTION_IN_PROGRESS")
-        previous = _archive_extraction(document)
+        previous = _archive_extraction(document, artifact)
         affected = []
         if previous["status"] == "ready":
             # Their inputs came from the archived extraction; keep the
@@ -1218,7 +1227,7 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
             "numeric_value": numeric_value, "old_numeric_value": current["numeric_value"], "previous_revision_id": current["id"],
             "reason": payload.reason.strip(),
         }
-        _append_edit(document, evidence_key, revision, _evidence_location(evidence) if evidence else None)
+        _append_edit(document, evidence_key, revision)
         affected = mark_answers_needing_update(session, document_id, evidence_key, current["id"])
         session["updated_at"] = utc_now()
         if not postgres_runtime:

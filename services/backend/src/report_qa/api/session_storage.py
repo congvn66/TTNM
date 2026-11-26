@@ -249,7 +249,7 @@ def _snapshot_events(items: dict[str, Any], chart_reads: list[dict[str, Any]]) -
     for key, item in items.items():
         for revision in item.get("revisions") or []:
             if revision.get("action") == "edit":
-                timed.append(((revision.get("created_at") or ""), 1, numbers.edit_event(key, revision, None)))
+                timed.append(((revision.get("created_at") or ""), 1, numbers.edit_event(key, revision)))
     return [event for _, _, event in sorted(timed, key=lambda entry: (entry[0], entry[1]))]
 
 

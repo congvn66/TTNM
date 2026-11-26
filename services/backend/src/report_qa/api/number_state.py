@@ -7,7 +7,7 @@ reading's append-only log (see session_storage.append_number_events):
 * ``{"kind": "chart_read", "record": {...}}``: a chart read on demand. Its
   numbers that the reading does not have yet are added; a number whose earlier
   read gave no value gets this read's value.
-* ``{"kind": "edit", "evidence_key": ..., "revision": {...}, "location": ...}``:
+* ``{"kind": "edit", "evidence_key": ..., "revision": {...}}``:
   a value a user typed, or a user's edit carried over from an earlier reading.
 
 The number state is a replay: an initial revision for every base number, then
@@ -76,8 +76,8 @@ def apply_event(state: dict[str, Any], event: dict[str, Any]) -> None:
         raise ValueError(f"unknown number event {event['kind']!r}")
 
 
-def edit_event(evidence_key: str, revision: dict[str, Any], location: dict[str, Any] | None) -> dict[str, Any]:
-    return {"kind": "edit", "evidence_key": evidence_key, "revision": revision, "location": location}
+def edit_event(evidence_key: str, revision: dict[str, Any]) -> dict[str, Any]:
+    return {"kind": "edit", "evidence_key": evidence_key, "revision": revision}
 
 
 def chart_read_event(record: dict[str, Any]) -> dict[str, Any]:

@@ -30,7 +30,7 @@ def _ready_catalog():
 
 
 def _edit(key, value, revision_id, previous):
-    return number_state.edit_event(key, {"id": revision_id, "revision_no": 2, "action": "edit", "numeric_value": value, "previous_revision_id": previous}, None)
+    return number_state.edit_event(key, {"id": revision_id, "revision_no": 2, "action": "edit", "numeric_value": value, "previous_revision_id": previous})
 
 
 def test_number_events_are_appended_to_the_reading_log_and_never_rewritten(runtime, monkeypatch):
