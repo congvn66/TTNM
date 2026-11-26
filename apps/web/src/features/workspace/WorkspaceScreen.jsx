@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { API, request } from "../../shared/api/client.js";
@@ -77,9 +77,12 @@ const ERROR_COPY = {
   DOCUMENT_CONTEXT_TOO_LARGE: "Tài liệu quá dài để trợ lý đọc hết trong một lần hỏi.",
   ASSISTANT_INCOMPLETE: "Trợ lý chưa hoàn tất câu trả lời trong số bước cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",
   QUEUE_UNAVAILABLE: "Hàng đợi xử lý chưa sẵn sàng. Hãy khởi động worker hoặc thử lại sau.",
+  REEXTRACTION_NOT_SUPPORTED: "Máy chủ này chưa hỗ trợ đọc lại tài liệu. Hãy tải PDF lên lại để đọc từ đầu.",
+  EXTRACTION_IN_PROGRESS: "Tài liệu đang được đọc. Hãy chờ xong rồi thử lại.",
 };
 
 function userFacingError(value) {
+  if (ERROR_COPY[value?.code]) return ERROR_COPY[value.code];
   const raw = typeof value === "string" ? value : value?.message;
   if (!raw) return "Không thể hoàn tất thao tác. Hãy thử lại.";
   const code = Object.keys(ERROR_COPY).find((key) => raw.includes(key));
@@ -311,7 +314,9 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
   return <section className="reader-shell">
     <header className="reader-toolbar">
       <div className="reader-file"><strong>{document.file_name}</strong><span>{formatBytes(document.byte_size)} · {processingLabel(document.extraction_status)}</span></div>
-      {onReextract && !["queued", "processing"].includes(document.extraction_status) && <button className="reextract-button" type="button" title="Đọc lại tài liệu; kết quả cũ được lưu trữ" disabled={reextractDisabled} onClick={() => onReextract(document)}><Icon name="refresh" size={13} /> Trích xuất lại</button>}
+      {["queued", "processing"].includes(document.extraction_status)
+        ? <span className="reextract-status" role="status"><span className="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>{processingLabel(document.extraction_status)}…</span>
+        : onReextract && <button className="reextract-button" type="button" title="Đọc lại tài liệu và lập lại bảng số liệu" disabled={reextractDisabled} onClick={() => onReextract(document)}><Icon name="refresh" size={13} /> Trích xuất lại</button>}
       <div className="page-control"><button aria-label="Trang trước" title="Trang trước" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}><Icon name="arrowLeft" /></button><span>{page} / {pdf?.numPages ?? document.page_count ?? "—"}</span><button aria-label="Trang sau" title="Trang sau" disabled={!pdf || page >= pdf.numPages} onClick={() => setPage((value) => value + 1)}><Icon name="arrowRight" /></button></div>
       <div className="zoom-control"><button aria-label="Thu nhỏ" title="Thu nhỏ" onClick={() => setScale((value) => Math.max(.35, value - .15))}><Icon name="minus" /></button><span>{Math.round(scale * 100)}%</span><button aria-label="Phóng to" title="Phóng to" onClick={() => setScale((value) => Math.min(2.5, value + .15))}><Icon name="plus" /></button><button aria-label="Vừa chiều rộng" title="Vừa chiều rộng" onClick={fitWidth}><Icon name="fit" /></button><button aria-label="Xoay tài liệu" title="Xoay tài liệu" onClick={() => setRotation((value) => (value + 90) % 360)}><Icon name="rotate" /></button></div>
     </header>
@@ -404,17 +409,30 @@ function ActionMenu({ label, onRename, onDelete }) {
   </>;
 }
 
+// One dialog for confirmations: "rename-*" asks for a name, "delete-*" is
+// destructive, anything else is a plain confirmation with its own wording.
 function ResourceDialog({ dialog, busy, onClose, onConfirm }) {
+  const inputId = useId();
   const [value, setValue] = useState(dialog?.value ?? "");
   useEffect(() => setValue(dialog?.value ?? ""), [dialog?.kind, dialog?.value]);
+  useEffect(() => {
+    if (!dialog) return undefined;
+    const onKey = (event) => { if (event.key === "Escape" && !busy) onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [dialog, busy, onClose]);
   if (!dialog) return null;
   const isDelete = dialog.kind.startsWith("delete");
-  return <div className="resource-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="resource-dialog-title">
-      <div className={`resource-modal-icon ${isDelete ? "danger" : ""}`}><Icon name={isDelete ? "trash" : "edit"} size={19} /></div>
-      <div><p className="dialog-kicker">{isDelete ? "XÁC NHẬN THAO TÁC" : "CHỈNH SỬA"}</p><h2 id="resource-dialog-title">{dialog.title}</h2><p>{dialog.description}</p></div>
-      {isDelete ? <div className="dialog-warning">Thao tác này sẽ ẩn mục khỏi workspace. Dữ liệu nguồn được archive để bảo toàn lịch sử.</div> : <label className="dialog-input-label">Tên hiển thị<input autoFocus value={value} onChange={(event) => setValue(event.target.value)} maxLength={dialog.maxLength ?? 255} /></label>}
-      <div className="resource-modal-actions"><button type="button" className="dialog-secondary" onClick={onClose} disabled={busy}>Hủy</button><button type="button" className={isDelete ? "dialog-danger" : "dialog-primary"} disabled={busy || (!isDelete && !value.trim())} onClick={() => onConfirm(dialog, value.trim())}>{busy ? "Đang lưu…" : isDelete ? "Xóa khỏi workspace" : "Lưu thay đổi"}</button></div>
+  const needsName = dialog.kind.startsWith("rename");
+  const confirmLabel = dialog.confirmLabel ?? (isDelete ? "Xóa khỏi workspace" : "Lưu thay đổi");
+  return <div className="resource-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+    <section className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="resource-dialog-title" aria-describedby="resource-dialog-description">
+      <div className={`resource-modal-icon ${isDelete ? "danger" : ""}`}><Icon name={dialog.icon ?? (isDelete ? "trash" : "edit")} size={19} /></div>
+      <div><p className="dialog-kicker">{needsName ? "CHỈNH SỬA" : "XÁC NHẬN THAO TÁC"}</p><h2 id="resource-dialog-title">{dialog.title}</h2><p id="resource-dialog-description">{dialog.description}</p></div>
+      {isDelete && <div className="dialog-warning">Thao tác này sẽ ẩn mục khỏi workspace. Dữ liệu nguồn được archive để bảo toàn lịch sử.</div>}
+      {needsName && <div className="dialog-input-label"><label htmlFor={inputId}>Tên hiển thị</label><input id={inputId} autoFocus value={value} onChange={(event) => setValue(event.target.value)} maxLength={dialog.maxLength ?? 255} /></div>}
+      {dialog.error && <p className="dialog-error" role="alert">{dialog.error}</p>}
+      <div className="resource-modal-actions"><button type="button" className="dialog-secondary" onClick={onClose} disabled={busy}>Hủy</button><button type="button" autoFocus={!needsName} className={isDelete ? "dialog-danger" : "dialog-primary"} disabled={busy || (needsName && !value.trim())} onClick={() => onConfirm(dialog, value.trim())}>{busy ? (dialog.busyLabel ?? "Đang lưu…") : confirmLabel}</button></div>
     </section>
   </div>;
 }
@@ -736,10 +754,13 @@ function App({ user = null, onSignOut = null, onNavigate }) {
         setActiveDocumentId(null);
         refresh(activeSession.id).catch(() => {});
         showNotice("Đã đưa tài liệu vào lưu trữ.");
+      } else if (dialog.kind === "reextract-document" && activeSession) {
+        await startReextraction(dialog.document);
       }
       setResourceDialog(null);
     } catch (error) {
-      showNotice(error.message, "error");
+      // The dialog stays open so the reason is next to the action that failed.
+      setResourceDialog((current) => current && { ...current, error: userFacingError(error) });
     } finally { setBusy(false); }
   }
 
@@ -862,18 +883,33 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   // is retried from the job center instead.
   const canReextract = runtimeHealth?.persistence_backend === "json";
 
-  async function reextractDocument(document) {
-    if (!activeSession || !document) return;
-    if (document.extraction_status === "ready" && !window.confirm("Trích xuất lại tài liệu này? Kết quả cũ được lưu trữ, số đã sửa được giữ, các câu trả lời cũ sẽ được đánh dấu cần tính lại.")) return;
-    setBusy(true);
-    try {
-      const result = await request(`/api/v1/sessions/${activeSession.id}/documents/${document.id}/extraction`, { method: "POST" });
-      await refreshSessionDetail(activeSession.id);
-      const affected = result.affected_message_ids?.length ?? 0;
-      showNotice(`Đang trích xuất lại ${document.file_name}.${affected ? ` ${affected} câu trả lời cũ cần tính lại.` : ""}`);
-    } catch (error) { showNotice(error.message, "error"); }
-    finally { setBusy(false); }
+  function reextractDocument(document) {
+    setResourceDialog({
+      kind: "reextract-document", document, icon: "refresh", confirmLabel: "Đọc lại tài liệu", busyLabel: "Đang gửi yêu cầu…",
+      title: "Đọc lại tài liệu này?",
+      description: document.extraction_status === "ready"
+        ? `SourceLens sẽ đọc lại “${document.file_name}” và lập lại bảng số liệu. Số bạn đã sửa được giữ; các câu trả lời cũ dùng số liệu sẽ được đánh dấu cần tính lại. Việc này có thể mất vài phút.`
+        : `SourceLens sẽ thử đọc lại “${document.file_name}”. Việc này có thể mất vài phút.`,
+    });
   }
+
+  // Documents being re-read, so the end of the run can be announced.
+  const reextractingRef = useRef(new Set());
+  async function startReextraction(document) {
+    const result = await request(`/api/v1/sessions/${activeSession.id}/documents/${document.id}/extraction`, { method: "POST" });
+    reextractingRef.current.add(document.id);
+    const affected = result.affected_message_ids?.length ?? 0;
+    showNotice(`Đang đọc lại ${document.file_name}…${affected ? ` ${affected} câu trả lời cũ cần tính lại.` : ""}`);
+    await refreshSessionDetail(activeSession.id).catch(() => {});
+  }
+  useEffect(() => {
+    const id = activeDocument?.id;
+    const status = activeDocument?.extraction_status;
+    if (!id || !reextractingRef.current.has(id) || !["ready", "failed"].includes(status)) return;
+    reextractingRef.current.delete(id);
+    if (status === "ready") showNotice(`Đã đọc lại ${activeDocument.file_name}: ${activeDocument.numeric_evidence_count ?? 0} số liệu.`);
+    else showNotice(`Chưa đọc lại được ${activeDocument.file_name}. ${ERROR_COPY[activeDocument.extraction_error] ?? "Hãy thử lại sau."}`, "error");
+  }, [activeDocument?.id, activeDocument?.extraction_status, activeDocument?.file_name, activeDocument?.numeric_evidence_count, activeDocument?.extraction_error, showNotice]);
 
   const nextTheme = preference === "light" ? "dark" : preference === "dark" ? "system" : "light";
   const activeJobCount = activeJobs.filter((job) => ["queued", "running"].includes(job.status)).length;

@@ -37,3 +37,4 @@
 
 .reextract-button { display: inline-flex; align-items: center; gap: 6px; min-height: 29px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface); color: var(--ink-soft); font-size: 10px; font-weight: 700; white-space: nowrap; }
 .reextract-button:hover:not(:disabled) { border-color: var(--color-cta); color: var(--color-cta); }
+.reextract-status { display: inline-flex; align-items: center; gap: 7px; min-height: 29px; padding: 0 10px; border: 1px solid var(--accent-border); border-radius: 7px; background: var(--accent-soft); color: var(--accent-strong); font-size: 10px; font-weight: 700; white-space: nowrap; }

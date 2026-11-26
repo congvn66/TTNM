@@ -165,7 +165,31 @@ it.each([["json", true], ["postgres", false]])("offers re-extraction only where 
   await screen.findByText("Ready");
   if (!offered) { expect(screen.queryByText("Trích xuất lại")).toBeNull(); return; }
   fireEvent.click(await screen.findByText("Trích xuất lại"));
+  expect(requestMock).not.toHaveBeenCalledWith("/api/v1/sessions/chat/documents/doc/extraction", { method: "POST" });
+  fireEvent.click(await screen.findByRole("button", { name: "Đọc lại tài liệu" }));
   await waitFor(() => expect(requestMock).toHaveBeenCalledWith("/api/v1/sessions/chat/documents/doc/extraction", { method: "POST" }));
+});
+
+it("asks before re-reading a document and shows why the server refused", async () => {
+  const doc = { id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: "ready" };
+  const session = { id: "chat", title: "My session", documents: [doc], messages: [] };
+  requestMock.mockImplementation(async (path) => {
+    if (path === "/health") return { persistence_backend: "json" };
+    if (path === "/api/v1/sessions") return { sessions: [session] };
+    if (path === "/api/v1/sessions/chat") return { session };
+    if (path.endsWith("/extraction")) throw Object.assign(new Error("Chưa hỗ trợ trích xuất lại khi lưu bằng PostgreSQL; hãy tải lại PDF."), { status: 409, code: "REEXTRACTION_NOT_SUPPORTED" });
+    return { jobs: [] };
+  });
+  render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  fireEvent.click(await screen.findByText("Trích xuất lại"));
+  const dialog = await screen.findByRole("dialog", { name: "Đọc lại tài liệu này?" });
+  expect(dialog.textContent).toContain("Số bạn đã sửa được giữ");
+  fireEvent.click(screen.getByRole("button", { name: "Đọc lại tài liệu" }));
+  const alert = await screen.findByText("Máy chủ này chưa hỗ trợ đọc lại tài liệu. Hãy tải PDF lên lại để đọc từ đầu.");
+  expect(alert.getAttribute("role")).toBe("alert");
+  expect(screen.getByRole("dialog", { name: "Đọc lại tài liệu này?" })).toBeTruthy();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("dialog", { name: "Đọc lại tài liệu này?" })).toBeNull();
 });
 
 it("closes confirmation notices by itself but keeps errors until closed", async () => {
@@ -188,6 +212,7 @@ it("closes confirmation notices by itself but keeps errors until closed", async 
     await waitFor(() => expect(create.disabled).toBe(false));
     fireEvent.click(create);
     await screen.findByText("Đã tạo phiên làm việc mới.");
+    await act(async () => {}); // let the notice effect start its timer
     await act(async () => { vi.advanceTimersByTime(7000); });
     expect(screen.queryByText("Đã tạo phiên làm việc mới.")).toBeNull();
     fireEvent.click(create);
