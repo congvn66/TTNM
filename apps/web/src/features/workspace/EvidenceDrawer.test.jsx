@@ -164,3 +164,16 @@ it("shows every value in Vietnamese style and a row without a number as what was
   expect(within(drawer).getByText("Đã đọc: “42.03”")).toBeTruthy();
   expect(within(drawer).getByRole("button", { name: /2025 · Tỷ lệ: chưa có số/ })).toBeTruthy();
 });
+
+it("shows the plain number beside the Vietnamese one before saving", async () => {
+  mockApi([
+    [`${base}/evidences/k1/revisions`, async () => ({ parsed_value: "1250", plain_value: "1250", decimal_separator: ",", display: "1.250", locale: "vi" })],
+    [`${base}/evidences`, async () => ({ evidences: [row("k1")] })],
+  ]);
+  const { drawer } = await openDrawer();
+  fireEvent.click(within(drawer).getByRole("button", { name: /^Sửa số/ }));
+  fireEvent.change(within(drawer).getByLabelText("Giá trị mới"), { target: { value: "1.250" } });
+  fireEvent.change(within(drawer).getByLabelText("Lý do sửa"), { target: { value: "Đối chiếu PDF" } });
+  fireEvent.click(within(drawer).getByRole("button", { name: "Kiểm tra số" }));
+  expect(await within(drawer).findByText("1.250 (= 1250)")).toBeTruthy();
+});

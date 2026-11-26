@@ -12,6 +12,14 @@ function editError(error) {
   return error?.status === 422 && !error.code ? EDIT_ERROR_FALLBACK : error?.message || EDIT_ERROR_FALLBACK;
 }
 
+// "21.500 (= 21500)": the plain number beside the Vietnamese one, so 1.250
+// (one thousand two hundred fifty) cannot be read as 1,25.
+function previewText(preview) {
+  const shown = preview.display ?? formatNumber(preview.parsed_value);
+  const plain = preview.plain_value == null ? "" : String(preview.plain_value);
+  return plain && plain !== shown ? `${shown} (= ${plain})` : shown;
+}
+
 function isEdited(evidence) {
   return numbersDiffer(evidence.current_numeric_value, evidence.original_numeric_value);
 }
@@ -100,7 +108,7 @@ function EditForm({ evidence, basePath, onCancel, onSaved, onConflict }) {
     {missing.reason && <p className="evidence-field-error" id={`${ids}-reason-missing`}>{missing.reason}</p>}
     {error && <p className="evidence-edit-error" id={`${ids}-error`} role="alert">{error}</p>}
     {readings.length > 0 && <div className="evidence-edit-readings" role="group" aria-label="Chọn số bạn muốn lưu"><span>Ý bạn là:</span>{readings.map((reading) => <button type="button" key={reading} disabled={working} onClick={() => requestPreview(reading)}>{formatNumber(reading)}</button>)}</div>}
-    {preview && <p className="evidence-edit-preview" role="status">Sẽ lưu: <b>{preview.display ?? formatNumber(preview.parsed_value)}</b></p>}
+    {preview && <p className="evidence-edit-preview" role="status">Sẽ lưu: <b>{previewText(preview)}</b></p>}
     <div>
       <button type="button" onClick={onCancel} disabled={working}>Hủy</button>
       {preview
