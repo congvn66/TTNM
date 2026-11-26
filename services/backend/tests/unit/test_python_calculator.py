@@ -226,3 +226,19 @@ def test_child_process_gets_no_parent_variables_except_what_windows_needs(monkey
 def test_extreme_scripts_fail_without_raising(code):
     evidence = {"a": {"evidence_key": "a", "numeric_value": "1.5", "data_status": "valid"}}
     assert run_calculation(code, evidence)["status"] in {"failed", "succeeded"}
+
+
+def test_printed_and_returned_values_never_show_decimal_reprs():
+    code = "d = {'bac_diff': value('b') - value('a')}\nprint(d)\nresult = d.values()"
+    result = run_calculation(code, facts())
+    assert result["status"] == "succeeded", result
+    assert "Decimal" not in result["stdout"] and result["stdout"] == "{'bac_diff': -270.50}\n"
+    assert result["result"] == ["-270.50"]
+
+
+def test_result_rows_name_each_value_and_its_data_keys():
+    code = "result = {'q3': value('b'), 'diff': value('b') - value('a'), 'name': 'Q3'}"
+    rows = run_calculation(code, facts())["result_rows"]
+    assert rows == [{"name": "q3", "value": "980.00", "source_keys": ["b"]},
+                    {"name": "diff", "value": "-270.50", "source_keys": ["a", "b"]},
+                    {"name": "name", "value": "Q3", "source_keys": []}]

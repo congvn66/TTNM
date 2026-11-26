@@ -15,6 +15,10 @@ cannot be rebound. Scripts can use Decimal, math, statistics, loops,
 comprehensions, small helper functions and list/dict methods. There is no file, environment,
 network or process access. This is a calculation language for reviewable
 scripts, not a hardened multi-tenant Python host.
+
+A succeeded run also returns result_rows, one per value of the result with
+the name the script gave it and its Data keys; printed values and the result
+show numbers as plain decimals, never as Decimal('...').
 """
 
 # AST node kinds are rejected as invalid programs, not as Python argument types.
@@ -257,13 +261,28 @@ def traced_len(items):
 def traced_int(x=0, *args):
     number=int(x,*args)
     return traced(Decimal(number),x.sources,x.typed) if isinstance(x,Traced) else number
+VIEWS=(list,tuple,set,frozenset,type({}.keys()),type({}.values()),type({}.items()))
+# Containers as dict/list with text keys, so the result and print show numbers, never Decimal('...').
+def normalized(x):
+    if isinstance(x,dict): return {k if isinstance(k,str) else str(k): normalized(v) for k,v in x.items()}
+    if isinstance(x,VIEWS): return [normalized(v) for v in x]
+    return x
 def result_numbers(x):
-    if isinstance(x,dict): return [n for k,v in x.items() for n in result_numbers(k)+result_numbers(v)]
-    if isinstance(x,(list,tuple)): return [n for item in x for n in result_numbers(item)]
+    if isinstance(x,dict): return [n for v in x.values() for n in result_numbers(v)]
+    if isinstance(x,list): return [n for item in x for n in result_numbers(item)]
     return [x] if is_number(x) else []
+# One row per value of the result: the name the script gave it and the Data keys it came from.
+def result_rows(x, name=None):
+    if isinstance(x,dict): return [r for k,v in x.items() for r in result_rows(v, k if name is None else name+' · '+k)]
+    if isinstance(x,list): return [r for i,v in enumerate(x) for r in result_rows(v, str(i+1) if name is None else name+' · '+str(i+1))]
+    return [{'name':name,'value':str(x) if is_number(x) else x,'source_keys':sorted(x.sources) if isinstance(x,Traced) else []}]
+def shown(x, top=True):
+    if isinstance(x,dict): return '{'+', '.join(shown(k,False)+': '+shown(v,False) for k,v in x.items())+'}'
+    if isinstance(x,list): return '['+', '.join(shown(v,False) for v in x)+']'
+    return repr(x) if isinstance(x,str) and not top else str(x)
 def captured_print(*args, sep=' ', end='\n'):
     room=payload['max_stdout']-sum(map(len, printed))
-    if room>0: printed.append((sep.join(map(str, args))+end)[:room])
+    if room>0: printed.append((sep.join(shown(normalized(a)) for a in args)+end)[:room])
 safe={name: __builtins__.__dict__[name] for name in payload['builtins']}
 safe['len']=traced_len
 safe['int']=traced_int
@@ -281,11 +300,12 @@ env={'__builtins__':safe,'value':value,'Decimal':Traced,**modules}
 try:
     exec(compile(payload['code'],'<calculation>','exec'),env,env)
     if 'result' not in env: raise ValueError('Assign the calculation output to result')
-    numbers=result_numbers(env['result'])
+    result=normalized(env['result'])
+    numbers=result_numbers(result)
     sources=set().union(*(n.sources for n in numbers if isinstance(n,Traced)))
     if not sources: raise ValueError('result must contain numbers computed from value(evidence_key), not copied constants or text')
     manual=unique(t for n in numbers for t in (n.typed if isinstance(n,Traced) else typed_of(n)))
-    output=json.dumps({'status':'succeeded','result':env['result'],'used_evidence_keys':[k for k in used if k in sources],
+    output=json.dumps({'status':'succeeded','result':result,'result_rows':result_rows(result),'used_evidence_keys':[k for k in used if k in sources],
                        'manual_numbers':list(manual),'traced_numbers':[str(n) for n in numbers if isinstance(n,Traced) and n.sources],
                        'stdout':''.join(printed)},default=str,allow_nan=False)
     if len(output)>30000: raise ValueError('Calculation result too large')

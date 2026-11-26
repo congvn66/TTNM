@@ -621,3 +621,14 @@ def test_an_answer_past_its_budget_fails_with_a_vietnamese_message(monkeypatch):
         _tools_answer([_row("a", "valid", "table")], {"action": "answer", "answer": "100", "evidence_keys": ["a"]})
     assert error.value.code == "AI_ANSWER_TIMEOUT"
     assert main.ai_failure("AI_ANSWER_TIMEOUT", "x", "t").detail["message"].startswith("Trợ lý chưa trả lời xong")
+
+
+def test_formula_result_rows_take_the_data_label_of_a_value_read_unchanged():
+    rows = [{**_row("a", "valid", "table"), "numeric_value": "18240", "table_locator": {"row_header": "Miền Bắc", "column_header": "Quý 1/2026"}},
+            {**_row("b", "valid", "table"), "numeric_value": "21350", "table_locator": {"row_header": "Miền Bắc", "column_header": "Quý 2/2026"}}]
+    answer = _tools_answer(rows, {"action": "python", "code": "result = {'dt_bac_q2': value('b'), 'total': value('a') + value('b')}"},
+                           {"action": "answer", "answer": "Quý 2 là 21.350, tổng 39.590.", "evidence_keys": ["a", "b"]})
+    assert answer["formulas"][0]["result_rows"] == [
+        {"label": "Miền Bắc · Quý 2/2026", "value": "21350", "source_keys": ["b"]},
+        {"label": "total", "value": "39590", "source_keys": ["a", "b"]},
+    ]

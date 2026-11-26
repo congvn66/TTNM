@@ -203,6 +203,24 @@ def untraced_numbers(answer: str, *, question: str, evidences: list[dict], quote
     return list(dict.fromkeys(text for text, readings, scale in _written_numbers(answer) if not traced(readings, scale)))
 
 
+def result_rows(rows: list[dict], by_key: dict) -> list[dict]:
+    """Script result rows as people read them: label, value and the Data keys behind it.
+
+    A value that is exactly one Data row's value takes that row's label;
+    any other value keeps the name the script gave it.
+    """
+    labelled = []
+    for row in rows:
+        keys = row["source_keys"]
+        source = by_key.get(keys[0]) if len(keys) == 1 else None
+        try:
+            same = source is not None and Decimal(str(row["value"])) == Decimal(str(source.get("numeric_value")))
+        except InvalidOperation:
+            same = False
+        labelled.append({"label": evidence_label(source) if same else row["name"], "value": row["value"], "source_keys": keys})
+    return labelled
+
+
 def _is_page(value) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
@@ -278,6 +296,8 @@ class _Turn:
             self.reject("python action needs non-empty code")
             return
         result = run_calculation(code, self.evidence_by_key())
+        if result["status"] == "succeeded":
+            result["result_rows"] = result_rows(result["result_rows"], self.evidence_by_key())
         record = {"tool": "python", "code": code, "explanation": str(action.get("explanation") or ""), "result": result}
         self.tools.append(record)
         self.calculations.append(record)
