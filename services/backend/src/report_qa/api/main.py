@@ -1176,14 +1176,21 @@ def _ready_document(session: dict[str, Any], document_id: str) -> tuple[dict[str
     summary="Inspect original/current numeric evidence and revision history",
     responses=OPENAPI_COMMON_ERRORS,
 )
-def list_document_evidences(session_id: str, document_id: str, request: Request) -> dict[str, Any]:
+def list_document_evidences(session_id: str, document_id: str, request: Request) -> JSONResponse:
     session = get_session(session_id, owner_id_for_request(request))
     document, artifact = _ready_document(session, document_id)
     with catalog_lock:
-        return _evidence_records(document, document_id, artifact, with_chart_batches(document, artifact))
+        records = _evidence_records(document, document_id, artifact, with_chart_batches(document, artifact))
+    # The records are plain JSON (strings, numbers, lists, dicts): serialize them once, outside the lock.
+    return JSONResponse(records)
 
 
 def _evidence_records(document: dict[str, Any], document_id: str, artifact: dict[str, Any], extraction: dict[str, Any]) -> dict[str, Any]:
+    """The Data rows with their current values. Call under catalog_lock.
+
+    Values from the number state are copied; the rest is the reading's rows,
+    which never change.
+    """
     state = ensure_document_evidence_state(document, artifact)
     records = []
     for evidence in (extraction.get("evidence_batch") or {}).get("evidences", []):
@@ -1199,7 +1206,7 @@ def _evidence_records(document: dict[str, Any], document_id: str, artifact: dict
             "original_numeric_value": item["original_numeric_value"], "current_numeric_value": current["numeric_value"],
             "current_revision_id": current["id"], "revision_count": len(item["revisions"]),
         })
-    return json.loads(json.dumps({"document_id": document_id, "data_revision": state["data_revision"], "evidences": records}))
+    return {"document_id": document_id, "data_revision": state["data_revision"], "evidences": records}
 
 
 @app.get(
