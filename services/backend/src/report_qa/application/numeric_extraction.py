@@ -73,6 +73,8 @@ PERIOD = re.compile(
 DATE = re.compile(
     r"(?<![\w/.,])(?:\d{1,2}(?P<sep>[/.\-])\d{1,2}(?P=sep)(?:19|20)?\d{2}|\d{1,2}/(?:19|20)\d{2})(?![\w/.,])"
 )
+# A reference to a figure or table of the document: "Biểu đồ 2", "Bảng 1", "Hình 3".
+REFERENCE = re.compile(r"(?i)\b(?:biểu đồ|bảng|hình|sơ đồ|phụ lục|figure|fig\.?|table|chart)\s*\d+(?!\w)")
 # A length of time counted in periods: "4 quý", "3 năm", "6 tháng" (not "6 năm 2026").
 DURATION = re.compile(r"(?i)(?<![\w/.,])\d{1,3}\s*(?:năm|quý|tháng)(?!\w)(?!\s*(?:19|20)\d{2})")
 _DASHES = {"-", "—", "–"}
@@ -183,10 +185,11 @@ def quantities(text: str) -> list[re.Match]:
 
     Digits glued to letters or slashes ("Q3", "H1", "6T") are never NUMBER
     matches; periods, dates and durations ("quý 2/2026", "31/12/2023",
-    "4 quý") are labels of time, not quantities. Positions are those of text.
+    "4 quý") are labels of time and "Biểu đồ 2" is the name of a figure, not
+    quantities. Positions are those of text.
     """
     blanked = list(text)
-    for pattern in (PERIOD, DATE, DURATION):
+    for pattern in (PERIOD, DATE, DURATION, REFERENCE):
         for match in pattern.finditer(text):
             blanked[match.start():match.end()] = " " * (match.end() - match.start())
     return list(NUMBER.finditer("".join(blanked)))

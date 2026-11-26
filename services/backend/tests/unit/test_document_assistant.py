@@ -112,6 +112,7 @@ def test_numbers_traced_to_results_rows_quotes_and_question_are_accepted(answer)
     "Doanh thu tháng 3/2026 và tháng 6 là 10.",  # months
     "Năm 2019 và 2025 doanh thu là 10.",  # years written only in the pages
     "Trong 6 tháng đầu năm 2026, có 4 quý, trung bình 3 năm là 10.",  # durations
+    "Theo Biểu đồ 2 và Bảng 1, doanh thu là 10.",  # TC3 ran out of steps: "2" of "Biểu đồ 2" was rejected each retry
 ])
 def test_honest_non_quantities_are_not_checked(answer):
     # Each of these was rejected: page refs, dates, period labels and counts were read as quantities.
