@@ -377,7 +377,7 @@ def test_durable_storage_keeps_only_chart_reads_whose_check_passed(monkeypatch, 
     persist, save = Mock(), Mock()
     result = flow.answer_document(
         {"messages": []}, {"id": "d", "version_id": "v", "storage_name": "d.pdf", "extraction_name": "d.json"}, "A?", "t", [], {},
-        overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision, complete=lambda *args: json.dumps(next(actions)),
+        overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision, complete=lambda *args, **kwargs: json.dumps(next(actions)),
         load_extraction=lambda name: {"pages": [{"page": 1, "text": "Doanh thu theo vùng"}], "evidence_batch": {"evidences": []}, "chart_regions": [region]},
         resolve_pdf=lambda name: Path(name), save=save, persist_chart=persist,
     )
@@ -486,7 +486,7 @@ def test_an_answer_whose_inputs_changed_while_it_ran_is_stored_as_needing_update
     session = {"messages": []}
     answer = json.dumps({"action": "answer", "answer": "100", "evidence_keys": ["a"]})
 
-    def complete(system, user):
+    def complete(system, user, timeout=None):
         # What a re-run or an edit does to the document while the AI is still answering.
         if change == "reextract":
             document.setdefault("extraction_history", []).append({"status": "ready"})
@@ -552,7 +552,7 @@ def test_a_long_document_sends_the_relevant_and_named_pages_and_lists_the_rest()
     extraction = _long_document()
     sent = []
 
-    def complete(system, user):
+    def complete(system, user, timeout=None):
         sent.append(json.loads(user))
         return json.dumps({"action": "answer", "answer": "Lợi nhuận gộp mảng thép là 77 tỷ đồng.",
                            "sources": [{"page": 42, "quote": "Lợi nhuận gộp mảng thép xây dựng đạt 77 tỷ đồng."}]})
@@ -582,3 +582,33 @@ def test_history_is_dropped_oldest_first_and_a_short_document_is_sent_whole():
     fitted = fit_context(context, "q", budget=2_700)
     assert [t["text"][:6] for t in fitted["history"]] == ["turn 6", "turn 7"] and fitted["pages"] == context["pages"]
     assert "omitted_pages" not in fitted
+
+
+def test_every_model_call_of_an_answer_shares_one_time_budget(monkeypatch):
+    from report_qa.api.ai_provider import ProviderError
+    from report_qa.application import document_assistant
+
+    clock = [100.0]
+    monkeypatch.setattr(document_assistant.time, "monotonic", lambda: clock[0])
+    timeouts = []
+
+    def complete(system, user, timeout):
+        timeouts.append(timeout)
+        clock[0] += 25  # each model step takes 25 s
+        return json.dumps({"action": "python", "code": "result = value('a')"})
+
+    with pytest.raises(ProviderError) as error:
+        run_assistant("Q1?", context(), complete=document_assistant.with_time_budget(complete, 60), read_chart=Mock())
+    assert error.value.code == "AI_ANSWER_TIMEOUT"
+    assert timeouts == [60, 35, 10]
+
+
+def test_an_answer_past_its_budget_fails_with_a_vietnamese_message(monkeypatch):
+    from report_qa.api import main
+    from report_qa.api.ai_provider import ProviderError
+
+    monkeypatch.setenv("REPORT_QA_ANSWER_TIMEOUT_SECONDS", "0")
+    with pytest.raises(ProviderError) as error:
+        _tools_answer([_row("a", "valid", "table")], {"action": "answer", "answer": "100", "evidence_keys": ["a"]})
+    assert error.value.code == "AI_ANSWER_TIMEOUT"
+    assert main.ai_failure("AI_ANSWER_TIMEOUT", "x", "t").detail["message"].startswith("Trợ lý chưa trả lời xong")

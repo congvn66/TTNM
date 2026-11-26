@@ -9,7 +9,9 @@ page it cites before an answer is accepted.
 from __future__ import annotations
 
 import json
+import os
 import re
+import time
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from report_qa.api.ai_provider import MAX_ANSWER_CHARS, ProviderError, _json_from_content
@@ -59,6 +61,34 @@ Không tự tạo key, số trang hoặc giá trị không có trong context/too
 Mọi số viết trong answer phải có trong result python, dòng data nêu ở evidence_keys, quote trong
 sources hoặc câu hỏi; số không truy được nguồn sẽ bị trả lại kèm danh sách.
 """
+
+
+def answer_timeout_seconds() -> float:
+    """Total time one tools answer may take, every model call and tool included."""
+    return float(os.getenv("REPORT_QA_ANSWER_TIMEOUT_SECONDS", "60"))
+
+
+def with_time_budget(complete, seconds: float):
+    """complete(system, user) for one answer: each provider call gets the time left as its timeout.
+
+    Once the budget is used up, the call fails with AI_ANSWER_TIMEOUT instead
+    of reaching the provider, and a provider failure that ends past the
+    deadline is reported as AI_ANSWER_TIMEOUT too, since the budget cut it.
+    """
+    deadline = time.monotonic() + seconds
+
+    def timed(system, user):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ProviderError("AI_ANSWER_TIMEOUT", f"Answer exceeded its {seconds:g}s time budget")
+        try:
+            return complete(system, user, timeout=remaining)
+        except ProviderError as exc:
+            if time.monotonic() >= deadline:
+                raise ProviderError("AI_ANSWER_TIMEOUT", f"Answer exceeded its {seconds:g}s time budget") from exc
+            raise
+
+    return timed
 
 
 class AssistantError(RuntimeError):

@@ -675,7 +675,7 @@ class _FakePlanner:
     def __init__(self, reply):
         self.reply, self.calls = reply, []
 
-    def complete(self, system, user):
+    def complete(self, system, user, timeout=None):
         self.calls.append(user)
         if isinstance(self.reply, Exception):
             raise self.reply

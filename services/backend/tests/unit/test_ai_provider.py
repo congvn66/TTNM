@@ -269,3 +269,21 @@ def test_a_delivered_non_json_body_is_invalid_output_and_not_retried(monkeypatch
     else:
         raise AssertionError("expected ProviderError")
     assert len(calls) == 1
+
+
+def test_a_call_gets_the_time_left_as_its_timeout_and_none_once_it_is_used_up(monkeypatch):
+    ai_provider, client = _gemini_client(monkeypatch, REPORT_QA_AI_TIMEOUT_SECONDS="20")
+    timeouts = []
+    _capture_request(monkeypatch, ai_provider)
+    capture = ai_provider.urlopen
+    monkeypatch.setattr(ai_provider, "urlopen", lambda request, timeout: (timeouts.append(timeout), capture(request, timeout))[1])
+
+    client.complete("system", "user", timeout=3)
+    client.complete("system", "user")
+    try:
+        client.complete("system", "user", timeout=0)
+    except ai_provider.ProviderError as exc:
+        assert exc.code == "AI_PROVIDER_TIMEOUT"
+    else:
+        raise AssertionError("expected ProviderError")
+    assert timeouts[0] <= 3 and timeouts[1] == 20 and len(timeouts) == 2

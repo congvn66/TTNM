@@ -14,7 +14,13 @@ from report_qa.api.session_storage import (
     utc_now,
 )
 from report_qa.application.chart_tool import read_chart_region
-from report_qa.application.document_assistant import data_rows, evidence_label, run_assistant
+from report_qa.application.document_assistant import (
+    answer_timeout_seconds,
+    data_rows,
+    evidence_label,
+    run_assistant,
+    with_time_budget,
+)
 from report_qa.application.extraction_contract import validate_extraction_batch
 from report_qa.application.text_evidence import quote_bbox
 from report_qa.application.text_safety import storable
@@ -245,7 +251,8 @@ def answer_document(
     client = planner_client() if complete is None else None
     if complete is None and client is None:
         raise ProviderError("AI_NOT_CONFIGURED", "Document assistant requires an AI provider")
-    complete = complete or client.complete
+    # One time budget covers every model call of this answer, chart checks included.
+    complete = with_time_budget(complete or client.complete, answer_timeout_seconds())
     extraction = load_extraction(document["extraction_name"])
     unstored_keys = set()
     current = overlay(document, with_chart_batches(document, extraction))

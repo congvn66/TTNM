@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -500,7 +501,9 @@ class PlannerChatClient:
         if not self.api_key:
             raise ProviderError("AI_NOT_CONFIGURED", f"{key_name} is not configured")
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, timeout: float | None = None) -> str:
+        """One chat completion; a timeout bounds the whole call, retries and their waits included."""
+        deadline = time.monotonic() + timeout if timeout is not None else math.inf
         body = {"model": self.model, "temperature": 0, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
         if self.mode == "gemini":
             # Planner and document assistant both expect one JSON object; keep
@@ -513,8 +516,11 @@ class PlannerChatClient:
             headers.update({"HTTP-Referer": "http://127.0.0.1:4173", "X-Title": "SourceLens"})
         request = Request(f"{self.base_url}/chat/completions", data=json.dumps(body, ensure_ascii=False).encode("utf-8"), method="POST", headers=headers)
         for attempt in range(self.max_retries + 1):
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise ProviderError("AI_PROVIDER_TIMEOUT", f"{self.mode} planner request ran out of time")
             try:
-                with urlopen(request, timeout=self.timeout_seconds) as response:
+                with urlopen(request, timeout=min(self.timeout_seconds, left)) as response:
                     raw = response.read()
                 break
             except HTTPError as exc:
@@ -523,7 +529,7 @@ class PlannerChatClient:
                     code = "AI_PROVIDER_UNAVAILABLE" if retryable else ("AI_MODEL_UNAVAILABLE" if exc.code == 404 else "AI_PROVIDER_HTTP_ERROR")
                     logger.warning("%s planner request failed (HTTP %s): %s", self.mode, exc.code, _provider_error_message(exc, self.api_key) or "no error text")
                     raise ProviderError(code, f"{self.mode} planner request failed (HTTP {exc.code})", exc.code) from exc
-                time.sleep(min(8.0, 2.0 * (attempt + 1)))
+                time.sleep(max(0.0, min(8.0, 2.0 * (attempt + 1), deadline - time.monotonic())))
             except (URLError, TimeoutError, OSError) as exc:
                 if attempt >= self.max_retries:
                     raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"{self.mode} planner is unreachable") from exc

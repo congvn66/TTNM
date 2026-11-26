@@ -103,6 +103,7 @@ AI_ERROR_MESSAGES = {
     "AI_UNSUPPORTED_EVIDENCE": "AI chưa xác minh được evidence trong tài liệu. Hãy thử lại câu hỏi.",
     "DOCUMENT_CONTEXT_TOO_LARGE": "Tài liệu quá dài để trợ lý đọc hết trong một lần hỏi.",
     "ASSISTANT_INCOMPLETE": "Trợ lý chưa hoàn tất câu trả lời trong số bước cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",
+    "AI_ANSWER_TIMEOUT": "Trợ lý chưa trả lời xong trong thời gian cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",
 }
 
 
