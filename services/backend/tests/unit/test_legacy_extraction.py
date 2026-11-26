@@ -256,3 +256,30 @@ def test_unreadable_glyph_codes_are_read_with_pymupdf(tmp_path, monkeypatch):
 
 def test_a_few_icon_characters_do_not_switch_the_reader():
     assert _private_use_share(" Doanh thu quý 2 tăng mạnh so với cùng kỳ") < 0.05
+
+
+def test_damaged_catalog_is_set_aside_not_overwritten(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(session_storage, "RUNTIME_ROOT", tmp_path)
+    monkeypatch.setattr(session_storage, "CATALOG_FILE", tmp_path / "sessions.json")
+    damaged = '{"sessions": {"a": {"id": "a"'
+    (tmp_path / "sessions.json").write_text(damaged, encoding="utf-8")
+
+    assert session_storage.load_catalog() == {"sessions": {}}
+    session_storage.save_catalog({"sessions": {}})
+
+    [kept] = tmp_path.glob("sessions.json.corrupt-*")
+    assert kept.read_text(encoding="utf-8") == damaged
+    assert "not valid" in caplog.text
+
+
+def test_catalog_save_syncs_before_replacing(tmp_path, monkeypatch):
+    monkeypatch.setattr(session_storage, "RUNTIME_ROOT", tmp_path)
+    monkeypatch.setattr(session_storage, "CATALOG_FILE", tmp_path / "sessions.json")
+    calls = []
+    real_fsync, real_replace = session_storage.os.fsync, session_storage.os.replace
+    monkeypatch.setattr(session_storage.os, "fsync", lambda fd: (calls.append("fsync"), real_fsync(fd))[1])
+    monkeypatch.setattr(session_storage.os, "replace", lambda a, b: (calls.append("replace"), real_replace(a, b))[1])
+
+    session_storage.save_catalog({"sessions": {}})
+
+    assert calls == ["fsync", "replace"]
