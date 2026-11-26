@@ -1460,3 +1460,30 @@ def test_upload_body_the_multipart_parser_refuses_gets_the_upload_error_shape() 
         assert client.get("/api/v1/no-such-route").json() == {"detail": {"code": "NOT_FOUND", "message": api_main.MESSAGES["NOT_FOUND"]}}
     finally:
         cleanup_session(created["id"])
+
+
+def test_a_reading_is_parsed_once_and_requests_leave_the_shared_copy_unchanged(monkeypatch) -> None:
+    from report_qa.api import document_assistant_flow
+    from report_qa.api.object_storage_runtime import read_extraction
+
+    created = client.post("/api/v1/sessions", json={"title": "Parsed once"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        name = api_main.catalog["sessions"][created["id"]]["documents"][0]["extraction_name"]
+        assert read_extraction(name) is read_extraction(name)
+        on_disk = json.loads(api_main.extraction_path(name).read_text(encoding="utf-8"))
+
+        row = client.get(f"{base}/evidences").json()["evidences"][0]
+        edited = client.post(f"{base}/evidences/{row['evidence_key']}/revisions",
+                             json={"numeric_value": "130", "reason": "Đối chiếu PDF", "expected_revision_id": row["current_revision_id"]})
+        assert edited.status_code == 200, edited.text
+        monkeypatch.setenv("REPORT_QA_ASSISTANT_MODE", "tools")
+        monkeypatch.setattr(document_assistant_flow, "planner_client", lambda: _FakePlanner(
+            {"action": "answer", "answer": "Doanh thu là 130.", "evidence_keys": [row["evidence_key"]]}))
+        answer = client.post(f"/api/v1/sessions/{created['id']}/messages", json={"document_id": document_id, "question": "Doanh thu?"})
+        assert answer.status_code == 200, answer.text
+        assert client.get(f"{base}/evidences").json()["evidences"][0]["current_numeric_value"] == "130"
+        assert read_extraction(name) == on_disk
+    finally:
+        cleanup_session(created["id"])

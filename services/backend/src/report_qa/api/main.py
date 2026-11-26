@@ -70,9 +70,9 @@ from .session_storage import (
 from .number_state import ReadingNotCurrent, apply_event, edit_event, replay, run_id_of
 from .object_storage_runtime import (
     ObjectStorageError,
-    cache_extraction,
     cache_pdf,
     pdf_storage_key,
+    read_extraction,
     persist_extraction_cache,
     persist_pdf_cache,
     storage_health,
@@ -288,7 +288,7 @@ chart_reader = DeplotChartReader() if os.getenv("CHART_READER_BACKEND", "deplot"
 
 def _load_extraction_for_persistence(document: dict[str, Any]) -> dict[str, Any] | None:
     try:
-        return json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
+        return read_extraction(document["extraction_name"])
     except (KeyError, OSError, json.JSONDecodeError):
         return None
 
@@ -1302,8 +1302,7 @@ def normalize_search_text(value: str) -> str:
 def relevant_pages(document: dict[str, Any], question: str, limit: int = 3) -> list[tuple[dict[str, Any], int]]:
     if document.get("extraction_status") != "ready":
         raise user_error(409, "EXTRACTION_NOT_READY")
-    artifact_path = cache_extraction(document["extraction_name"])
-    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload = read_extraction(document["extraction_name"])
     if "evidence_batch" not in payload:
         upgraded = extract_pdf_pages(cache_pdf(document["storage_name"]), document["id"], document["id"])
         if upgraded["status"] != "ready":
@@ -1470,7 +1469,7 @@ def _append_exchange(session: dict[str, Any], user_message: dict[str, Any], assi
 
 
 def _load_extraction_artifact(extraction_name: str) -> dict[str, Any]:
-    return json.loads(cache_extraction(extraction_name).read_text(encoding="utf-8"))
+    return read_extraction(extraction_name)
 
 
 def _persist_chart_read(session: dict[str, Any], document: dict[str, Any], result: dict[str, Any], region_key: str) -> None:
@@ -1495,7 +1494,7 @@ def _persist_chart_read(session: dict[str, Any], document: dict[str, Any], resul
 
 def _base_extraction_or_none(document: dict[str, Any]) -> dict[str, Any] | None:
     try:
-        return json.loads(cache_extraction(document["extraction_name"]).read_text(encoding="utf-8"))
+        return read_extraction(document["extraction_name"])
     except (KeyError, OSError, json.JSONDecodeError):
         return None
 

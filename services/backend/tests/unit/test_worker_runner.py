@@ -39,8 +39,7 @@ def _extraction_setup(monkeypatch, *, result, persistence_error=False):
     monkeypatch.setattr(main, "catalog", {"sessions": {sid: {"documents": []}}})
     monkeypatch.setattr(main, "cache_pdf", lambda key: key)
     monkeypatch.setattr(main, "extract_pdf_pages", lambda *args: result)
-    artifact = '{"evidence_batch": {"extraction_run_id": "run-1", "evidences": []}}'
-    monkeypatch.setattr(main, "cache_extraction", lambda key: SimpleNamespace(read_text=lambda **kwargs: artifact))
+    monkeypatch.setattr(main, "read_extraction", lambda key: {"evidence_batch": {"extraction_run_id": "run-1", "evidences": []}})
     monkeypatch.setattr(main, "ensure_document_evidence_state", lambda *args: None)
     def save(*args):
         writes.append(document["extraction_status"])
