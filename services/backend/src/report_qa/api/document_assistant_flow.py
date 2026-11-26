@@ -1,6 +1,7 @@
 """Persist document-aware assistant answers using the local session runtime."""
 
 import json
+import re
 from uuid import uuid4
 
 from report_qa.api.ai_provider import MAX_ANSWER_CHARS, ProviderError, planner_client
@@ -54,6 +55,22 @@ def _quote_citation(pdf_path, source):
     except (ImportError, OSError, RuntimeError, ValueError):
         bbox = None  # the viewer still highlights by matching the quote text
     return {"kind": "text", "page": source["page"], "bbox": bbox, "quote": source["quote"], "match": source["match"]}
+
+
+_NUMERAL = re.compile(r"\d+(?:[.,]\d+)*")
+
+
+def quoted_rows(sources, evidences):
+    """Data rows a quote states: same page, and every number of the row's raw PDF text is a number of the quote."""
+    rows = []
+    for source in sources:
+        quoted = set(_NUMERAL.findall(source["quote"]))
+        rows += [
+            e for e in evidences
+            if e["page_number"] == source["page"] and (numerals := _NUMERAL.findall(e.get("raw_text") or ""))
+            and quoted.issuperset(numerals)
+        ]
+    return rows
 
 
 def _display(value):
@@ -270,7 +287,7 @@ def answer_document(
                 "page_number": e["page_number"],
                 "bbox": e["bbox"],
             }
-            for e in used
+            for e in {e["evidence_key"]: e for e in used + quoted_rows(result["sources"], context["evidences"])}.values()
         ],
         "tool_calculations": result["calculations"],
         "tool_results": result["tool_results"],

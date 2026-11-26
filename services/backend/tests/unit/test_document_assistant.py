@@ -513,3 +513,25 @@ def test_a_python_number_without_a_data_source_does_not_trace_the_answer():
     assert result["answer"] == "Q2 là 130."
     assert result["calculations"][0]["result"]["manual_numbers"] == ["999"]
     assert json.loads(complete.call_args.args[1])["tool_results"][1]["untraced_numbers"] == ["999"]
+
+
+def test_rows_stated_by_an_accepted_quote_become_answer_inputs_so_an_edit_flags_the_answer():
+    from report_qa.api import document_assistant_flow as flow
+    from report_qa.api.main import extraction_with_evidence_revisions, mark_answers_needing_update, snapshot_answer_revision
+
+    page = "Doanh thu quý 2 đạt 130 tỷ đồng. Chi phí là 1.130 tỷ đồng."
+    rows = [{**_row("rev", "valid", "table"), "raw_text": "130"}, {**_row("cost", "valid", "table"), "raw_text": "1.130"},
+            {**_row("other", "valid", "table"), "raw_text": "130", "page_number": 2}]
+    extraction = {"pages": [{"page": 1, "text": page}, {"page": 2, "text": "x"}], "evidence_batch": {"evidences": rows}, "chart_regions": []}
+    document = {"id": "doc", "extraction_name": "x", "storage_name": "x"}
+    session = {"messages": []}
+    answer = {"action": "answer", "answer": "Doanh thu quý 2 là 130 tỷ đồng.",
+              "sources": [{"page": 1, "quote": "Doanh thu quý 2 đạt 130 tỷ đồng."}]}
+    message = flow.answer_document(
+        session, document, "Doanh thu quý 2?", "trace", [], {"sessions": {}},
+        overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision, complete=sequence(answer),
+        load_extraction=lambda name: extraction, resolve_pdf=lambda name: name, save=lambda catalog: None,
+    )["assistant_message"]
+    assert [i["evidence_key"] for i in message["answer_inputs"]] == ["rev"]
+    revision = message["answer_inputs"][0]["evidence_revision_id"]
+    assert mark_answers_needing_update(session, "doc", "rev", revision) == [message["id"]]
