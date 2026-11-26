@@ -64,14 +64,50 @@ def test_text_numbers_get_readable_labels():
     assert evidence_label({"evidence_key": "k", "semantic": {"measure": "unknown"}}) == "k"
 
 
-def test_text_answer_can_cite_pages_but_not_invented_ones():
+def test_pages_are_checked_but_are_not_a_citation_on_their_own():
     complete = sequence(
         {"action": "answer", "answer": "Chưa gồm thuế.", "pages": [9]},
         {"action": "answer", "answer": "Chưa gồm thuế.", "pages": [1]},
+        {"action": "answer", "answer": "Chưa gồm thuế.", "pages": [1],
+         "sources": [{"page": 1, "quote": "Revenue excludes tax."}]},
     )
     result = run_assistant("Thuế?", context(), complete=complete, read_chart=Mock())
-    assert result["pages"] == [1]
-    assert "pages must be" in json.loads(complete.call_args.args[1])["tool_results"][0]["error"]
+    assert result["pages"] == [1] and result["sources"][0]["quote"] == "Revenue excludes tax."
+    errors = [t["error"] for t in json.loads(complete.call_args.args[1])["tool_results"]]
+    assert "pages must be" in errors[0] and "pages alone are not a citation" in errors[1]
+
+
+def test_a_number_no_source_contains_is_sent_back_with_the_list():
+    # The data says 100; the answer used to be accepted with any number in it.
+    complete = sequence(
+        {"action": "answer", "answer": "Doanh thu Q1 là 9.999 tỷ, gấp 3 lần.", "evidence_keys": ["a"]},
+        {"action": "answer", "answer": "Doanh thu Q1 là 100 tỷ.", "evidence_keys": ["a"]},
+    )
+    result = run_assistant("Doanh thu Q1?", context(), complete=complete, read_chart=Mock())
+    assert result["answer"] == "Doanh thu Q1 là 100 tỷ."
+    rejected = json.loads(complete.call_args.args[1])["tool_results"][0]
+    assert rejected["untraced_numbers"] == ["9.999 tỷ", "3"]
+
+
+@pytest.mark.parametrize("answer", [
+    "Tăng trưởng 17,05% so với 2025.",  # rounded vi percent of a python fraction, year from the question
+    "Tăng trưởng 17.1%.",  # en separator, one decimal
+    "Q2 là 1.250,5 nghìn đồng, chiếm 30% (trích 'chiếm 30%').",  # value with scale word, quote number
+    "Q2/2026 Miền Bắc đạt 1250500 đồng.",  # label numbers and the raw value
+])
+def test_numbers_traced_to_results_rows_quotes_and_question_are_accepted(answer):
+    from report_qa.application.document_assistant import untraced_numbers
+
+    row = {"evidence_key": "k", "numeric_value": "1250500", "raw_text": "1.250.500",
+           "table_locator": {"row_header": "Miền Bắc", "column_header": "Q2/2026"}}
+    assert untraced_numbers(answer, question="So với 2025 thì sao?", evidences=[row],
+                            quotes=["Miền Nam chiếm 30% doanh thu."], results=[{"growth": "0.170547"}]) == []
+
+
+def test_a_number_from_an_uncited_row_is_not_traced():
+    from report_qa.application.document_assistant import untraced_numbers
+
+    assert untraced_numbers("Q2 là 130.", question="Q2?", evidences=[], quotes=[], results=[]) == ["130"]
 
 
 def test_ungrounded_answer_is_retried_unless_not_found():
