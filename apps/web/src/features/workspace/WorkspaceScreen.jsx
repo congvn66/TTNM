@@ -622,7 +622,8 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const [busy, setBusy] = useState(false);
   const [booting, setBooting] = useState(() => !initialSessionSnapshot?.sessions?.length);
   const [connectionState, setConnectionState] = useState("checking");
-  const [runtimeHealth, setRuntimeHealth] = useState(null);
+  // undefined until the first health answer; null when the server did not answer.
+  const [runtimeHealth, setRuntimeHealth] = useState(undefined);
   const [bootError, setBootError] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState("info");
@@ -1152,7 +1153,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const nextTheme = preference === "light" ? "dark" : preference === "dark" ? "system" : "light";
   const nextThemeLabel = { light: "giao diện sáng", dark: "giao diện tối", system: "giao diện theo hệ thống" }[nextTheme];
   const activeJobCount = activeJobs.filter((job) => ["queued", "running"].includes(job.status)).length;
-  const readinessState = runtimeHealth?.readiness?.status ?? (runtimeHealth ? "checking" : "offline");
+  const readinessState = runtimeHealth === null ? "offline" : runtimeHealth?.readiness?.status ?? "checking";
   const readinessLabel = readinessState === "ready" ? "Sẵn sàng" : readinessState === "degraded" ? "Một số dịch vụ cần kiểm tra" : readinessState === "checking" ? "Đang kiểm tra" : "Kết nối gián đoạn";
   const readinessBlockers = runtimeHealth?.readiness?.blockers?.length ? "Một số dịch vụ chưa sẵn sàng" : "";
 

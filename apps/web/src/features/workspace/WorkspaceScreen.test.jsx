@@ -443,3 +443,16 @@ it("shows the server's own message when the PDF file cannot be loaded", async ()
   expect(requestMock).toHaveBeenCalledWith(doc.file_url, { headers: { Range: "bytes=0-0" } });
   expect(screen.queryByText(/Unexpected server response/)).toBeNull();
 });
+
+it("says the connection is being checked, not lost, until the first health answer", async () => {
+  let answerHealth;
+  const session = { id: "chat", title: "My session", documents: [], messages: [] };
+  requestMock.mockImplementation((path) => path === "/health"
+    ? new Promise((resolve) => { answerHealth = resolve; })
+    : Promise.resolve(path === "/api/v1/sessions" ? { sessions: [session] } : path === "/api/v1/sessions/chat" ? { session } : { jobs: [] }));
+  render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  await screen.findByText("Đang kiểm tra");
+  expect(screen.queryByText("Kết nối gián đoạn")).toBeNull();
+  await act(async () => answerHealth({ readiness: { status: "ready", blockers: [] } }));
+  await screen.findByText("Sẵn sàng");
+});
