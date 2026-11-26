@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { StrictMode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 const { requestMock } = vi.hoisted(() => ({ requestMock: vi.fn() }));
 vi.mock("../../shared/api/client.js", async (importActual) => ({ ...await importActual(), API: "http://localhost:8000", request: requestMock }));
 const { pdfFailure } = vi.hoisted(() => ({ pdfFailure: { current: null } }));
@@ -455,4 +455,20 @@ it("says the connection is being checked, not lost, until the first health answe
   expect(screen.queryByText("Kết nối gián đoạn")).toBeNull();
   await act(async () => answerHealth({ readiness: { status: "ready", blockers: [] } }));
   await screen.findByText("Sẵn sàng");
+});
+
+it("offers a clarifying question's answers and asks the chosen one next", async () => {
+  const doc = { id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: "ready" };
+  const session = { id: "chat", title: "My session", documents: [doc], messages: [
+    { id: "q1", role: "user", document_id: "doc", body: "Doanh thu?" },
+    { id: "a1", role: "assistant", document_id: "doc", reply_to_message_id: "q1", body: "Bạn muốn hỏi về năm nào?", structured_answer: { presentation: "document_assistant", answer: "Bạn muốn hỏi về năm nào?", options: ["2023", "2024"], evidence: [] } },
+  ] };
+  requestMock.mockImplementation(async (path, options) => {
+    if (path === "/api/v1/sessions/chat/messages") return { user_message: { id: "q2", role: "user", document_id: "doc", body: JSON.parse(options.body).question }, assistant_message: { id: "a2", role: "assistant", document_id: "doc", reply_to_message_id: "q2", body: "Năm 2024" } };
+    return path === "/api/v1/sessions" ? { sessions: [{ ...session, messages: [] }] } : path === "/api/v1/sessions/chat" ? { session } : { jobs: [] };
+  });
+  render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  const group = await screen.findByRole("group", { name: "Chọn một câu trả lời" });
+  fireEvent.click(within(group).getByRole("button", { name: "2024" }));
+  await waitFor(() => expect(requestMock).toHaveBeenCalledWith("/api/v1/sessions/chat/messages", expect.objectContaining({ body: JSON.stringify({ document_id: "doc", question: "2024" }) })));
 });

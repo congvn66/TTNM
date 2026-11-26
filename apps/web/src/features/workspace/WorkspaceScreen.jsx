@@ -246,7 +246,7 @@ function RetrievalExcerpt({ answer }) {
   </section>;
 }
 
-function StructuredAnswer({ answer, fallback, onCitation, evidenceByKey }) {
+function StructuredAnswer({ answer, fallback, onCitation, evidenceByKey, busy, onAsk }) {
   if (answer?.pending) return <div className="typing-indicator" aria-live="polite"><span className="typing-dots"><i></i><i></i><i></i></span><span>Đang tạo câu trả lời</span></div>;
   if (!answer && typeof fallback === "string" && fallback.startsWith("Không thể tạo câu trả lời:")) return <div className="answer-failure" role="alert"><Icon name="refresh" size={14} /><span>{fallback}</span></div>;
   if (!answer) return <p>{fallback}</p>;
@@ -257,8 +257,11 @@ function StructuredAnswer({ answer, fallback, onCitation, evidenceByKey }) {
     {answer.warnings?.filter(Boolean).length > 0 && <div className="answer-status-note"><Icon name="trace" size={13} /><span>{answer.warnings.filter(Boolean)[0]}</span></div>}
   </div>;
   const warnings = answer.warnings?.filter(Boolean) ?? [];
+  // A clarifying question offers answers; choosing one asks it as the next question.
+  const options = (answer.options ?? []).filter((option) => typeof option === "string" && option.trim());
   return <div className="structured-answer">
     <AnswerText text={answer.answer} />
+    {options.length > 0 && onAsk && <div className="answer-options" role="group" aria-label="Chọn một câu trả lời">{options.map((option) => <button type="button" key={option} disabled={busy} onClick={() => onAsk(option)}>{option}</button>)}</div>}
     {answer.evidence?.length > 0 && <EvidenceList items={answer.evidence} evidenceByKey={evidenceByKey} onCitation={onCitation} />}
     {answer.summary && <p className="answer-summary">{answer.summary}</p>}
     {answer.claims?.length > 0 && <section className="answer-section answer-claims"><h4>Nhận định và căn cứ</h4>{answer.claims.map((claim, index) => <div className="claim-card" key={`${claim.claim}-${index}`}>
@@ -273,7 +276,7 @@ function StructuredAnswer({ answer, fallback, onCitation, evidenceByKey }) {
   </div>;
 }
 
-function ChatMessage({ message, busy, evidenceByKey, onCitation, onStop, onRetry, onEditQuestion, onCopy }) {
+function ChatMessage({ message, busy, evidenceByKey, onCitation, onStop, onRetry, onEditQuestion, onCopy, onAsk }) {
   const isUser = message.role === "user";
   const failed = message.failed || message.status === "failed";
   const processing = !isUser && message.status === "processing";
@@ -284,7 +287,7 @@ function ChatMessage({ message, busy, evidenceByKey, onCitation, onStop, onRetry
       <small>{isUser ? "Bạn" : "Trợ lý SourceLens"}</small>
       {!isUser && message.failed
         ? <div className="answer-failure" role="alert"><Icon name="refresh" size={14} /><span>{message.body}</span></div>
-        : <StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} evidenceByKey={evidenceByKey} onCitation={onCitation} />}
+        : <StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} evidenceByKey={evidenceByKey} onCitation={onCitation} busy={busy} onAsk={onAsk} />}
       {processing && <button className="retry-answer-button" type="button" onClick={() => onStop(message)}>Dừng trả lời</button>}
       {failed && !isUser && <button className="retry-answer-button" type="button" onClick={() => onRetry(message)} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}
       {isUser && !message.pending && <button className="message-icon-button" type="button" aria-label="Sửa câu hỏi" title="Sửa câu hỏi" onClick={() => onEditQuestion(message.body)}><Icon name="edit" size={14} /></button>}
@@ -1206,7 +1209,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
         <div className="chat-body" ref={chatBodyRef}>
           <p className="visually-hidden" aria-live="polite">{chatAnnouncement}</p>
           {!messages.length && <div className="welcome"><div className="welcome-mark"><Icon name="spark" size={18} /></div><h3>Bắt đầu với tài liệu của bạn</h3><p>Đặt câu hỏi để nhận câu trả lời có dẫn nguồn, trích dẫn theo trang và cấu trúc rõ ràng.</p>{activeDocument?.extraction_status === "ready" && <button onClick={() => setQuery("Tóm tắt nội dung chính của tài liệu")}>Tóm tắt tài liệu</button>}</div>}
-          {messages.map((message) => <ChatMessage key={message.id} message={message} busy={busy} evidenceByKey={evidenceByKey} onCitation={openCitation} onStop={stopAnswer} onRetry={retryAnswer} onEditQuestion={(text) => { setQuery(text); document.getElementById("chat-question")?.focus(); }} onCopy={async (text) => { try { await navigator.clipboard.writeText(text); showNotice("Đã sao chép."); } catch { showNotice("Không thể sao chép.", "error"); } }} />)}
+          {messages.map((message) => <ChatMessage key={message.id} message={message} busy={busy} evidenceByKey={evidenceByKey} onCitation={openCitation} onStop={stopAnswer} onRetry={retryAnswer} onAsk={submitQuestion} onEditQuestion={(text) => { setQuery(text); document.getElementById("chat-question")?.focus(); }} onCopy={async (text) => { try { await navigator.clipboard.writeText(text); showNotice("Đã sao chép."); } catch { showNotice("Không thể sao chép.", "error"); } }} />)}
         </div>
         <form className="chat-composer" onSubmit={ask}><textarea id="chat-question" aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Thêm tài liệu để bắt đầu" : activeDocument.extraction_status === "ready" ? "Đặt câu hỏi về tài liệu…" : activeDocument.extraction_status === "failed" ? canReextract ? "Chưa thể đọc tài liệu, bấm Trích xuất lại" : "Chưa thể đọc tài liệu — mở Trung tâm tác vụ để thử lại" : "Đặt câu hỏi — trợ lý sẽ trả lời khi tài liệu sẵn sàng…"} disabled={!activeDocument || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Trợ lý sẵn sàng" : activeDocument?.extraction_status === "failed" ? "Tài liệu chưa đọc được" : activeDocument?.extraction_status === "queued" || activeDocument?.extraction_status === "processing" ? "Câu hỏi sẽ được xử lý sau khi đọc tài liệu" : "Chưa sẵn sàng"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status === "failed" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form>
         <EvidenceDrawer data={evidenceOpen ? activeEvidence : null} basePath={evidencePath} onClose={closeEvidence} onReload={() => loadEvidence().catch(() => {})} onSaved={evidenceSaved} onFocus={(evidence) => openCitation(evidence.page_number, "", evidence.bbox)} />
