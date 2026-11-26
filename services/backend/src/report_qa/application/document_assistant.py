@@ -320,7 +320,7 @@ def untraced_numbers(answer: str, *, evidences: list[dict], quotes: list[dict], 
 
 
 def result_rows(rows: list[dict], by_key: dict) -> list[dict]:
-    """Script result rows as people read them: label, value and the Data keys behind it.
+    """Script result rows as people read them: label, the script's name, value and the Data keys behind it.
 
     A value that is exactly one Data row's value takes that row's label;
     any other value keeps the name the script gave it.
@@ -333,7 +333,8 @@ def result_rows(rows: list[dict], by_key: dict) -> list[dict]:
             same = source is not None and Decimal(str(row["value"])) == Decimal(str(source.get("numeric_value")))
         except InvalidOperation:
             same = False
-        labelled.append({"label": evidence_label(source) if same else row["name"], "value": row["value"], "source_keys": keys})
+        labelled.append({"label": evidence_label(source) if same else row["name"], "name": row["name"],
+                         "value": row["value"], "source_keys": keys})
     return labelled
 
 
@@ -416,7 +417,9 @@ class _Turn:
             result["result_rows"] = result_rows(result["result_rows"], self.evidence_by_key())
         record = {"tool": "python", "code": code, "explanation": str(action.get("explanation") or ""), "result": result}
         self.tools.append(record)
-        self.calculations.append(record)
+        # The model sometimes runs the same script twice; the answer shows one calculation.
+        if not any(c["code"] == code and c["result"] == result for c in self.calculations):
+            self.calculations.append(record)
         self.trace.append({"stage": "calculation", "status": result["status"],
                            "used_evidence_keys": result.get("used_evidence_keys", []),
                            **({"error": result["error"]} if result.get("error") else {})})

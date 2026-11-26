@@ -813,6 +813,13 @@ def test_formula_result_rows_take_the_data_label_of_a_value_read_unchanged():
     answer = _tools_answer(rows, {"action": "python", "code": "result = {'dt_bac_q2': value('b'), 'total': value('a') + value('b')}"},
                            {"action": "answer", "answer": "Quý 2 là 21.350, tổng 39.590.", "evidence_keys": ["a", "b"]})
     assert answer["formulas"][0]["result_rows"] == [
-        {"label": "Miền Bắc · Quý 2/2026", "value": "21350", "source_keys": ["b"]},
-        {"label": "total", "value": "39590", "source_keys": ["a", "b"]},
+        {"label": "Miền Bắc · Quý 2/2026", "name": "dt_bac_q2", "value": "21350", "source_keys": ["b"]},
+        {"label": "total", "name": "total", "value": "39590", "source_keys": ["a", "b"]},
     ]
+
+
+def test_the_same_script_run_twice_is_one_calculation():
+    rows = [{**_row("a", "valid", "table"), "numeric_value": "18240", "raw_text": "18.240"}]
+    script = {"action": "python", "code": "result = value('a') + value('a')"}
+    answer = _tools_answer(rows, script, script, {"action": "answer", "answer": "Gấp đôi là 36.480.", "evidence_keys": ["a"]})
+    assert len(answer["formulas"]) == 1

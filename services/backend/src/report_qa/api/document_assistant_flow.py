@@ -164,7 +164,7 @@ def _formula(record, by_key):
         "expression": record["code"],
         "substitution": record["explanation"],
         "result": _display(result["result"]),
-        # [{label, value, source_keys}]: label is the Data row's label when the value is that row's value.
+        # [{label, name, value, source_keys}]: label is the Data row's label when the value is that row's value, else name.
         "result_rows": result.get("result_rows") or [],
         "unit": None,
         "stdout": result.get("stdout") or "",
