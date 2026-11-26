@@ -361,6 +361,38 @@ def test_client_worker_header_does_not_skip_storing_the_answer() -> None:
         cleanup_session(created["id"])
 
 
+def test_parallel_requests_with_one_idempotency_key_answer_once(monkeypatch) -> None:
+    import threading
+    import time
+
+    real_plan = api_main.plan_question
+
+    def slow_plan(*args, **kwargs):
+        time.sleep(0.3)
+        return real_plan(*args, **kwargs)
+
+    monkeypatch.setattr(api_main, "plan_question", slow_plan)
+    created = client.post("/api/v1/sessions", json={"title": "Parallel idempotency"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        payload = {"document_id": document_id, "question": "What was revenue in Q1/2026?"}
+        responses = []
+
+        def ask():
+            responses.append(client.post(f"/api/v1/sessions/{created['id']}/messages", json=payload, headers={"Idempotency-Key": "parallel-key"}))
+
+        threads = [threading.Thread(target=ask) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert [item.status_code for item in responses] == [200] * 4
+        assert len({item.json()["assistant_message"]["id"] for item in responses}) == 1
+        assert len(client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["messages"]) == 2
+    finally:
+        cleanup_session(created["id"])
+
+
 def test_unmatched_question_is_rejected_instead_of_sent_to_ai() -> None:
     created = client.post("/api/v1/sessions", json={"title": "Retrieval guard"}).json()["session"]
     try:

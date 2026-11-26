@@ -1316,6 +1316,30 @@ def _persist_unsupported(session, session_id, document, question, question_plan,
     responses={**OPENAPI_COMMON_ERRORS, 502: {"description": "AI provider timeout/network/invalid structured output."}},
 )
 def ask_session_document(session_id: str, payload: SessionQuestionRequest, request: Request, response: Response) -> dict[str, Any]:
+    idempotency_key = request.headers.get("Idempotency-Key")
+    if not idempotency_key:
+        return _ask_session_document(session_id, payload, request, response)
+    # Same-key requests run one at a time: a duplicate waits for the first
+    # and then gets its stored response instead of answering again.
+    slot = (session_id, idempotency_key)
+    while True:
+        with catalog_lock:
+            running = _idempotency_in_flight.get(slot)
+            if running is None:
+                _idempotency_in_flight[slot] = threading.Event()
+                break
+        running.wait()
+    try:
+        return _ask_session_document(session_id, payload, request, response)
+    finally:
+        with catalog_lock:
+            _idempotency_in_flight.pop(slot).set()
+
+
+_idempotency_in_flight: dict[tuple[str, str], threading.Event] = {}
+
+
+def _ask_session_document(session_id: str, payload: SessionQuestionRequest, request: Request, response: Response) -> dict[str, Any]:
     session = get_session(session_id, owner_id_for_request(request))
     # A durable worker reuses this pipeline as a computation.  Isolate its
     # working snapshot so temporary messages and intermediate saves cannot
