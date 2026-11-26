@@ -26,6 +26,12 @@
   --font-ui: "Plus Jakarta Sans Variable", "Google Sans Text", "Google Sans", "Inter", "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --font-sans: var(--font-body);
+  /* Type scale. Every font size up to 17px comes from here, so nothing a
+     person reads is smaller than --text-xs. */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
 }
 
 [data-theme="dark"] {

@@ -95,6 +95,6 @@ code, pre, kbd, samp,
 [data-theme="dark"] .session-button:hover,
 [data-theme="dark"] .document-list > button:hover { background: rgba(51, 65, 85, .58); }
 
-.theme-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; border: 1px solid var(--border); border-radius: 999px; padding: 0 10px; background: var(--surface); color: var(--ink-soft); font-size: 10px; font-weight: 700; cursor: pointer; }
+.theme-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; border: 1px solid var(--border); border-radius: 999px; padding: 0 10px; background: var(--surface); color: var(--ink-soft); font-size: var(--text-sm); font-weight: 700; cursor: pointer; }
 .theme-toggle:hover { border-color: var(--color-cta); color: var(--color-cta); }
 .theme-toggle span { text-transform: capitalize; }
