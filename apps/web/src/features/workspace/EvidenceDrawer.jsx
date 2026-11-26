@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { request } from "../../shared/api/client.js";
 import { Icon } from "./Icon.jsx";
-import { dataStatusLabel, evidenceLabel, needsCheck, formatDateTime, formatNumber, numbersDiffer } from "./format.js";
+import { dataStatusLabel, differsFromReading, evidenceLabel, formatDateTime, formatNumber, needsCheck } from "./format.js";
 
 const REASON_MIN_LENGTH = 3;
 // The server's own limits; longer text could only be refused.
@@ -26,7 +26,7 @@ function separatorNote(preview) {
 }
 
 function isEdited(evidence) {
-  return numbersDiffer(evidence.current_numeric_value, evidence.original_numeric_value);
+  return differsFromReading(evidence.current_numeric_value, evidence.original_numeric_value);
 }
 
 // The value is always a number in Vietnamese style. A row without one shows
@@ -41,7 +41,7 @@ function RevisionHistory({ history }) {
   return <ol className="evidence-history">
     {history.revisions.map((revision) => <li key={revision.id}>
       {revision.action === "edit"
-        ? <span><b>{formatNumber(revision.old_numeric_value) || "trống"} → {formatNumber(revision.numeric_value)}</b>{revision.reason ? ` · ${revision.reason}` : ""}</span>
+        ? <span><b>{formatNumber(revision.old_numeric_value) || "chưa có số"} → {formatNumber(revision.numeric_value)}</b>{revision.reason ? ` · ${revision.reason}` : ""}</span>
         : <span>{revision.action === "initialize" ? "Đọc từ PDF" : "Đọc lại"}: <b>{formatNumber(revision.numeric_value) || "chưa đọc được"}</b></span>}
       {revision.carried_over_from_revision_id && <em>giữ lại sau khi đọc lại tài liệu</em>}
       <time dateTime={revision.created_at}>{formatDateTime(revision.created_at)}</time>

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { dataStatusLabel, distinctFormulas, formatNumber, needsCheck, numbersDiffer, readableLabel, resultRows, scriptResultRows, withoutDecimalRepr } from "./format.js";
+import { dataStatusLabel, differsFromReading, distinctFormulas, formatNumber, needsCheck, numbersDiffer, readableLabel, resultRows, scriptResultRows, withoutDecimalRepr } from "./format.js";
 
 it("formats canonical decimals in Vietnamese style", () => {
   expect(formatNumber("21350")).toBe("21.350");
@@ -67,4 +67,11 @@ it("says a no-data cell has no data, and asks to check only unverified numbers",
   expect(needsCheck("valid")).toBe(false);
   expect(needsCheck("ambiguous")).toBe(true);
   expect(needsCheck("error")).toBe(true);
+});
+
+it("counts a value given to a number the reading could not get as an edit", () => {
+  expect(differsFromReading("18240", null)).toBe(true);
+  expect(differsFromReading("18240", "18240.0")).toBe(false);
+  expect(differsFromReading("18250", "18240")).toBe(true);
+  expect(differsFromReading(null, null)).toBe(false);
 });

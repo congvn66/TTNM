@@ -1,12 +1,12 @@
 import "./toolAnswer.css";
-import { dataStatusLabel, formatNumber, needsCheck, numbersDiffer, readableLabel, scriptResultRows, withoutDecimalRepr } from "./format.js";
+import { dataStatusLabel, differsFromReading, formatNumber, needsCheck, readableLabel, scriptResultRows, withoutDecimalRepr } from "./format.js";
 
 // A number counts as edited when the value the answer used is not the value
 // first read from the PDF. Both are canonical decimals from the API; the PDF
 // text ("21.350") is never compared, it only shows what the page says.
 function editedRow(item, evidenceByKey) {
   const row = evidenceByKey?.get(item.evidence_key);
-  return row && numbersDiffer(item.value, row.original_numeric_value) ? row : null;
+  return row && differsFromReading(item.value, row.original_numeric_value) ? row : null;
 }
 
 function itemLabel(item) {

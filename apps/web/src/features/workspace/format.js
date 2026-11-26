@@ -26,6 +26,16 @@ export function numbersDiffer(first, second) {
   return Number(a) !== Number(b);
 }
 
+const isEmpty = (value) => value === null || value === undefined || value === "";
+
+/**
+ * True when a value is not the number first read from the PDF: a user edit.
+ * A number the reading could not get (no original) differs from any value.
+ */
+export function differsFromReading(value, original) {
+  return !isEmpty(value) && (isEmpty(original) || numbersDiffer(value, original));
+}
+
 // Codes the extractor writes into semantic fields; labels for people.
 const MEASURE_LABELS = {
   doanh_thu: "Doanh thu",

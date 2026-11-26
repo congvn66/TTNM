@@ -1108,7 +1108,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   }
 
   async function evidenceSaved(evidence, result) {
-    const before = formatNumber(result.revision?.old_numeric_value ?? evidence.current_numeric_value) || "trống";
+    const before = formatNumber(result.revision?.old_numeric_value ?? evidence.current_numeric_value) || "chưa có số";
     const after = formatNumber(result.revision?.numeric_value);
     showNotice(`Đã lưu ${before} → ${after}.${result.affected_message_ids?.length ? " Các câu trả lời dùng số này cần được tính lại." : ""}`);
     try { await Promise.all([loadEvidence(), refreshSessionDetail(activeSession.id)]); }
