@@ -225,7 +225,7 @@ def test_reasoning_effort_can_be_omitted(monkeypatch):
     assert "reasoning_effort" not in sent["body"]
 
 
-def test_provider_rejection_reason_is_kept_without_the_key(monkeypatch):
+def test_provider_rejection_reason_is_logged_not_returned(monkeypatch, caplog):
     from io import BytesIO
     from urllib.error import HTTPError
 
@@ -239,8 +239,33 @@ def test_provider_rejection_reason_is_kept_without_the_key(monkeypatch):
     try:
         client.complete("system", "user")
     except ai_provider.ProviderError as exc:
-        assert exc.code == "AI_PROVIDER_HTTP_ERROR"
-        assert "Thinking level MINIMAL is not supported" in str(exc)
-        assert "test-key-123" not in str(exc)
+        assert exc.code == "AI_PROVIDER_HTTP_ERROR" and exc.http_status == 400
+        assert "Thinking level MINIMAL" not in str(exc)
+        assert "Thinking level MINIMAL is not supported" in caplog.text
+        assert "test-key-123" not in caplog.text
     else:
         raise AssertionError("expected ProviderError")
+
+
+def test_a_delivered_non_json_body_is_invalid_output_and_not_retried(monkeypatch):
+    ai_provider, client = _gemini_client(monkeypatch, REPORT_QA_AI_RETRIES="1")
+    calls = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return b"<html>gateway page</html>"
+
+    monkeypatch.setattr(ai_provider, "urlopen", lambda request, timeout: (calls.append(1), Response())[1])
+    try:
+        client.complete("system", "user")
+    except ai_provider.ProviderError as exc:
+        assert exc.code == "AI_INVALID_OUTPUT"
+    else:
+        raise AssertionError("expected ProviderError")
+    assert len(calls) == 1

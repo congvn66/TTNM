@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import time
@@ -43,12 +44,19 @@ def _load_local_env() -> None:
         return
 
 
-class ProviderError(RuntimeError):
-    """Safe, stable error raised at the provider boundary."""
+logger = logging.getLogger(__name__)
 
-    def __init__(self, code: str, message: str = "AI provider request failed") -> None:
+
+class ProviderError(RuntimeError):
+    """Safe, stable error raised at the provider boundary.
+
+    The message is for server logs; it never carries the provider's own text.
+    """
+
+    def __init__(self, code: str, message: str = "AI provider request failed", http_status: int | None = None) -> None:
         super().__init__(message)
         self.code = code
+        self.http_status = http_status
 
 
 @dataclass(frozen=True, slots=True)
@@ -320,10 +328,10 @@ class GeminiProvider:
             except HTTPError as exc:
                 if attempt >= self.max_retries:
                     if exc.code == 404:
-                        raise ProviderError("AI_MODEL_UNAVAILABLE", f"Gemini model {self.model} is unavailable (HTTP 404)") from exc
+                        raise ProviderError("AI_MODEL_UNAVAILABLE", f"Gemini model {self.model} is unavailable (HTTP 404)", exc.code) from exc
                     if exc.code in {408, 429, 500, 502, 503, 504}:
-                        raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"Gemini provider is unavailable (HTTP {exc.code})") from exc
-                    raise ProviderError("AI_PROVIDER_HTTP_ERROR", f"Gemini provider rejected the request (HTTP {exc.code})") from exc
+                        raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"Gemini provider is unavailable (HTTP {exc.code})", exc.code) from exc
+                    raise ProviderError("AI_PROVIDER_HTTP_ERROR", f"Gemini provider rejected the request (HTTP {exc.code})", exc.code) from exc
             except (URLError, TimeoutError, OSError) as exc:
                 if attempt >= self.max_retries:
                     raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"Không kết nối được AI provider {self.base_url}; kiểm tra mạng, proxy hoặc API key") from exc
@@ -394,10 +402,10 @@ class OpenRouterProvider:
             except HTTPError as exc:
                 if attempt >= self.max_retries:
                     if exc.code in {408, 429, 500, 502, 503, 504}:
-                        raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"OpenRouter provider is unavailable (HTTP {exc.code})") from exc
+                        raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"OpenRouter provider is unavailable (HTTP {exc.code})", exc.code) from exc
                     if exc.code == 404:
-                        raise ProviderError("AI_MODEL_UNAVAILABLE", f"OpenRouter model {self.model} is unavailable (HTTP 404)") from exc
-                    raise ProviderError("AI_PROVIDER_HTTP_ERROR", f"OpenRouter rejected the request (HTTP {exc.code})") from exc
+                        raise ProviderError("AI_MODEL_UNAVAILABLE", f"OpenRouter model {self.model} is unavailable (HTTP 404)", exc.code) from exc
+                    raise ProviderError("AI_PROVIDER_HTTP_ERROR", f"OpenRouter rejected the request (HTTP {exc.code})", exc.code) from exc
             except (URLError, TimeoutError, OSError) as exc:
                 if attempt >= self.max_retries:
                     raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"Không kết nối được AI provider {self.base_url}; kiểm tra mạng, proxy hoặc API key") from exc
@@ -456,7 +464,7 @@ def planner_mode() -> str:
 
 
 def _provider_error_message(exc: HTTPError, secret: str) -> str:
-    """The provider's own error text (e.g. why a request was rejected), short and key-free."""
+    """The provider's own error text (e.g. why a request was rejected), short and key-free, for server logs."""
     try:
         payload = json.loads(exc.read().decode("utf-8", errors="replace") or "{}")
     except (OSError, ValueError):
@@ -506,18 +514,24 @@ class PlannerChatClient:
         for attempt in range(self.max_retries + 1):
             try:
                 with urlopen(request, timeout=self.timeout_seconds) as response:
-                    envelope = json.loads(response.read().decode("utf-8"))
+                    raw = response.read()
                 break
             except HTTPError as exc:
                 retryable = exc.code in {408, 429, 500, 502, 503, 504}
                 if attempt >= self.max_retries or not retryable:
                     code = "AI_PROVIDER_UNAVAILABLE" if retryable else ("AI_MODEL_UNAVAILABLE" if exc.code == 404 else "AI_PROVIDER_HTTP_ERROR")
-                    detail = _provider_error_message(exc, self.api_key)
-                    raise ProviderError(code, f"{self.mode} planner request failed (HTTP {exc.code})" + (f": {detail}" if detail else "")) from exc
+                    logger.warning("%s planner request failed (HTTP %s): %s", self.mode, exc.code, _provider_error_message(exc, self.api_key) or "no error text")
+                    raise ProviderError(code, f"{self.mode} planner request failed (HTTP {exc.code})", exc.code) from exc
                 time.sleep(min(8.0, 2.0 * (attempt + 1)))
-            except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            except (URLError, TimeoutError, OSError) as exc:
                 if attempt >= self.max_retries:
                     raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"{self.mode} planner is unreachable") from exc
+        # A delivered 200 whose body is not JSON is bad output, not a network
+        # failure: retrying the same request does not fix it.
+        try:
+            envelope = json.loads(raw.decode("utf-8"))
+        except ValueError as exc:
+            raise ProviderError("AI_INVALID_OUTPUT", f"{self.mode} planner response is not JSON") from exc
         try:
             content = envelope["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
