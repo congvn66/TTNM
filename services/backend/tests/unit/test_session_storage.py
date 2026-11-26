@@ -10,6 +10,7 @@ def runtime(tmp_path, monkeypatch):
     monkeypatch.setattr(session_storage, "RUNTIME_ROOT", tmp_path)
     monkeypatch.setattr(session_storage, "CATALOG_FILE", tmp_path / "sessions.json")
     monkeypatch.setattr(session_storage, "EXTRACTION_ROOT", tmp_path / "extracted")
+    monkeypatch.setattr(session_storage, "UPLOAD_ROOT", tmp_path / "uploads")
     return tmp_path
 
 
@@ -167,3 +168,90 @@ def test_a_catalog_with_messages_inside_is_split_into_session_files_without_loss
     index = json.loads((runtime / "sessions.json").read_text(encoding="utf-8"))
     assert "messages" not in index["sessions"]["s0"] and "request_keys" not in index["sessions"]["s0"]
     assert session_storage.load_catalog() == catalog
+
+
+def _saved_with_two_edits(runtime):
+    catalog = _ready_catalog()
+    document = catalog["sessions"]["s1"]["documents"][0]
+    with session_storage.catalog_lock:
+        session_storage.record_number_events(document, [_edit("a", "5", "r2", "x"), _edit("b", "6", "r3", "y")])
+    session_storage.save_catalog(catalog)
+    return runtime / "number-state" / "doc-1.run-1.jsonl"
+
+
+def test_a_damaged_number_log_is_set_aside_and_reported(runtime, caplog):
+    log = _saved_with_two_edits(runtime)
+    log.write_text('{"kind": "edit", "evidence_key": "a", "revision": {"id": "r2"}}\n{not json}\n', encoding="utf-8")
+
+    document = session_storage.load_catalog()["sessions"]["s1"]["documents"][0]
+
+    assert document["number_log"] == [] and document["number_event_count"] == 0
+    [kept] = (runtime / "number-state").glob("doc-1.run-1.jsonl.corrupt-*")
+    assert "{not json}" in kept.read_text(encoding="utf-8")
+    assert any(record.levelname == "CRITICAL" and "Number log" in record.getMessage() for record in caplog.records)
+
+
+def test_a_missing_number_log_that_the_index_counts_is_reported(runtime, caplog):
+    _saved_with_two_edits(runtime).unlink()
+
+    document = session_storage.load_catalog()["sessions"]["s1"]["documents"][0]
+
+    assert document["number_log"] == []
+    assert any(record.levelname == "CRITICAL" and "missing" in record.getMessage() and "2 events" in record.getMessage() for record in caplog.records)
+
+
+def test_an_unfinished_last_line_of_a_number_log_is_cut_off(runtime):
+    log = _saved_with_two_edits(runtime)
+    with open(log, "a", encoding="utf-8") as handle:
+        handle.write('{"kind": "edit", "evidence_key": "a", "revi')
+
+    document = session_storage.load_catalog()["sessions"]["s1"]["documents"][0]
+
+    assert [event["revision"]["id"] for event in document["number_log"]] == ["r2", "r3"]
+    text = log.read_text(encoding="utf-8")
+    assert text.endswith("\n") and len(text.splitlines()) == 2
+
+
+def test_a_damaged_or_missing_session_file_is_reported_and_the_rest_loads(runtime, caplog):
+    catalog = _sessions(3)
+    session_storage.save_catalog(catalog)
+    (runtime / "sessions" / "s0.json").write_text("{\"messages\": [", encoding="utf-8")
+    (runtime / "sessions" / "s1.json").unlink()
+
+    loaded = session_storage.load_catalog()
+
+    assert loaded["sessions"]["s2"] == catalog["sessions"]["s2"]
+    assert "messages" not in loaded["sessions"]["s0"] and "messages" not in loaded["sessions"]["s1"]
+    assert list((runtime / "sessions").glob("s0.json.corrupt-*"))
+    messages = [record.getMessage() for record in caplog.records if record.levelname == "CRITICAL"]
+    assert any("Session file" in message and "s0.json" in message for message in messages)
+    assert any("s1.json is missing" in message for message in messages)
+
+
+def test_a_damaged_number_state_file_from_before_the_log_does_not_stop_loading(runtime, caplog):
+    _write_artifact(runtime, _artifact())
+    (runtime / "number-state").mkdir()
+    (runtime / "number-state" / "doc-1.json").write_text("{\"evidence_state\": ", encoding="utf-8")
+    document = {"id": "doc-1", "file_name": "a.pdf", "extraction_name": "doc-1.json", "extraction_status": "ready"}
+    (runtime / "sessions.json").write_text(json.dumps({"sessions": {"s1": {"id": "s1", "documents": [document], "messages": []}}}), encoding="utf-8")
+
+    loaded = session_storage.load_catalog()["sessions"]["s1"]["documents"][0]
+
+    assert loaded["extraction_run_id"] == "run-1" and loaded["number_log"] == []
+    assert list((runtime / "number-state").glob("doc-1.json.corrupt-*"))
+
+
+def test_temporary_files_left_by_a_killed_process_are_removed_on_load(runtime):
+    session_storage.save_catalog(_sessions(1))
+    left = [runtime / "sessions.json.123.456.tmp", runtime / "sessions" / "s0.json.123.456.tmp",
+            runtime / "extracted" / "doc.run.tmp", runtime / "uploads" / "doc.uploading", runtime / "number-state" / "x.tmp"]
+    for path in left:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("half", encoding="utf-8")
+    kept = runtime / "uploads" / "doc.pdf"
+    kept.write_text("%PDF-", encoding="utf-8")
+
+    session_storage.load_catalog()
+
+    assert [path for path in left if path.exists()] == []
+    assert kept.exists()

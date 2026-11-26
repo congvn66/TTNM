@@ -94,23 +94,25 @@ def load_catalog() -> dict[str, Any]:
     except json.JSONDecodeError:
         value = None
     if not isinstance(value, dict) or not isinstance(value.get("sessions"), dict):
-        _set_aside_damaged_catalog()
+        _set_aside(CATALOG_FILE, "Session catalog")
         return {"sessions": {}}
+    _remove_stale_temporary_files()
     renamed_ids: dict[str, str] = {}
-    migrated = False
+    changed = False
     for session_id, session in value["sessions"].items():
         if any(field in session for field in SESSION_FILE_FIELDS):
-            migrated = True  # a catalog from before session files: save moves them out
+            changed = True  # a catalog from before session files: save moves them out
         else:
-            _load_session_file(session_id, session)
+            changed |= _load_session_file(session_id, session)
     for document in _documents(value):
         if "number_event_count" not in document:
             renamed_ids.update(_migrate_number_state(document))
-            migrated = True
-        run_id = document.get("extraction_run_id")
-        document["number_log"] = _read_number_log(number_log_name(document["id"], run_id)) if run_id else []
+            changed = True
+        expected = document["number_event_count"]
+        document["number_log"] = _read_number_log(document)
         document["chart_extractions"] = [event["record"] for event in document["number_log"] if event["kind"] == "chart_read"]
-    if migrated:
+        changed |= document["number_event_count"] != expected
+    if changed:
         # Answers and edits named the old random initial revision ids.
         _rename_ids(value, renamed_ids)
         save_catalog(value)
@@ -119,11 +121,26 @@ def load_catalog() -> dict[str, Any]:
     return value
 
 
-def _set_aside_damaged_catalog() -> None:
+def _set_aside(path: Path, what: str) -> None:
+    """Keep a damaged file for recovery under a new name; the catalog goes on without it."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    damaged = CATALOG_FILE.with_name(f"{CATALOG_FILE.name}.corrupt-{stamp}")
-    os.replace(CATALOG_FILE, damaged)
-    logger.critical("Session catalog %s is not valid; moved it to %s and started with an empty catalog", CATALOG_FILE, damaged)
+    damaged = path.with_name(f"{path.name}.corrupt-{stamp}")
+    os.replace(path, damaged)
+    logger.critical("%s %s is not valid; moved it to %s and went on without it", what, path, damaged)
+
+
+# Suffixes of files a writer renames into place when it finishes.
+_TEMPORARY_SUFFIXES = (".tmp", ".uploading")
+
+
+def _remove_stale_temporary_files() -> None:
+    """Remove the temporary files of writes that never finished: the process was killed before its rename."""
+    for directory in (RUNTIME_ROOT, RUNTIME_ROOT / "sessions", number_state_root(), EXTRACTION_ROOT, UPLOAD_ROOT):
+        if directory.is_dir():
+            for path in directory.iterdir():
+                if path.is_file() and path.suffix in _TEMPORARY_SUFFIXES:
+                    path.unlink()
+                    logger.warning("Removed %s, left by a write that did not finish", path)
 
 
 def _documents(catalog: dict[str, Any]):
@@ -174,16 +191,25 @@ def _save_session_file(session_id: str, session: dict[str, Any]) -> None:
     _session_file_digests[str(path)] = digest
 
 
-def _load_session_file(session_id: str, session: dict[str, Any]) -> None:
+def _load_session_file(session_id: str, session: dict[str, Any]) -> bool:
+    """Read a session's messages; True when the file was missing or damaged (the index must be saved)."""
     count = session.pop("message_count", 0)
     path = session_file_path(session_id)
     if not path.exists():
         if count:
-            logger.critical("Session file %s is missing; its %d messages are lost", path, count)
-        return
+            logger.critical("Session file %s is missing; the index says it held %d messages", path, count)
+        return bool(count)
     text = path.read_text(encoding="utf-8")
-    session.update(json.loads(text))
+    try:
+        content = json.loads(text)
+    except ValueError:
+        content = None
+    if not isinstance(content, dict) or not all(isinstance(content.get(field, []), (list, dict)) for field in SESSION_FILE_FIELDS):
+        _set_aside(path, "Session file")
+        return True
+    session.update(content)
     _session_file_digests[str(path)] = sha256(text.encode("utf-8")).hexdigest()
+    return False
 
 
 def record_number_events(document: dict[str, Any], events: list[dict[str, Any]]) -> None:
@@ -227,11 +253,51 @@ def record_chart_reads(document: dict[str, Any]) -> None:
         record_number_events(document, [numbers.chart_read_event(record) for record in kept])
 
 
-def _read_number_log(name: str) -> list[dict[str, Any]]:
-    path = number_state_path(name)
-    if not path.exists():
-        return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+def _read_number_log(document: dict[str, Any]) -> list[dict[str, Any]]:
+    """The current reading's events; sets ``number_event_count`` to what was read.
+
+    The index counts the events each document's log holds, so a missing or
+    shorter log is reported. A last line without its newline is a write that
+    was never acknowledged (the process was killed during it) and is cut off.
+    A log with a line that is not an event is set aside.
+    """
+    expected = document.get("number_event_count") or 0
+    run_id = document.get("extraction_run_id")
+    path = number_state_path(number_log_name(document["id"], run_id)) if run_id else None
+    events: list[dict[str, Any]] = []
+    if path is None or not path.exists():
+        if expected:
+            logger.critical("Number log %s of document %s is missing; the index says it held %d events", path, document["id"], expected)
+    else:
+        data = path.read_bytes()
+        complete = data[: data.rfind(b"\n") + 1]
+        if len(complete) != len(data):
+            with open(path, "r+b") as handle:
+                handle.truncate(len(complete))
+                os.fsync(handle.fileno())
+            logger.warning("Cut an unfinished last line off number log %s", path)
+        try:
+            events = [json.loads(line) for line in complete.decode("utf-8").splitlines() if line]
+            if not all(_is_number_event(event) for event in events):
+                raise ValueError("not a number event")
+        except ValueError:
+            _set_aside(path, "Number log")
+            events = []
+        else:
+            if len(events) < expected:
+                logger.critical("Number log %s holds %d events; the index says %d", path, len(events), expected)
+    document["number_event_count"] = len(events)
+    return events
+
+
+def _is_number_event(event: Any) -> bool:
+    if not isinstance(event, dict):
+        return False
+    if event.get("kind") == "edit":
+        return isinstance(event.get("evidence_key"), str) and isinstance(event.get("revision"), dict) and "id" in event["revision"]
+    if event.get("kind") == "chart_read":
+        return isinstance(((event.get("record") or {}).get("evidence_batch") or {}).get("evidences"), list)
+    return False
 
 
 def _migrate_number_state(document: dict[str, Any]) -> dict[str, str]:
@@ -246,7 +312,12 @@ def _migrate_number_state(document: dict[str, Any]) -> dict[str, str]:
     snapshot = {field: document.pop(field) for field in ("evidence_state", "chart_extractions") if field in document}
     old_file = number_state_path(document["id"])
     if not snapshot and old_file.exists():
-        snapshot = json.loads(old_file.read_text(encoding="utf-8"))
+        try:
+            snapshot = json.loads(old_file.read_text(encoding="utf-8"))
+        except ValueError:
+            _set_aside(old_file, "Number state file")
+        if not isinstance(snapshot, dict):
+            snapshot = {}
     artifact = _read_artifact(document)
     state = snapshot.get("evidence_state") or {}
     items = state.get("items") or {}
