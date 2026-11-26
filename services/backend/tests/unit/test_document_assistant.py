@@ -252,6 +252,19 @@ def test_quote_numbers_carry_their_own_scale_word():
     assert check("Mục tiêu là 220 triệu đồng.") == ["220 triệu"]
 
 
+@pytest.mark.parametrize(("answer", "untraced"), [
+    ("Khoảng 3.460 tỷ đồng.", []),  # rounded at the third significant digit
+    ("Khoảng 3.457 tỷ đồng.", []),
+    ("Khoảng 3.500 tỷ đồng.", ["3.500 tỷ"]),  # two significant digits: compared exactly
+    ("Khoảng 3.450 tỷ đồng.", ["3.450 tỷ"]),
+])
+def test_a_whole_number_may_be_rounded_at_its_last_significant_digit(answer, untraced):
+    from report_qa.application.document_assistant import untraced_numbers
+
+    row = {"evidence_key": "k", "numeric_value": "3456.78", "raw_text": "3.456,78"}
+    assert untraced_numbers(answer, evidences=[row], quotes=[], results=[], locale="vi") == untraced
+
+
 def test_a_number_from_an_uncited_row_is_not_traced():
     from report_qa.application.document_assistant import untraced_numbers
 

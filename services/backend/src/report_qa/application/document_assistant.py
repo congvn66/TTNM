@@ -147,13 +147,22 @@ _PAGE_WORD = re.compile(r"(?:\btrang|\bpage)\s+$", re.IGNORECASE)
 _DIRECTION = re.compile(r"\b(tăng|giảm)\s+$", re.IGNORECASE)
 
 
-def _reading(numeral, number_format: str) -> tuple[Decimal, int] | None:
-    """(value, decimals written) of a numeral in one number format, or None if that format cannot read it."""
+def _reading(numeral, number_format: str) -> tuple[Decimal, Decimal] | None:
+    """(value, precision written) of a numeral in one number format, or None if that format cannot read it.
+
+    The precision is the last decimal written ("17,05" -> 0.01); a whole
+    number with three or more significant digits before trailing zeros is
+    rounded at its last significant digit ("3.460" -> 10, so 3456,78 traces).
+    """
     try:
         text = decimal_text(str(numeral), number_format)
     except ValueError:
         return None
-    return Decimal(text), len(text.partition(".")[2])
+    whole, _, fraction = text.lstrip("-").partition(".")
+    zeros = len(whole) - len(whole.rstrip("0"))
+    if fraction or len(whole) - zeros < 3:
+        zeros = 0
+    return Decimal(text), Decimal(1).scaleb(zeros - len(fraction))
 
 
 def _written_numbers(text, cited_pages=frozenset()):
@@ -255,7 +264,7 @@ def untraced_numbers(answer: str, *, evidences: list[dict], quotes: list[dict], 
     same format as the answer; a python result in its input rows' formats).
     When a source allows both formats and they read the written number
     differently ("1.250"), it does not trace to that source. It is traced
-    when that value equals a trusted value rounded to the decimals written,
+    when that value equals a trusted value rounded to the precision written (_reading),
     with its scale word or "%" matching the source's unit (_targets):
     "17,05%" traces to a result 17.0547 or 0.170547; "21,35 tỷ" to 21.350 in
     triệu đồng. Magnitudes are compared; a signed
@@ -305,8 +314,7 @@ def untraced_numbers(answer: str, *, evidences: list[dict], quotes: list[dict], 
             readings = {r for f in source.formats if (r := _reading(numeral, f))}
             if len({number for number, _ in readings}) != 1:
                 continue
-            (written, decimals), = readings
-            step = Decimal(1).scaleb(-decimals)
+            (written, step), = readings
             for target in _targets(source.value, unit, source.unit):
                 try:
                     if abs(target).quantize(step, rounding=ROUND_HALF_UP) == written:
