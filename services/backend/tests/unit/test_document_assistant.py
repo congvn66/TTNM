@@ -101,7 +101,7 @@ def test_numbers_traced_to_results_rows_quotes_and_question_are_accepted(answer)
     row = {"evidence_key": "k", "numeric_value": "1250500", "raw_text": "1.250.500",
            "table_locator": {"row_header": "Miền Bắc", "column_header": "Q2/2026"}}
     assert untraced_numbers(answer, question="So với 2025 thì sao?", evidences=[row],
-                            quotes=["Miền Nam chiếm 30% doanh thu."], results=[{"growth": "0.170547"}]) == []
+                            quotes=["Miền Nam chiếm 30% doanh thu."], results=["0.170547"]) == []
 
 
 def test_a_number_from_an_uncited_row_is_not_traced():
@@ -470,7 +470,7 @@ def test_summary_does_not_claim_data_table_values_when_the_script_typed_numbers(
     rows = [_row("a", "valid", "table")]
     typed = _tools_answer(rows, {"action": "python", "code": "result = value('a') + 37", "explanation": "x"},
                           {"action": "answer", "answer": "137", "evidence_keys": ["a"]})
-    read = _tools_answer(rows, {"action": "python", "code": "result = value('a') * 2", "explanation": "x"},
+    read = _tools_answer(rows, {"action": "python", "code": "result = value('a') + value('a')", "explanation": "x"},
                          {"action": "answer", "answer": "200", "evidence_keys": ["a"]})
     assert "gõ tay" in typed["summary"]
     assert read["summary"] == "Phép tính được chạy bằng script Python trên giá trị hiện tại của bảng Dữ liệu."
@@ -501,3 +501,15 @@ def test_an_answer_whose_inputs_changed_while_it_ran_is_stored_as_needing_update
     )["assistant_message"]
     assert session["messages"][-1]["needs_update"] is (change is not None)
     assert message["needs_update"] is (change is not None)
+
+
+def test_a_python_number_without_a_data_source_does_not_trace_the_answer():
+    complete = sequence(
+        {"action": "python", "code": "result = {'q2': value('b'), 'made_up': int('9' + '99')}"},
+        {"action": "answer", "answer": "Q2 là 130, dự báo 999.", "evidence_keys": ["b"]},
+        {"action": "answer", "answer": "Q2 là 130.", "evidence_keys": ["b"]},
+    )
+    result = run_assistant("Q2?", context(), complete=complete, read_chart=Mock())
+    assert result["answer"] == "Q2 là 130."
+    assert result["calculations"][0]["result"]["manual_numbers"] == ["999"]
+    assert json.loads(complete.call_args.args[1])["tool_results"][1]["untraced_numbers"] == ["999"]

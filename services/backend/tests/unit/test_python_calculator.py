@@ -88,7 +88,47 @@ def test_numbers_typed_into_the_script_are_reported():
     code = "rate = Decimal('74') / value('a')\nresult = round((rate + Decimal(7) / 10) / 2 * 100, 2)"
     result = run_calculation(code, facts())
     assert result["status"] == "succeeded"
-    assert result["manual_numbers"] == ["74", "7", "10"]
+    assert result["manual_numbers"] == ["74", "7", "10", "2", "100"]
+
+
+def test_inputs_are_the_sources_of_the_result_not_every_value_read():
+    result = run_calculation("x = value('a')\nresult = {'q3': round(value('b'), 1)}", facts())
+    assert result["used_evidence_keys"] == ["b"] and result["manual_numbers"] == []
+
+
+def test_provenance_survives_sum_statistics_math_max_and_quantize():
+    code = """total = 0
+for key in ['a', 'b']:
+    total += value(key)
+rows = [value('a'), value('b')]
+result = {'sum': sum(rows), 'mean': round(statistics.mean(rows), 2), 'root': math.sqrt(value('a')),
+          'top': max(rows), 'q': (total / len(rows)).quantize(Decimal('0.01'))}
+"""
+    result = run_calculation(code, facts())
+    assert result["status"] == "succeeded", result
+    assert result["used_evidence_keys"] == ["a", "b"]
+    assert result["manual_numbers"] == ["2"]  # only len(rows) entered the arithmetic from outside the Data table
+    assert "2230.50" in result["traced_numbers"]
+
+
+@pytest.mark.parametrize("code", [
+    "a = value('a')\nvalue = lambda k: a * 0 + 101\nresult = value('b')",
+    "def round(x, n):\n    return 101\nresult = round(value('a'), 2)",
+    "for value in [1]:\n    pass\nresult = 1",
+    "Decimal = int\nresult = value('a')",
+])
+def test_names_the_runtime_provides_cannot_be_rebound(code):
+    result = run_calculation(code, facts())
+    assert result["status"] == "failed" and "reserved name" in result["error"]
+
+
+def test_a_number_built_from_strings_is_reported_as_manual():
+    # The script text has no number literal; the card used to show row a as the only input.
+    disguised = run_calculation("result = value('a') * 0 + int('1' + '0' + '1' + '0')", facts())
+    assert disguised["status"] == "succeeded"
+    assert disguised["used_evidence_keys"] == ["a"] and disguised["manual_numbers"] == ["0", "1010"]
+    unsourced = run_calculation("x = value('a')\nresult = {'x': int('1' + '0' + '1')}", facts())
+    assert unsourced["status"] == "failed" and "computed from value" in unsourced["error"]
 
 
 def test_runaway_script_is_stopped():
