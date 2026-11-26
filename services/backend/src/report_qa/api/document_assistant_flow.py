@@ -1,9 +1,11 @@
 """Persist document-aware assistant answers using the local session runtime."""
 
 import json
+from collections import defaultdict
 from uuid import uuid4
 
-from report_qa.api.ai_provider import ProviderError, planner_client
+from report_qa.api.ai_provider import MAX_ANSWER_CHARS, ProviderError, planner_client
+from report_qa.api.number_input import document_number_locale
 from report_qa.api.session_storage import (
     catalog_lock,
     document_path,
@@ -12,7 +14,16 @@ from report_qa.api.session_storage import (
     utc_now,
 )
 from report_qa.application.chart_tool import read_chart_region
-from report_qa.application.document_assistant import evidence_label, run_assistant
+from report_qa.application.document_assistant import (
+    answer_timeout_seconds,
+    data_rows,
+    evidence_label,
+    named_pages,
+    page_relevance,
+    run_assistant,
+    stated_quantities,
+    with_time_budget,
+)
 from report_qa.application.extraction_contract import validate_extraction_batch
 from report_qa.application.text_evidence import quote_bbox
 from report_qa.application.text_safety import storable
@@ -20,17 +31,73 @@ from report_qa.application.text_safety import storable
 MAX_CONTEXT_CHARS = 300_000
 
 
+def _size(value) -> int:
+    return len(json.dumps(value, ensure_ascii=False))
+
+
+def _model_view(context) -> dict:
+    """What the model is sent about the document (the payload's document part)."""
+    return {"pages": context["pages"], "data": data_rows(context["evidences"]),
+            "chart_regions": context["chart_regions"], "history": context["history"]}
+
+
+def fit_context(context: dict, question: str, budget: int = MAX_CONTEXT_CHARS) -> dict:
+    """The whole document when it fits the budget; otherwise as much of it as fits.
+
+    First the oldest history turns are dropped. If the document is still too
+    large, the last exchange (two turns) is kept, so a follow-up keeps its
+    context, and the most relevant pages are sent whole in the room left,
+    each with its Data rows and chart regions: pages the question names
+    first, then the others by page_relevance (ties in page order), each page
+    taken while it fits. The model is told which pages were left out.
+    """
+    # Each part is measured once: a 250-page document has tens of thousands of rows.
+    data = data_rows(context["evidences"])
+    document_size = _size({"pages": context["pages"], "data": data, "chart_regions": context["chart_regions"], "history": []})
+    history = list(context["history"])
+    while history and document_size + _size(history) > budget:
+        history.pop(0)
+    if document_size + _size(history) <= budget:
+        return context if len(history) == len(context["history"]) else {**context, "history": history}
+    scores = page_relevance(context["pages"], question, context["history"])
+    named = named_pages(question)
+    recent = context["history"][-2:]
+    room = budget - _size({"pages": [], "data": [], "chart_regions": [], "history": recent,
+                           "omitted_pages": [p["page"] for p in context["pages"]]})
+    rows_by_page, charts_by_page = defaultdict(list), defaultdict(list)
+    for row in data:
+        rows_by_page[row["page"]].append(row)
+    for region in context["chart_regions"]:
+        charts_by_page[region.get("page_number")].append(region)
+    kept = set()
+    for page in sorted(context["pages"], key=lambda p: (p["page"] not in named, -scores[p["page"]], p["page"])):
+        cost = _size(page) + _size(rows_by_page[page["page"]]) + _size(charts_by_page[page["page"]]) + 3  # separators between items
+        if cost <= room:
+            room -= cost
+            kept.add(page["page"])
+    return {
+        **context,
+        "pages": [p for p in context["pages"] if p["page"] in kept],
+        "evidences": [e for e in context["evidences"] if e["page_number"] in kept],
+        "chart_regions": [r for r in context["chart_regions"] if r.get("page_number") in kept],
+        "history": recent,
+        "omitted_pages": [p["page"] for p in context["pages"] if p["page"] not in kept],
+    }
+
+
 def with_chart_batches(document, extraction):
-    """Base Docling evidence plus every on-demand chart batch, newest first."""
-    result = json.loads(json.dumps(extraction))
-    evidences = result["evidence_batch"]["evidences"]
+    """Base Docling evidence plus every on-demand chart batch, newest first.
+
+    The rows are those of the inputs, not copies: neither is changed.
+    """
+    evidences = list(extraction["evidence_batch"]["evidences"])
     seen = {e["evidence_key"] for e in evidences}
     for record in reversed(document.get("chart_extractions", [])):
         for e in record["evidence_batch"]["evidences"]:
             if e["evidence_key"] not in seen:
                 evidences.append(e)
                 seen.add(e["evidence_key"])
-    return result
+    return {**extraction, "evidence_batch": {**extraction["evidence_batch"], "evidences": evidences}}
 
 
 def _citation(evidence):
@@ -56,6 +123,24 @@ def _quote_citation(pdf_path, source):
     return {"kind": "text", "page": source["page"], "bbox": bbox, "quote": source["quote"], "match": source["match"]}
 
 
+def quoted_rows(sources, evidences, locale=None):
+    """Data rows a quote states: same page, and every quantity of the row's printed text is a quantity of the quote.
+
+    Quantities are compared as values read in the document's number format
+    ("1250" is "1.250"), a percent only with a percent; years and other
+    periods are not quantities, so a row "2023" is never a quote's input.
+    """
+    rows = []
+    for source in sources:
+        quoted = stated_quantities(source["quote"], locale)
+        rows += [
+            e for e in evidences
+            if e["page_number"] == source["page"] and (printed := stated_quantities(e.get("raw_text"), locale))
+            and quoted.issuperset(printed)
+        ]
+    return rows
+
+
 def _display(value):
     return json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
 
@@ -69,6 +154,8 @@ def _formula(record, by_key):
         "expression": record["code"],
         "substitution": record["explanation"],
         "result": _display(result["result"]),
+        # [{label, name, value, source_keys}]: label is the Data row's label when the value is that row's value, else name.
+        "result_rows": result.get("result_rows") or [],
         "unit": None,
         "stdout": result.get("stdout") or "",
         "manual_numbers": result.get("manual_numbers") or [],
@@ -86,6 +173,46 @@ def _formula(record, by_key):
     }
 
 
+def extraction_marker(document):
+    """Changes whenever a re-run archives the extraction an answer may have read."""
+    return len(document.get("extraction_history") or [])
+
+
+def flag_if_inputs_changed(document, assistant, marker):
+    """Mark an answer stale if its inputs changed while it was being made. Call under catalog_lock."""
+    inputs = assistant.get("answer_inputs") or []
+    if not inputs:
+        return
+    items = (document.get("evidence_state") or {}).get("items", {})
+    edited = any(
+        item.get("evidence_revision_id") is not None
+        and item["evidence_key"] in items
+        and items[item["evidence_key"]]["current_revision_id"] != item["evidence_revision_id"]
+        for item in inputs
+    )
+    if edited or extraction_marker(document) != marker:
+        assistant["needs_update"] = True
+
+
+def _calculation_summary(calculations):
+    if not calculations:
+        return ""
+    if any(record["result"].get("manual_numbers") for record in calculations):
+        return "Phép tính được chạy bằng script Python; có số được gõ tay trong script, không lấy từ bảng Dữ liệu."
+    return "Phép tính được chạy bằng script Python trên giá trị hiện tại của bảng Dữ liệu."
+
+
+NO_DATA_WARNING = "Báo cáo ghi “—” (không có số liệu) ở một số ô được dẫn."
+
+
+def _unverified_warning(evidences):
+    if not evidences:
+        return []
+    if all(e.get("source_type") == "chart" for e in evidences):
+        return ["Một số giá trị biểu đồ chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
+    return ["Một số giá trị chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
+
+
 def _history(session, document_id):
     """Recent finished turns; a queued question and its placeholder are not history."""
     turns = []
@@ -95,7 +222,12 @@ def _history(session, document_id):
                 turns.pop()
             continue
         if message.get("document_id") == document_id:
-            turns.append({"role": message["role"], "text": message.get("body", "")})
+            # No stored turn may crowd the document out of the context; an
+            # answer within the answer cap is kept whole.
+            text = message.get("body", "")
+            if len(text) > MAX_ANSWER_CHARS:
+                text = text[:MAX_ANSWER_CHARS] + "…"
+            turns.append({"role": message["role"], "text": text})
     return turns[-8:]
 
 
@@ -108,13 +240,15 @@ def answer_document(
     The caller injects storage: local JSON by default, or PostgreSQL/R2 through
     load_extraction, resolve_pdf, save and persist_chart.
     """
+    marker = extraction_marker(document)
     load_extraction = load_extraction or (lambda name: json.loads(extraction_path(name).read_text(encoding="utf-8")))
     resolve_pdf = resolve_pdf or document_path
     save = save or save_catalog
     client = planner_client() if complete is None else None
     if complete is None and client is None:
         raise ProviderError("AI_NOT_CONFIGURED", "Document assistant requires an AI provider")
-    complete = complete or client.complete
+    # One time budget covers the whole answer: model calls, chart checks and DePlot reads (with_time_budget).
+    complete = with_time_budget(complete or client.complete, answer_timeout_seconds())
     extraction = load_extraction(document["extraction_name"])
     unstored_keys = set()
     current = overlay(document, with_chart_batches(document, extraction))
@@ -129,9 +263,10 @@ def answer_document(
             for region in current.get("chart_regions", [])
         ],
         "history": _history(session, document["id"]),
+        # Answer numbers are read in the document's number format (not sent to the model).
+        "number_locale": document_number_locale(current),
     }
-    if len(json.dumps(context, ensure_ascii=False)) > MAX_CONTEXT_CHARS:
-        raise ProviderError("DOCUMENT_CONTEXT_TOO_LARGE", "Document is too large for full-context mode")
+    context = fit_context(context, question)
     trace.append({
         "stage": "ai_context",
         "status": "ready",
@@ -139,6 +274,7 @@ def answer_document(
         "pages": len(context["pages"]),
         "numeric_values": len(context["evidences"]),
         "chart_regions": len(context["chart_regions"]),
+        "omitted_pages": context.get("omitted_pages", []),
         "provider": f"{client.mode}/{client.model}" if client else "injected",
     })
 
@@ -155,6 +291,7 @@ def answer_document(
             None,
         )
         if cached is None:
+            complete.check()  # DePlot cannot be stopped once started: start it only while time is left
             region = next(r for r in context["chart_regions"] if r["chart_region_key"] == key)
             result = storable(read_chart_region(
                 resolve_pdf(document["storage_name"]), region, document.get("version_id") or document["id"], f"tools:{key}", complete=complete,
@@ -169,18 +306,19 @@ def answer_document(
                 # is used for this answer only and read again next time.
                 unstored_keys.update(e["evidence_key"] for e in result["evidence_batch"]["evidences"])
             with catalog_lock:
-                document.setdefault("chart_extractions", []).append({**result, "chart_region_key": key, "created_at": utc_now()})
+                document.setdefault("chart_extractions", []).append({**result, "chart_region_key": key, "created_at": utc_now(), "document_run_id": extraction["evidence_batch"].get("extraction_run_id")})
             if persist_chart is None:
                 save(catalog)
         else:
             result = cached
         refreshed = overlay(document, with_chart_batches(document, extraction))
         batch_keys = {e["evidence_key"] for e in result["evidence_batch"]["evidences"]}
+        sent_pages = {p["page"] for p in context["pages"]}
         return {
             "status": result["status"],
             "evidences": [e for e in refreshed["evidence_batch"]["evidences"] if e["evidence_key"] in batch_keys],
             "warnings": result["evidence_batch"]["warnings"],
-            "all_evidences": refreshed["evidence_batch"]["evidences"],
+            "all_evidences": [e for e in refreshed["evidence_batch"]["evidences"] if e["page_number"] in sent_pages],
         }
 
     result = run_assistant(question, context, complete=complete, read_chart=chart_tool)
@@ -197,14 +335,13 @@ def answer_document(
     structured = {
         "presentation": "document_assistant",
         "answer": result["answer"],
-        "summary": "Phép tính được chạy bằng script Python trên giá trị hiện tại của bảng Dữ liệu."
-        if result["calculations"] else "",
+        "summary": _calculation_summary(result["calculations"]),
         "sections": [],
         "formulas": [_formula(record, by_key) for record in result["calculations"]],
         "tables": [],
         "claims": [],
-        "warnings": ["Một số giá trị biểu đồ chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
-        if result["unverified_keys"] else [],
+        "warnings": _unverified_warning([by_key[k] for k in result["unverified_keys"]])
+        + ([NO_DATA_WARNING] if result["no_data_keys"] else []),
         "cited_pages": sorted({c["page"] for c in citations}),
         "evidence": citations,
         "not_found": result["not_found"],
@@ -229,7 +366,8 @@ def answer_document(
                 "page_number": e["page_number"],
                 "bbox": e["bbox"],
             }
-            for e in used
+            for e in {e["evidence_key"]: e for e in used + quoted_rows(result["sources"], context["evidences"],
+                                                                      context.get("number_locale"))}.values()
         ],
         "tool_calculations": result["calculations"],
         "tool_results": result["tool_results"],
@@ -241,6 +379,7 @@ def answer_document(
     user = {"id": str(uuid4()), "role": "user", "body": question, "document_id": document["id"], "created_at": now}
     user, assistant = storable(user), storable(assistant)
     with catalog_lock:
+        flag_if_inputs_changed(document, assistant, marker)
         session["messages"].extend([user, assistant])
         session["updated_at"] = now
     try:

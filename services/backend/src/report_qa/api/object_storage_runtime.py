@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from report_qa.config import settings
 from report_qa.infrastructure.object_storage import ObjectStorageError, build_object_storage
@@ -39,6 +42,24 @@ def cache_extraction(extraction_name: str) -> Path:
     return path
 
 
+def read_extraction(extraction_name: str) -> dict[str, Any]:
+    """The parsed artifact of a reading, shared by every request: callers must not change it.
+
+    An artifact file is written once per reading and never changed, so it is
+    parsed once (a large one is 20+ MB of JSON). The key holds the file's
+    modification time and size, so a replaced file is parsed again.
+    """
+    path = cache_extraction(extraction_name)
+    stat = path.stat()
+    return _parsed(str(path), stat.st_mtime_ns, stat.st_size)
+
+
+# A large artifact takes about 130 MB parsed; the readings in use are few.
+@lru_cache(maxsize=4)
+def _parsed(path: str, mtime_ns: int, size: int) -> dict[str, Any]:
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
 def persist_pdf_cache(storage_name: str, path: Path) -> None:
     if uses_remote_object_storage():
         object_storage.upload_file(storage_name, path, content_type="application/pdf")
@@ -57,6 +78,7 @@ __all__ = [
     "ObjectStorageError",
     "cache_extraction",
     "cache_pdf",
+    "read_extraction",
     "extraction_storage_key",
     "pdf_storage_key",
     "persist_extraction_cache",

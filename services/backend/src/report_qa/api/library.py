@@ -5,12 +5,13 @@ from __future__ import annotations
 from uuid import UUID
 
 import psycopg
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field, field_validator
 from psycopg.rows import dict_row
 
 from report_qa.config import settings
 from .auth import owner_id_for_request
+from .user_messages import user_error
 
 
 router = APIRouter(prefix="/api/v1", tags=["library"])
@@ -83,7 +84,7 @@ class SessionProjectUpdateRequest(BaseModel):
 
 def _connection():
     if settings.persistence_backend != "postgres":
-        raise HTTPException(status_code=503, detail={"code": "LIBRARY_REQUIRES_POSTGRES", "message": "Library cần PostgreSQL."})
+        raise user_error(503, "LIBRARY_REQUIRES_POSTGRES")
     return psycopg.connect(settings.database_url, row_factory=dict_row)
 
 
@@ -94,7 +95,7 @@ def _normalize(value: str) -> str:
 def _project(connection, project_id: UUID, owner_id: UUID):
     row = connection.execute("SELECT id,owner_id,name,created_at,updated_at,deleted_at FROM projects WHERE id=%s AND owner_id=%s AND deleted_at IS NULL", (project_id, owner_id)).fetchone()
     if row is None:
-        raise HTTPException(status_code=404, detail={"code": "PROJECT_NOT_FOUND", "message": "Không tìm thấy thư viện này."})
+        raise user_error(404, "PROJECT_NOT_FOUND")
     return row
 
 
@@ -148,7 +149,7 @@ def create_project(payload: ProjectCreateRequest, request: Request):
             row = connection.execute("INSERT INTO projects (owner_id,name) VALUES (%s,%s) RETURNING id,owner_id,name,created_at,updated_at", (owner_id, payload.name.strip())).fetchone()
         except Exception as error:
             if getattr(error, "sqlstate", None) == "23505":
-                raise HTTPException(status_code=409, detail={"code": "PROJECT_NAME_CONFLICT", "message": "Tên thư viện đã tồn tại."}) from error
+                raise user_error(409, "PROJECT_NAME_CONFLICT") from error
             raise
     return {"project": dict(row)}
 
@@ -174,7 +175,7 @@ def archive_project(project_id: UUID, request: Request):
             (project_id, owner_id, project_id, owner_id),
         ).fetchone()
         if counts["session_count"] or counts["document_count"]:
-            raise HTTPException(status_code=409, detail={"code": "PROJECT_NOT_EMPTY", "message": "Hãy chuyển hoặc lưu trữ các phiên trước khi xóa thư viện."})
+            raise user_error(409, "PROJECT_NOT_EMPTY")
         connection.execute("UPDATE projects SET deleted_at=now(),updated_at=now() WHERE id=%s AND owner_id=%s", (project_id, owner_id))
     return {"project_id": str(project_id), "status": "archived"}
 
@@ -208,7 +209,7 @@ def move_session_to_project(session_id: UUID, payload: SessionProjectUpdateReque
         _project(connection, payload.project_id, owner_id)
         result = connection.execute("UPDATE chats SET project_id=%s,updated_at=now() WHERE id=%s AND owner_id=%s AND deleted_at IS NULL", (payload.project_id, session_id, owner_id))
         if result.rowcount != 1:
-            raise HTTPException(status_code=404, detail={"code": "SESSION_NOT_FOUND", "message": "Không tìm thấy phiên làm việc."})
+            raise user_error(404, "SESSION_NOT_FOUND")
         connection.execute("""INSERT INTO project_documents (owner_id,project_id,document_id,display_name)
             SELECT %s,%s,dv.document_id,COALESCE(NULLIF(btrim(d.title), ''), 'Tài liệu chưa đặt tên')
               FROM chat_documents cd
@@ -226,11 +227,11 @@ def update_project_document(project_id: UUID, document_id: UUID, payload: Projec
         _project(connection, project_id, owner_id)
         linked = connection.execute("SELECT version FROM project_documents WHERE project_id=%s AND document_id=%s AND owner_id=%s", (project_id, document_id, owner_id)).fetchone()
         if linked is None:
-            raise HTTPException(status_code=404, detail={"code": "PROJECT_DOCUMENT_NOT_FOUND", "message": "Tài liệu không nằm trong thư viện này."})
+            raise user_error(404, "PROJECT_DOCUMENT_NOT_FOUND")
         if int(linked["version"]) != payload.expected_version:
-            raise HTTPException(status_code=409, detail={"code": "PROJECT_DOCUMENT_REVISION_CONFLICT", "message": "Tài liệu vừa được thay đổi; hãy tải lại."})
+            raise user_error(409, "PROJECT_DOCUMENT_REVISION_CONFLICT")
         if payload.folder_id and connection.execute("SELECT id FROM folders WHERE id=%s AND project_id=%s AND owner_id=%s AND deleted_at IS NULL", (payload.folder_id, project_id, owner_id)).fetchone() is None:
-            raise HTTPException(status_code=422, detail={"code": "INVALID_FOLDER_PARENT", "message": "Thư mục không thuộc thư viện này."})
+            raise user_error(422, "INVALID_FOLDER_PARENT")
         row = connection.execute("""UPDATE project_documents SET folder_id=%s,display_name=COALESCE(%s,display_name),version=version+1
             WHERE project_id=%s AND document_id=%s AND owner_id=%s AND version=%s
             RETURNING project_id,document_id,folder_id,display_name,version""", (payload.folder_id, payload.display_name.strip() if payload.display_name else None, project_id, document_id, owner_id, payload.expected_version)).fetchone()
@@ -252,15 +253,15 @@ def create_folder(project_id: UUID, payload: FolderCreateRequest, request: Reque
     with _connection() as connection:
         project = connection.execute("SELECT id FROM projects WHERE id=%s AND owner_id=%s AND deleted_at IS NULL", (project_id, owner_id)).fetchone()
         if project is None:
-            raise HTTPException(status_code=404, detail={"code": "PROJECT_NOT_FOUND", "message": "project not found"})
+            raise user_error(404, "PROJECT_NOT_FOUND")
         if payload.parent_id:
             parent = connection.execute("SELECT id FROM folders WHERE id=%s AND project_id=%s AND owner_id=%s AND deleted_at IS NULL", (payload.parent_id, project_id, owner_id)).fetchone()
             if parent is None:
-                raise HTTPException(status_code=422, detail={"code": "INVALID_FOLDER_PARENT", "message": "parent folder is not in this project"})
+                raise user_error(422, "INVALID_FOLDER_PARENT")
         try:
             row = connection.execute("INSERT INTO folders (owner_id,project_id,parent_id,name,normalized_name) VALUES (%s,%s,%s,%s,%s) RETURNING *", (owner_id, project_id, payload.parent_id, payload.name.strip(), normalized)).fetchone()
         except psycopg.errors.UniqueViolation as error:
-            raise HTTPException(status_code=409, detail={"code": "FOLDER_NAME_CONFLICT", "message": "folder name already exists"}) from error
+            raise user_error(409, "FOLDER_NAME_CONFLICT") from error
     return {"folder": dict(row)}
 
 
@@ -270,24 +271,24 @@ def update_folder(folder_id: UUID, payload: FolderUpdateRequest, request: Reques
     with _connection() as connection:
         current = connection.execute("SELECT * FROM folders WHERE id=%s AND owner_id=%s AND deleted_at IS NULL", (folder_id, owner_id)).fetchone()
         if current is None:
-            raise HTTPException(status_code=404, detail={"code": "FOLDER_NOT_FOUND", "message": "folder not found"})
+            raise user_error(404, "FOLDER_NOT_FOUND")
         if int(current["version"]) != payload.expected_version:
-            raise HTTPException(status_code=409, detail={"code": "FOLDER_REVISION_CONFLICT", "message": "folder changed; reload before editing"})
+            raise user_error(409, "FOLDER_REVISION_CONFLICT")
         parent_id = payload.parent_id if "parent_id" in payload.model_fields_set else current["parent_id"]
         if parent_id == folder_id:
-            raise HTTPException(status_code=422, detail={"code": "FOLDER_CYCLE", "message": "folder cannot be its own parent"})
+            raise user_error(422, "FOLDER_CYCLE")
         if parent_id:
             parent = connection.execute("SELECT id FROM folders WHERE id=%s AND project_id=%s AND owner_id=%s AND deleted_at IS NULL", (parent_id, current["project_id"], owner_id)).fetchone()
             if parent is None:
-                raise HTTPException(status_code=422, detail={"code": "INVALID_FOLDER_PARENT", "message": "parent folder is not in this project"})
+                raise user_error(422, "INVALID_FOLDER_PARENT")
         name = payload.name.strip() if payload.name is not None else current["name"]
         normalized = _normalize(name)
         try:
             row = connection.execute("UPDATE folders SET name=%s,normalized_name=%s,parent_id=%s,version=version+1,updated_at=now() WHERE id=%s AND owner_id=%s AND version=%s RETURNING *", (name, normalized, parent_id, folder_id, owner_id, payload.expected_version)).fetchone()
         except psycopg.errors.UniqueViolation as error:
-            raise HTTPException(status_code=409, detail={"code": "FOLDER_NAME_CONFLICT", "message": "folder name already exists"}) from error
+            raise user_error(409, "FOLDER_NAME_CONFLICT") from error
         if row is None:
-            raise HTTPException(status_code=409, detail={"code": "FOLDER_REVISION_CONFLICT", "message": "folder changed; reload before editing"})
+            raise user_error(409, "FOLDER_REVISION_CONFLICT")
     return {"folder": dict(row)}
 
 
@@ -297,5 +298,5 @@ def archive_folder(folder_id: UUID, request: Request):
     with _connection() as connection:
         result = connection.execute("UPDATE folders SET deleted_at=now(),version=version+1,updated_at=now() WHERE id=%s AND owner_id=%s AND deleted_at IS NULL", (folder_id, owner_id))
         if result.rowcount != 1:
-            raise HTTPException(status_code=404, detail={"code": "FOLDER_NOT_FOUND", "message": "folder not found"})
+            raise user_error(404, "FOLDER_NOT_FOUND")
     return {"folder_id": str(folder_id), "status": "archived"}

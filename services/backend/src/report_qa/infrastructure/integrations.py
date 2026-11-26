@@ -94,6 +94,14 @@ def worker_status() -> dict[str, Any]:
     }
 
 
+def reextraction_status() -> dict[str, Any]:
+    """Whether POST .../documents/{id}/extraction can re-read a stored PDF."""
+    if settings.persistence_backend == "json":
+        return {"status": "available"}
+    # PostgreSQL keeps one immutable base extraction run per document version.
+    return {"status": "unsupported", "error_code": "REEXTRACTION_NOT_SUPPORTED"}
+
+
 def runtime_capabilities(*, database: dict[str, Any] | None = None, storage: dict[str, Any] | None = None) -> dict[str, Any]:
     """Build a redacted capability document suitable for health/diagnostics."""
 
@@ -102,6 +110,7 @@ def runtime_capabilities(*, database: dict[str, Any] | None = None, storage: dic
         "pdf_extraction": _pdf_extraction(),
         "chart_reader": _chart_reader(),
         "worker": worker_status(),
+        "reextraction": reextraction_status(),
         "database": database or {"status": "not_probed"},
         "storage": storage or {"status": "not_probed"},
     }
@@ -132,4 +141,4 @@ def readiness(capabilities: dict[str, Any]) -> tuple[str, list[str]]:
     return ("ready" if not checks else "degraded", checks)
 
 
-__all__ = ["readiness", "runtime_capabilities", "worker_status"]
+__all__ = ["readiness", "reextraction_status", "runtime_capabilities", "worker_status"]

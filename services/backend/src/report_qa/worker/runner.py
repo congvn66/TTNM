@@ -61,6 +61,7 @@ def complete_answer_job(payload: dict[str, object], *, publish_guard=None) -> No
         "query_string": b"", "server": ("worker", 0), "client": ("worker", 0), "scheme": "http",
     })
     request.state.internal_owner_id = owner_id
+    request.state.worker_job = True
     response = Response()
     try:
         result = ask_session_document(session_id, SessionQuestionRequest(document_id=str(payload["document_id"]), question=str(payload["question"])), request, response)

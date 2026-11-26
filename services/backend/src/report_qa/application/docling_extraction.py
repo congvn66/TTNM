@@ -14,7 +14,19 @@ from typing import Any
 from uuid import uuid4
 
 from report_qa.application.extraction_contract import validate_extraction_batch
-from report_qa.application.numeric_extraction import NUMBER, decimal_text
+from report_qa.application.numeric_extraction import (
+    HEADER_JOIN,
+    NUMBER,
+    decimal_text,
+    detected_locale,
+    is_value_text,
+    period_near,
+    quantities,
+    single_year,
+)
+
+# Headings and running text around the page are not values: "1. Phạm vi", "BÁO CÁO 6 THÁNG".
+_NOT_VALUE_TEXT = {"page_header", "page_footer", "caption", "section_header", "title"}
 
 
 @lru_cache(maxsize=1)
@@ -64,9 +76,10 @@ def extract_docling_artifact(
 
     # Reuse semantic helpers, without invoking the legacy extractor.
     from report_qa.application.evidence_extraction import (
-        _measure,
-        _period_near,
         _unit_near,
+        cell_semantics,
+        sentence_semantics,
+        unit_note,
     )
     from report_qa.application.ocr_extraction import TesseractPdfOcr
 
@@ -75,7 +88,7 @@ def extract_docling_artifact(
     if status != "success":
         raise RuntimeError(f"Docling conversion failed: {result.status}")
     data = result.document.export_to_dict()
-    evidence, warnings, contexts, charts, pages = [], [], {}, [], []
+    evidence, warnings, contexts, charts, pages, page_years = [], [], {}, [], [], {}
     ocr_pages = {}
     with pymupdf.open(path) as pdf:
 
@@ -129,19 +142,22 @@ def extract_docling_artifact(
                     except Exception as exc:
                         warn(
                             type(exc).__name__ or "OCR_FAILED",
-                            f"KhÃ´ng Ä‘á»c Ä‘Æ°á»£c trang {number} báº±ng OCR.",
+                            f"Không đọc được trang {number} bằng OCR.",
                         )
                 else:
                     warn(
                         code or "OCR_UNAVAILABLE",
-                        f"Trang {number} khÃ´ng cÃ³ lá»›p chá»¯; chÆ°a trÃ­ch xuáº¥t sá»‘ tá»« trang nÃ y.",
+                        f"Trang {number} không có lớp chữ; chưa trích xuất số từ trang này.",
                     )
             pages.append({"page": number, "text": page_text})
+            page_years[number] = single_year(page_text)
             if not page_text.strip():
                 warn(
                     "OCR_REQUIRED",
                     f"Trang {number} không có lớp chữ; chưa trích xuất số từ trang này.",
                 )
+        # Unconfigured, numbers are read in the format the page text proves (as the API reads typed numbers).
+        locale = locale or detected_locale(page["text"] for page in pages)
 
         def emit(
             raw,
@@ -154,6 +170,8 @@ def extract_docling_artifact(
             original=None,
             extraction_method=None,
             confidence=0.85,
+            headers=(),
+            semantic=None,
         ):
             try:
                 value = decimal_text(raw, locale)
@@ -165,6 +183,7 @@ def extract_docling_artifact(
                     "Cần xác nhận quy ước dấu phân cách số.",
                     key,
                 )
+            measure, period = cell_semantics(list(headers), context, raw, page_years.get(number))
             method = extraction_method or ("table_cell" if source == "table" else "text")
             method_labels = {
                 "table_cell": "\u0111\u1ecdc t\u1eeb \u00f4 b\u1ea3ng",
@@ -185,10 +204,10 @@ def extract_docling_artifact(
                 "method_label": "đọc từ ô bảng"
                 if source == "table"
                 else "đọc từ văn bản",
-                "semantic": {
-                    "measure": _measure(context),
+                "semantic": semantic or {
+                    "measure": measure,
                     "subject": locator.get("row_header") if locator else None,
-                    "period": _period_near(context, max(0, context.rfind(raw))),
+                    "period": period,
                     "unit": _unit_near(context, raw),
                     "dimensions": {},
                 },
@@ -212,6 +231,8 @@ def extract_docling_artifact(
                 ):
                     continue
                 text = cell.get("text", "").strip()
+                if not is_value_text(text):  # a label such as "Giá mục tiêu 2026:"
+                    continue
                 # One value per physical cell. Footnotes/dates/text containing
                 # multiple numbers cannot silently become a numeric operand.
                 matches = list(NUMBER.finditer(text))
@@ -235,9 +256,12 @@ def extract_docling_artifact(
                 if not _inside(box, table_box):
                     warn("CELL_OUTSIDE_TABLE", "Vị trí ô nằm ngoài vùng bảng.")
                     continue
+                # The cell's own header path: column header levels outer to
+                # inner, and the labels left of it in its row (never a value
+                # or a "-" placeholder of a neighbouring cell).
                 headers = [
                     c["text"]
-                    for c in cells
+                    for c in sorted(cells, key=lambda c: c["start_row_offset_idx"])
                     if c.get("column_header")
                     and c["start_col_offset_idx"] <= col < c["end_col_offset_idx"]
                 ]
@@ -246,14 +270,15 @@ def extract_docling_artifact(
                     for c in cells
                     if c["start_row_offset_idx"] <= row < c["end_row_offset_idx"]
                     and c["end_col_offset_idx"] <= col
-                    and not NUMBER.search(c["text"])
+                    and not c.get("column_header")
+                    and not is_value_text(c["text"])
                 ]
                 locator = {
                     "table_region_key": f"page-{number}-table-{ti}",
                     "row_index": row,
                     "column_index": col,
-                    "row_header": " / ".join(row_headers) or None,
-                    "column_header": " / ".join(headers) or None,
+                    "row_header": HEADER_JOIN.join(row_headers) or None,
+                    "column_header": HEADER_JOIN.join(headers) or None,
                 }
                 # Only nearby caption/unit notes, never arbitrary page prose.
                 nearby = " ".join(
@@ -276,7 +301,13 @@ def extract_docling_artifact(
                     raw = text
                 else:
                     raw = matches[0].group()
-                emit(raw, context, number, box, key, "table", locator, original=text)
+                emit(raw, context, number, box, key, "table", locator, original=text, headers=row_headers + headers)
+                # A cell's unit is its own "%", else what its headers state, else the table's unit note;
+                # prose near the table ("tỷ lệ phần trăm khách hàng...") is not the cell's unit.
+                evidence[-1]["semantic"]["unit"] = (
+                    "PERCENT" if text.endswith("%") else _unit_near(HEADER_JOIN.join(row_headers + headers), "")
+                    or unit_note(nearby)
+                )
                 if matches[0] is None:
                     evidence[-1].update(numeric_value=None, data_status="missing")
                 elif len(matches) > 1:
@@ -303,7 +334,7 @@ def extract_docling_artifact(
                     if matches:
                         warn(
                             "OCR_MULTIPLE_NUMBERS",
-                            "OCR token chá»©a nhiá»u sá»‘; khÃ´ng Ä‘Æ°a vÃ o phÃ©p tÃ­nh.",
+                            "OCR token chứa nhiều số; không đưa vào phép tính.",
                         )
                     continue
                 match = matches[0]
@@ -322,8 +353,11 @@ def extract_docling_artifact(
         # Exact native word boxes avoid guessed character widths. Docling
         # decides the text regions; native words supply glyph geometry.
         for ti, text in enumerate(data.get("texts", [])):
-            if text.get("label") in {"page_header", "page_footer", "caption"}:
+            if text.get("label") in _NOT_VALUE_TEXT:
                 continue
+            item_text = text.get("text", "")
+            # Only quantities are values: not "quý 2", "tháng 6/2026", "6 tháng", "31/12/2023".
+            values = [m.span() for m in quantities(item_text)]
             for pi, prov in enumerate(text.get("prov", [])):
                 number, text_box = region(prov)
                 if any(
@@ -338,13 +372,19 @@ def extract_docling_artifact(
                     text_box[2] * page.rect.width,
                     text_box[3] * page.rect.height,
                 )
+                cursor = 0
                 for wi, word in enumerate(
                     page.get_text("words", clip=rect + (-1, -1, 1, 1))
                 ):
                     token = word[4]
+                    at = item_text.find(token, cursor)
+                    cursor = at + len(token) if at >= 0 else cursor
                     for mi, match in enumerate(NUMBER.finditer(token)):
                         raw = match.group()
                         if re.fullmatch(r"(?:19|20)\d{2}", raw.rstrip(".,")):
+                            continue
+                        position = at + match.start() if at >= 0 else None
+                        if position is not None and not any(a <= position < b for a, b in values):
                             continue
                         box = [
                             word[0] / page.rect.width,
@@ -365,7 +405,13 @@ def extract_docling_artifact(
                         )
                         if any(e["evidence_key"] == key for e in evidence):
                             continue
-                        emit(raw, text.get("text", ""), number, box, key, "text")
+                        # A word the Docling text does not contain keeps its number, unlabelled.
+                        semantic = (
+                            sentence_semantics(item_text, position, raw.rstrip(".,"), page_years.get(number))
+                            if position is not None
+                            else {"measure": "unknown", "subject": None, "period": None, "unit": None, "dimensions": {}}
+                        )
+                        emit(raw, item_text, number, box, key, "text", semantic=semantic)
         batch = {
             "schema_version": 2,
             "document_version_id": document_version_id,

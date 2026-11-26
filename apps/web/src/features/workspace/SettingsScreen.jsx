@@ -71,7 +71,7 @@ function ProfileSettings({ user, onProfileChange }) {
       const next = body.user?.display_name ?? value;
       setName(next); setServerName(next); setStatus("success"); onProfileChange?.(body.user);
       window.setTimeout(() => setStatus("idle"), 2400);
-    } catch (reason) { setError(reason.message || "Không thể lưu hồ sơ."); setStatus("error"); }
+    } catch (reason) { setError(reason.message); setStatus("error"); }
   }
   return <>
     <div className="settings-heading"><div><span className="settings-eyebrow">PROFILE</span><h1>Hồ sơ</h1><p>Thông tin được hiển thị trong workspace và các phiên phân tích của bạn.</p></div><span className="settings-status-dot"><i></i> Tài khoản đang hoạt động</span></div>
@@ -102,14 +102,14 @@ function PreferencesSettings() {
   const [error, setError] = useState("");
   useEffect(() => {
     let active = true;
-    request("/api/v1/settings/preferences").then((body) => { if (active) { const next = { ...DEFAULT_PREFS, ...(body.preferences || {}) }; setPrefs(next); setServerPrefs(next); setPreference(next.theme); } }).catch((reason) => { if (active) setError(reason.message || "Không thể tải tuỳ chọn."); }).finally(() => active && setLoading(false));
+    request("/api/v1/settings/preferences").then((body) => { if (active) { const next = { ...DEFAULT_PREFS, ...(body.preferences || {}) }; setPrefs(next); setServerPrefs(next); setPreference(next.theme); } }).catch((reason) => { if (active) setError(reason.message); }).finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [setPreference]);
   const dirty = JSON.stringify(prefs) !== JSON.stringify(serverPrefs);
   async function save(event) {
     event.preventDefault(); setStatus("saving"); setError("");
     try { const body = await request("/api/v1/settings/preferences", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(prefs) }); const next = { ...DEFAULT_PREFS, ...(body.preferences || prefs) }; setPrefs(next); setServerPrefs(next); setPreference(next.theme); setStatus("success"); window.setTimeout(() => setStatus("idle"), 2400); }
-    catch (reason) { setError(reason.message || "Không thể lưu tuỳ chọn."); setStatus("error"); }
+    catch (reason) { setError(reason.message); setStatus("error"); }
   }
   function update(key, value) { setPrefs((current) => ({ ...current, [key]: value })); if (key === "theme") setPreference(value); setStatus("idle"); }
   return <>
@@ -142,18 +142,18 @@ function SecuritySettings() {
   async function loadSessions() {
     setSessionsError("");
     try { const body = await request("/api/v1/auth/sessions"); setSessions(body.sessions ?? []); }
-    catch (reason) { setSessionsError(reason.message || "Không thể tải danh sách thiết bị."); }
+    catch (reason) { setSessionsError(reason.message); }
     finally { setSessionsLoading(false); }
   }
 
   useEffect(() => { loadSessions(); }, []);
 
   async function revokeSession(session) {
-    setConfirm({ title: session.current ? "Đăng xuất thiết bị này?" : "Thu hồi thiết bị này?", description: session.current ? "Bạn sẽ cần đăng nhập lại trên trình duyệt này." : "Thiết bị sẽ không còn truy cập được tài khoản.", action: async () => { try { const result = await request(`/api/v1/auth/sessions/${session.id}`, { method: "DELETE" }); if (result.current) window.location.reload(); else await loadSessions(); } catch (reason) { setSessionsError(reason.message || "Không thể thu hồi thiết bị."); } } });
+    setConfirm({ title: session.current ? "Đăng xuất thiết bị này?" : "Thu hồi thiết bị này?", description: session.current ? "Bạn sẽ cần đăng nhập lại trên trình duyệt này." : "Thiết bị sẽ không còn truy cập được tài khoản.", action: async () => { try { const result = await request(`/api/v1/auth/sessions/${session.id}`, { method: "DELETE" }); if (result.current) window.location.reload(); else await loadSessions(); } catch (reason) { setSessionsError(reason.message); } } });
   }
 
   async function revokeOthers() {
-    setConfirm({ title: "Đăng xuất các thiết bị khác?", description: "Mọi phiên ngoài thiết bị hiện tại sẽ bị thu hồi.", action: async () => { try { await request("/api/v1/auth/sessions/revoke-others", { method: "POST" }); await loadSessions(); } catch (reason) { setSessionsError(reason.message || "Không thể thu hồi các thiết bị khác."); } } });
+    setConfirm({ title: "Đăng xuất các thiết bị khác?", description: "Mọi phiên ngoài thiết bị hiện tại sẽ bị thu hồi.", action: async () => { try { await request("/api/v1/auth/sessions/revoke-others", { method: "POST" }); await loadSessions(); } catch (reason) { setSessionsError(reason.message); } } });
   }
 
   async function confirmAction() { if (!confirm?.action) return; setConfirmBusy(true); try { await confirm.action(); setConfirm(null); } finally { setConfirmBusy(false); } }
@@ -161,6 +161,7 @@ function SecuritySettings() {
   async function save(event) {
     event.preventDefault();
     setError("");
+    if (!form.current_password) { setError("Hãy nhập mật khẩu hiện tại."); return; }
     if (form.new_password.length < 8) { setError("Mật khẩu mới cần ít nhất 8 ký tự."); return; }
     if (form.new_password !== form.confirm_password) { setError("Hai mật khẩu mới chưa khớp."); return; }
     setStatus("saving");
@@ -174,19 +175,19 @@ function SecuritySettings() {
       setStatus("success");
       window.setTimeout(() => setStatus("idle"), 2800);
     } catch (reason) {
-      setError(reason.message || "Không thể đổi mật khẩu lúc này.");
+      setError(reason.message);
       setStatus("error");
     }
   }
 
   return <>
     <div className="settings-heading"><div><span className="settings-eyebrow">SECURITY</span><h1>Bảo mật</h1><p>Kiểm soát cách tài khoản được bảo vệ khi làm việc với dữ liệu.</p></div></div>
-    <form className="settings-card settings-form security-card" onSubmit={save}>
+    <form className="settings-card settings-form security-card" onSubmit={save} noValidate>
       <div className="settings-card-header"><div><h2>Đổi mật khẩu</h2><p>Phiên hiện tại vẫn được giữ, các phiên đăng nhập khác sẽ bị thu hồi.</p></div><span className="settings-info-icon"><Icon name="lock" size={17} /></span></div>
       <div className="settings-fields">
-        <label>Mật khẩu hiện tại<input type="password" autoComplete="current-password" value={form.current_password} onChange={(event) => setForm({ ...form, current_password: event.target.value })} required /></label>
-        <label>Mật khẩu mới<input type="password" autoComplete="new-password" minLength={8} value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} required /><small className="settings-help">Tối thiểu 8 ký tự.</small></label>
-        <label>Xác nhận mật khẩu mới<input type="password" autoComplete="new-password" minLength={8} value={form.confirm_password} onChange={(event) => setForm({ ...form, confirm_password: event.target.value })} required /></label>
+        <label>Mật khẩu hiện tại<input type="password" autoComplete="current-password" value={form.current_password} onChange={(event) => setForm({ ...form, current_password: event.target.value })} aria-required="true" /></label>
+        <label>Mật khẩu mới<input type="password" autoComplete="new-password" value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} aria-required="true" /><small className="settings-help">Tối thiểu 8 ký tự.</small></label>
+        <label>Xác nhận mật khẩu mới<input type="password" autoComplete="new-password" value={form.confirm_password} onChange={(event) => setForm({ ...form, confirm_password: event.target.value })} aria-required="true" /></label>
       </div>
       {error && <div className="settings-error" role="alert">{error}</div>}
       {status === "success" && <div className="settings-success" role="status"><Icon name="check" size={15} /> Đã đổi mật khẩu.</div>}

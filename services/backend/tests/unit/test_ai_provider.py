@@ -225,7 +225,7 @@ def test_reasoning_effort_can_be_omitted(monkeypatch):
     assert "reasoning_effort" not in sent["body"]
 
 
-def test_provider_rejection_reason_is_kept_without_the_key(monkeypatch):
+def test_provider_rejection_reason_is_logged_not_returned(monkeypatch, caplog):
     from io import BytesIO
     from urllib.error import HTTPError
 
@@ -239,8 +239,79 @@ def test_provider_rejection_reason_is_kept_without_the_key(monkeypatch):
     try:
         client.complete("system", "user")
     except ai_provider.ProviderError as exc:
-        assert exc.code == "AI_PROVIDER_HTTP_ERROR"
-        assert "Thinking level MINIMAL is not supported" in str(exc)
-        assert "test-key-123" not in str(exc)
+        assert exc.code == "AI_PROVIDER_HTTP_ERROR" and exc.http_status == 400
+        assert "Thinking level MINIMAL" not in str(exc)
+        assert "Thinking level MINIMAL is not supported" in caplog.text
+        assert "test-key-123" not in caplog.text
     else:
         raise AssertionError("expected ProviderError")
+
+
+def test_a_delivered_non_json_body_is_a_provider_failure_and_not_retried(monkeypatch):
+    ai_provider, client = _gemini_client(monkeypatch, REPORT_QA_AI_RETRIES="1")
+    calls = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return b"<html>gateway page</html>"
+
+    monkeypatch.setattr(ai_provider, "urlopen", lambda request, timeout: (calls.append(1), Response())[1])
+    try:
+        client.complete("system", "user")
+    except ai_provider.ProviderError as exc:
+        assert exc.code == "AI_PROVIDER_BAD_RESPONSE"
+    else:
+        raise AssertionError("expected ProviderError")
+    assert len(calls) == 1
+
+
+def test_tools_mode_stops_at_a_gateway_page_instead_of_asking_the_model_again(monkeypatch):
+    # The HTML body was classed as bad model output and retried for all 7 tool steps.
+    from report_qa.application.document_assistant import run_assistant
+
+    ai_provider, client = _gemini_client(monkeypatch)
+    calls = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return b"<html>gateway page</html>"
+
+    monkeypatch.setattr(ai_provider, "urlopen", lambda request, timeout: (calls.append(1), Response())[1])
+    context = {"pages": [{"page": 1, "text": "x"}], "evidences": [], "chart_regions": []}
+    try:
+        run_assistant("q", context, complete=client.complete, read_chart=lambda key: {})
+    except ai_provider.ProviderError as exc:
+        assert exc.code == "AI_PROVIDER_BAD_RESPONSE"
+    else:
+        raise AssertionError("expected ProviderError")
+    assert len(calls) == 1
+
+
+def test_a_call_gets_the_time_left_as_its_timeout_and_none_once_it_is_used_up(monkeypatch):
+    ai_provider, client = _gemini_client(monkeypatch, REPORT_QA_AI_TIMEOUT_SECONDS="20")
+    timeouts = []
+    _capture_request(monkeypatch, ai_provider)
+    capture = ai_provider.urlopen
+    monkeypatch.setattr(ai_provider, "urlopen", lambda request, timeout: (timeouts.append(timeout), capture(request, timeout))[1])
+
+    client.complete("system", "user", timeout=3)
+    client.complete("system", "user")
+    try:
+        client.complete("system", "user", timeout=0)
+    except ai_provider.ProviderError as exc:
+        assert exc.code == "AI_PROVIDER_TIMEOUT"
+    else:
+        raise AssertionError("expected ProviderError")
+    assert timeouts[0] <= 3 and timeouts[1] == 20 and len(timeouts) == 2

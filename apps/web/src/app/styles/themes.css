@@ -17,6 +17,17 @@
   --gold-soft: #fef9c3;
   --green-soft: #ecfdf5;
   --red-soft: #fff1f2;
+  /* Accent for navigation, links and selected rows. */
+  --accent: #0369a1;
+  --accent-strong: #075985;
+  --accent-soft: #eff6ff;
+  --accent-border: #bae6fd;
+  /* High-contrast fill for toasts, primary buttons and the user's bubble.
+     Text colours (--ink) flip with the theme, so they must never be fills. */
+  --inverse-bg: #0f172a;
+  --inverse-fg: #ffffff;
+  --inverse-hover: #1e293b;
+  --on-gold: #ffffff;
   --shadow-1: var(--shadow-sm);
   --shadow-2: var(--shadow-md);
   font-family: var(--font-sans);
@@ -32,6 +43,15 @@
   --gold-soft: rgba(250, 204, 21, .12);
   --green-soft: rgba(16, 185, 129, .14);
   --red-soft: rgba(239, 68, 68, .14);
+  --green: #34d399;
+  --accent: #7dd3fc;
+  --accent-strong: #bae6fd;
+  --accent-soft: rgba(14, 165, 233, .14);
+  --accent-border: #164e63;
+  --inverse-bg: #e2e8f0;
+  --inverse-fg: #0f172a;
+  --inverse-hover: #cbd5e1;
+  --on-gold: #0f172a;
 }
 
 body { font-family: var(--font-sans); }
@@ -75,6 +95,6 @@ code, pre, kbd, samp,
 [data-theme="dark"] .session-button:hover,
 [data-theme="dark"] .document-list > button:hover { background: rgba(51, 65, 85, .58); }
 
-.theme-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; border: 1px solid var(--border); border-radius: 999px; padding: 0 10px; background: var(--surface); color: var(--ink-soft); font-size: 10px; font-weight: 700; cursor: pointer; }
+.theme-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; border: 1px solid var(--border); border-radius: 999px; padding: 0 10px; background: var(--surface); color: var(--ink-soft); font-size: var(--text-sm); font-weight: 700; cursor: pointer; }
 .theme-toggle:hover { border-color: var(--color-cta); color: var(--color-cta); }
 .theme-toggle span { text-transform: capitalize; }

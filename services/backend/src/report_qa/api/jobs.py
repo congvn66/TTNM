@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 
 from report_qa.config import settings
 from report_qa.infrastructure.postgres.job_queue import JobQueueError, PostgresJobQueue
 from .auth import owner_id_for_request
+from .user_messages import user_error
 
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
@@ -17,11 +18,11 @@ RUNTIME_OWNER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 def queue() -> PostgresJobQueue:
     if settings.persistence_backend != "postgres":
-        raise HTTPException(status_code=503, detail={"code": "DURABLE_QUEUE_DISABLED", "message": "Durable queue cần PostgreSQL."})
+        raise user_error(503, "DURABLE_QUEUE_DISABLED")
     try:
         return PostgresJobQueue(settings.database_url)
     except JobQueueError as error:
-        raise HTTPException(status_code=503, detail={"code": "QUEUE_UNAVAILABLE", "message": str(error)}) from error
+        raise user_error(503, "QUEUE_UNAVAILABLE") from error
 
 
 @router.get("")
@@ -33,7 +34,7 @@ def list_jobs(request: Request, status: str | None = Query(default=None), limit:
 def get_job(job_id: UUID, request: Request):
     item = queue().get(owner_id=owner_id_for_request(request), job_id=job_id)
     if item is None:
-        raise HTTPException(status_code=404, detail={"code": "JOB_NOT_FOUND", "message": "job not found"})
+        raise user_error(404, "JOB_NOT_FOUND")
     return {"job": item}
 
 
@@ -45,7 +46,7 @@ def get_job_events(job_id: UUID, request: Request, limit: int = Query(default=10
 @router.post("/{job_id}/cancel")
 def cancel_job(job_id: UUID, request: Request):
     if not queue().cancel(owner_id=owner_id_for_request(request), job_id=job_id):
-        raise HTTPException(status_code=409, detail={"code": "JOB_NOT_CANCELLABLE", "message": "job is not queued or running"})
+        raise user_error(409, "JOB_NOT_CANCELLABLE")
     return {"job_id": str(job_id), "status": "cancelled"}
 
 
@@ -53,5 +54,5 @@ def cancel_job(job_id: UUID, request: Request):
 def retry_job(job_id: UUID, request: Request):
     item = queue().retry(owner_id=owner_id_for_request(request), job_id=job_id)
     if item is None:
-        raise HTTPException(status_code=409, detail={"code": "JOB_NOT_RETRYABLE", "message": "job is not in failed state"})
+        raise user_error(409, "JOB_NOT_RETRYABLE")
     return {"job": item}

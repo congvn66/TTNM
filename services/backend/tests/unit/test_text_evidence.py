@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
 from report_qa.application.document_assistant import run_assistant
 from report_qa.application.text_evidence import match_quote, quote_bbox, suggest_quote
 
@@ -24,8 +26,41 @@ def test_dash_and_quote_styles_do_not_break_exact_match():
 
 
 def test_small_copy_error_snaps_to_the_real_sentence():
-    match = match_quote(PAGE, "Biểu đồ đường thể hiện biến động của 5 khu vực A đến E")
+    match = match_quote(PAGE, "Biểu đồ đường thể hiện biến đông của năm khu vưc A đến E")
     assert match == {"quote": "Biểu đồ đường thể hiện biến động của năm khu vực A đến E.", "match": "snapped"}
+
+
+FACTS = "Doanh thu thuần năm 2024 đạt 1.250 tỷ đồng, tăng 15% so với cùng kỳ. Lợi nhuận sau thuế giảm 8% so với năm trước."
+
+
+@pytest.mark.parametrize("quote", [
+    "Lợi nhuận sau thuế tăng 8% so với năm trước.",  # direction flipped
+    "Doanh thu thuần năm 2024 đạt 2.250 tỷ đồng, tăng 15% so với cùng kỳ.",  # number changed
+    "Lợi nhuận sau thuế giảm 18% so với năm trước.",
+    "Lợi nhuận sau thuế không giảm 8% so với năm trước.",  # negation added
+    "Biểu đồ đường thể hiện biến động của 5 khu vực A đến E",  # a digit is not the word it replaces
+])
+def test_a_snap_never_changes_a_number_or_a_polarity_word(quote):
+    assert match_quote(FACTS + "\n" + PAGE, quote) is None
+
+
+@pytest.mark.parametrize("quote", [
+    "Lợi nhuận trước thuế năm 2023 đạt 1.250 tỷ đồng.",  # a word swapped: trước for sau
+    "Chi phí thuần năm 2023 tăng 8% so với năm trước.",  # a subject swapped: Chi phí for Doanh thu
+])
+def test_a_quote_about_another_subject_does_not_snap(quote):
+    page = "Lợi nhuận sau thuế năm 2023 đạt 1.250 tỷ đồng. Doanh thu thuần năm 2023 tăng 8% so với năm trước."
+    assert match_quote(page, quote) is None
+
+
+def test_spacing_and_punctuation_slips_snap():
+    page = "Doanh thu thuần năm 2023 tăng 8% so với năm trước."
+    assert match_quote(page, "Doanh thu thuần năm 2023 tăng 8 % so với năm trước")["quote"] == page
+
+
+def test_copy_noise_around_unchanged_numbers_still_snaps():
+    match = match_quote(FACTS, "Lợi nhuận sau thue giảm 8% so vói năm trước")
+    assert match == {"quote": "Lợi nhuận sau thuế giảm 8% so với năm trước.", "match": "snapped"}
 
 
 def test_paraphrase_or_invented_text_is_rejected_with_a_hint():
@@ -45,6 +80,28 @@ def test_quote_is_located_on_the_pdf_page():
     assert quote_bbox(PDF, 1, "không có trong tài liệu này") is None
     assert quote_bbox(PDF, 99, line) is None
 
+
+
+def test_repeated_quote_box_covers_only_the_first_occurrence(tmp_path):
+    import pymupdf
+
+    sentence = "Doanh thu tăng 15 phần trăm trong năm 2024."
+    paragraph = "Doanh thu tăng mười lăm phần trăm trong năm hai nghìn không trăm hai mươi bốn ở mọi khu vực"
+    path = tmp_path / "repeat.pdf"
+    with pymupdf.open() as pdf:
+        page = pdf.new_page()
+        page.insert_text((50, 80), sentence, fontname="helv")
+        page.insert_text((50, 760), sentence, fontname="helv")
+        page.insert_textbox(pymupdf.Rect(50, 200, 250, 300), paragraph)
+        page.insert_textbox(pymupdf.Rect(50, 500, 250, 600), paragraph)
+        pdf.save(path)
+    with pymupdf.open(path) as pdf:
+        sentence, paragraph = (" ".join(pdf[0].get_textbox(rect).split()) for rect in
+                               (pymupdf.Rect(40, 60, 560, 90), pymupdf.Rect(40, 190, 260, 310)))
+    line = quote_bbox(path, 1, sentence)
+    assert line[3] < 0.15
+    box = quote_bbox(path, 1, paragraph)
+    assert 0.2 < box[1] < box[3] < 0.45
 
 def context():
     return {
@@ -96,8 +153,9 @@ def test_flow_returns_located_text_and_data_evidence(tmp_path, monkeypatch):
     key = base["evidence_batch"]["evidences"][0]["evidence_key"]
     session = {"messages": []}
     message = flow.answer_document(
-        session, {"id": "doc", "extraction_name": "x", "storage_name": "x"}, "?", "trace", [], {"sessions": {}},
-        overlay=extraction_with_evidence_revisions, snapshot=snapshot_answer_revision,
+        session, {"id": "doc", "extraction_name": "x", "storage_name": "x", "extraction_status": "ready",
+                  "extraction_run_id": base["evidence_batch"]["extraction_run_id"]}, "?", "trace", [], {"sessions": {}},
+        overlay=lambda document, extraction: extraction_with_evidence_revisions(document, extraction, base), snapshot=snapshot_answer_revision,
         complete=sequence({"action": "answer", "answer": "Báo cáo doanh thu 2024; Q1 là 1250.50.",
                            "evidence_keys": [key], "sources": [{"page": 1, "quote": quote}]}),
     )["assistant_message"]

@@ -1,14 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { API, request } from "../../shared/api/client.js";
+import { API, CLIENT_ERRORS, request } from "../../shared/api/client.js";
 import { useTheme } from "../theme/ThemeProvider.jsx";
 import { EvidenceList, ScriptCard } from "./ToolAnswer.jsx";
+import { AnswerText } from "./AnswerText.jsx";
+import { Icon } from "./Icon.jsx";
+import { EvidenceDrawer } from "./EvidenceDrawer.jsx";
+import { distinctFormulas, formatNumber } from "./format.js";
+import { quoteBoxes } from "./pdfHighlight.js";
 
 const SESSION_KEY = "sourcelens-active-session";
 const DOCUMENT_KEY = "sourcelens-active-document";
 const SESSION_SNAPSHOT_KEY = "sourcelens-session-snapshot-v1";
 const SESSION_SNAPSHOT_TTL_MS = 60_000;
+// Session list refreshes of this page, run one after another (see refresh).
+let sessionListQueue = Promise.resolve();
+const NOTICE_TIMEOUT_MS = 6_000;
 
 function readSessionSnapshot() {
   try {
@@ -24,6 +32,84 @@ function readSessionSnapshot() {
   }
 }
 
+// Questions the server has not saved yet: the one still being sent and the
+// ones that failed. JSON mode answers inside the request and saves nothing
+// until it ends, so after a reload only this tab knows them. Each keeps its
+// Idempotency-Key, so sending it again returns the answer the server may have
+// saved meanwhile, and the question it was asked after, so it keeps its place.
+// After a reload a question still being sent is sent again while it is young;
+// any other one comes back as a failed question with its retry button.
+const UNSAVED_QUESTIONS_KEY = "sourcelens-unsaved-questions-v1";
+const RESEND_AFTER_RELOAD_MS = 10 * 60_000;
+
+function readUnsavedQuestions() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(UNSAVED_QUESTIONS_KEY) || "[]");
+    return Array.isArray(value) ? value.filter((item) => item?.id && item.question && item.key && item.session_id && item.document_id) : [];
+  } catch { return []; }
+}
+
+function updateUnsavedQuestions(change) {
+  try {
+    const next = change(readUnsavedQuestions());
+    if (next.length) sessionStorage.setItem(UNSAVED_QUESTIONS_KEY, JSON.stringify(next));
+    else sessionStorage.removeItem(UNSAVED_QUESTIONS_KEY);
+  } catch { /* storage disabled: a reload then loses only the unsaved questions */ }
+}
+
+/** The two chat messages of a question that was not saved. */
+function failedTurn(item) {
+  const scope = { session_id: item.session_id, document_id: item.document_id };
+  return [
+    { id: item.id, role: "user", body: item.question, ...scope, after_question_id: item.after ?? null, pending: false, failed: true, status: "failed" },
+    { id: item.answer_id, role: "assistant", reply_to_message_id: item.id, body: item.error || CLIENT_ERRORS.unknown, ...scope, pending: false, failed: true, status: "failed", structured_answer: null,
+      retry: { question: item.question, idempotencyKey: item.key, scope, after: item.after ?? null, replaces: [item.id, item.answer_id] } },
+  ];
+}
+
+/**
+ * Chat order: saved questions in server order, each followed by its replies.
+ * A question not saved yet sits right after the question that was last when
+ * it was sent; one without such a question goes last.
+ */
+function orderConversation(saved, unsaved) {
+  const all = [...saved, ...unsaved];
+  const replies = new Map();
+  for (const message of all) {
+    if (message.role === "assistant" && message.reply_to_message_id) replies.set(message.reply_to_message_id, [...(replies.get(message.reply_to_message_id) ?? []), message]);
+  }
+  const questionIds = new Set(all.filter((message) => message.role === "user").map((message) => message.id));
+  const unsavedAfter = new Map();
+  for (const message of unsaved) {
+    if (message.role !== "user") continue;
+    const anchor = questionIds.has(message.after_question_id) ? message.after_question_id : "end";
+    unsavedAfter.set(anchor, [...(unsavedAfter.get(anchor) ?? []), message]);
+  }
+  // A question's turn runs until the next question, so replies without a
+  // link (older data) stay with it; unsaved questions follow the whole turn.
+  const ordered = [];
+  let openTurn = null;
+  const closeTurn = () => {
+    const question = openTurn;
+    openTurn = null;
+    (unsavedAfter.get(question) ?? []).forEach(place);
+  };
+  function place(message) {
+    if (message.role === "assistant" && questionIds.has(message.reply_to_message_id)) return;
+    if (message.role === "user") closeTurn();
+    ordered.push(message);
+    if (message.role !== "user") return;
+    ordered.push(...(replies.get(message.id) ?? []));
+    openTurn = message.id;
+  }
+  saved.forEach(place);
+  closeTurn();
+  (unsavedAfter.get("end") ?? []).forEach(place);
+  closeTurn();
+  unsaved.filter((message) => message.role !== "user").forEach(place);
+  return ordered;
+}
+
 function writeSessionSnapshot(sessions) {
   try {
     // Keep the fast-start cache to workspace/document metadata. Chat history is
@@ -35,36 +121,36 @@ function writeSessionSnapshot(sessions) {
   }
 }
 
-function Icon({ name, size = 16 }) {
-  const paths = {
-    add: <path d="M12 5v14M5 12h14" />,
-    arrowLeft: <><path d="m15 18-6-6 6-6" /><path d="M9 12h10" /></>,
-    arrowRight: <><path d="m9 18 6-6-6-6" /><path d="M5 12h10" /></>,
-    close: <path d="m6 6 12 12M18 6 6 18" />,
-    chevronDown: <path d="m6 9 6 6 6-6" />,
-    copy: <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
-    fit: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
-    folder: <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />,
-    grid: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
-    link: <><path d="M10 13a5 5 0 0 0 7.1.1l1.4-1.4a5 5 0 0 0-7.1-7.1L10 6" /><path d="M14 11a5 5 0 0 0-7.1-.1l-1.4 1.4a5 5 0 0 0 7.1 7.1L14 18" /></>,
-    more: <><circle cx="5" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="19" cy="12" r="1" fill="currentColor" /></>,
-    edit: <><path d="m4 20 4.2-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z" /><path d="m13.8 7.2 3 3" /></>,
-    trash: <><path d="M4 7h16M10 11v5M14 11v5M6 7l1 13h10l1-13M9 7V4h6v3" /></>,
-    user: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c.6-3.4 3-5.2 7-5.2s6.4 1.8 7 5.2" /></>,
-    logout: <><path d="M10 5H5v14h5" /><path d="m14 8 4 4-4 4M8 12h10" /></>,
-    moon: <path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z" />,
-    minus: <path d="M5 12h14" />,
-    plus: <path d="M12 5v14M5 12h14" />,
-    refresh: <><path d="M20 11a8 8 0 0 0-14.7-3L4 10" /><path d="M4 5v5h5" /><path d="M4 13a8 8 0 0 0 14.7 3L20 14" /><path d="M20 19v-5h-5" /></>,
-    rotate: <><path d="M4 9a8 8 0 0 1 13.7-3L20 8" /><path d="M20 3v5h-5" /><path d="M20 15a8 8 0 0 1-13.7 3L4 16" /><path d="M4 21v-5h5" /></>,
-    send: <><path d="m4 4 16 8-16 8 3-8z" /><path d="M7 12h13" /></>,
-    settings: <><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" /><circle cx="12" cy="12" r="3.5" /></>,
-    spark: <><path d="m12 3 1.3 5.7L19 10l-5.7 1.3L12 17l-1.3-5.7L5 10l5.7-1.3z" /><path d="m19 16 .6 2.4L22 19l-2.4.6z" /></>,
-    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></>,
-    trace: <><path d="M5 5h4v4H5zM15 15h4v4h-4z" /><path d="M9 7h3a3 3 0 0 1 3 3v5" /><path d="M12 15h3" /></>,
-    upload: <><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 20h14" /></>,
-  };
-  return <svg className="ui-icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
+// Why an edit was not carried over to a new reading that is ready. (A failed
+// reading carries nothing over: the edits stay in document.pending_edits.)
+const EDIT_NOT_KEPT_REASONS = {
+  NOT_IN_NEW_READING: "không còn trong lần đọc mới",
+  LOCATION_CHANGED: "vị trí đã thay đổi",
+};
+
+/** What the latest re-extraction did, once its new reading is ready. */
+function rereadSummary(document) {
+  const run = document.extraction_history?.at(-1);
+  const flagged = run?.affected_message_ids?.length ?? 0;
+  return `Đã đọc lại ${document.file_name}: ${document.numeric_evidence_count ?? 0} số liệu.${carriedEditsSummary(run)}${flagged ? ` ${flagged} câu trả lời dùng số đã thay đổi cần cập nhật.` : ""}`;
+}
+
+/** What happened to the user's edits in the latest re-extraction. */
+function carriedEditsSummary(run) {
+  const kept = run?.edits_carried_over;
+  const lost = run?.edits_not_carried_over;
+  if (!Array.isArray(kept) || !Array.isArray(lost) || (!kept.length && !lost.length)) return "";
+  const parts = [];
+  if (kept.length) parts.push(`Giữ lại ${kept.length} số đã sửa`);
+  if (lost.length) {
+    const counts = new Map();
+    for (const item of lost) {
+      const reason = EDIT_NOT_KEPT_REASONS[item.code] ?? "không khớp lần đọc mới";
+      counts.set(reason, (counts.get(reason) ?? 0) + 1);
+    }
+    parts.push([...counts].map(([reason, count]) => `${count} số không giữ được vì ${reason}`).join(", "));
+  }
+  return ` ${parts.join("; ")}.`;
 }
 
 function formatBytes(value = 0) {
@@ -83,35 +169,11 @@ function processingLabel(status) {
   }[status] ?? "Đang kiểm tra");
 }
 
-const ERROR_COPY = {
-  AUTH_REQUIRED: "Phiên đăng nhập đã hết. Vui lòng đăng nhập lại.",
-  SESSION_TITLE_REQUIRED: "Hãy nhập tên cho phiên làm việc.",
-  SESSION_NOT_FOUND: "Không tìm thấy phiên làm việc này. Hãy tải lại danh sách.",
-  DOCUMENT_NOT_FOUND: "Không tìm thấy tài liệu này. Hãy tải lại danh sách.",
-  DATABASE_UNAVAILABLE: "Dịch vụ dữ liệu tạm thời không sẵn sàng. Hãy thử lại sau.",
-  INVALID_PDF: "Tệp không phải PDF hợp lệ hoặc không thể đọc được.",
-  PDF_TOO_LARGE: "Tệp PDF vượt quá giới hạn 100 MiB.",
-  PDF_TOO_MANY_PAGES: "Tài liệu vượt quá số trang cho phép.",
-  EXTRACTION_NOT_READY: "Tài liệu đang được chuẩn bị. Bạn có thể đặt câu hỏi khi tài liệu sẵn sàng.",
-  AI_PROVIDER_TIMEOUT: "AI phản hồi quá lâu. Bạn có thể thử gửi lại câu hỏi.",
-  AI_PROVIDER_UNAVAILABLE: "Không kết nối được tới dịch vụ AI. Kiểm tra mạng hoặc thử lại sau.",
-  AI_MODEL_UNAVAILABLE: "Mô hình AI hiện không khả dụng. Kiểm tra lại cấu hình model.",
-  AI_PROVIDER_HTTP_ERROR: "Dịch vụ AI từ chối yêu cầu. Kiểm tra API key và giới hạn sử dụng.",
-  AI_NOT_CONFIGURED: "Chưa cấu hình nhà cung cấp AI cho môi trường này.",
-  AI_INVALID_OUTPUT: "AI trả về dữ liệu không đúng định dạng. Hãy thử lại câu hỏi.",
-  AI_UNGROUNDED_CITATION: "AI trả về trích dẫn không nằm trong tài liệu. Hãy thử lại câu hỏi.",
-  AI_UNSUPPORTED_EVIDENCE: "AI chưa xác minh được evidence trong tài liệu. Hãy thử lại câu hỏi.",
-  QUEUE_UNAVAILABLE: "Hàng đợi xử lý chưa sẵn sàng. Hãy khởi động worker hoặc thử lại sau.",
-};
-
+// Errors from request() already carry the text to show: the server's
+// detail.message, or the client's own text for network problems.
 function userFacingError(value) {
-  const raw = typeof value === "string" ? value : value?.message;
-  if (!raw) return "Không thể hoàn tất thao tác. Hãy thử lại.";
-  const code = Object.keys(ERROR_COPY).find((key) => raw.includes(key));
-  if (code) return ERROR_COPY[code];
-  if (raw.includes("Không kết nối được tới backend")) return "Không thể kết nối tới máy chủ. Hãy thử lại sau ít phút.";
-  if (raw.includes("Yêu cầu quá thời gian chờ")) return "Máy chủ phản hồi quá lâu. Hãy thử lại sau ít phút.";
-  return raw.replace(/^\w+_[A-Z_]+:\s*/, "").trim();
+  const text = typeof value === "string" ? value : value?.message;
+  return text?.trim() || CLIENT_ERRORS.unknown;
 }
 
 function normalizedBbox(value) {
@@ -120,20 +182,6 @@ function normalizedBbox(value) {
   const [x0, y0, x1, y1] = raw.map((item) => Math.max(0, Math.min(1, Number(item))));
   if (x1 <= x0 || y1 <= y0) return null;
   return [x0, y0, x1, y1];
-}
-
-// PDF.js represents affine transforms as [a, b, c, d, e, f]. Keeping this
-// tiny operation local avoids pulling the whole PDF.js runtime into the
-// initial bundle just to derive a citation box from the already-rendered text.
-function multiplyTransform(first, second) {
-  return [
-    first[0] * second[0] + first[2] * second[1],
-    first[1] * second[0] + first[3] * second[1],
-    first[0] * second[2] + first[2] * second[3],
-    first[1] * second[2] + first[3] * second[3],
-    first[0] * second[4] + first[2] * second[5] + first[4],
-    first[1] * second[4] + first[3] * second[5] + first[5],
-  ];
 }
 
 function presentationAnswer(message) {
@@ -182,29 +230,7 @@ function JobCenterDrawer({ jobs, busy, onClose, onAction }) {
   return <section className="job-center-drawer" role="dialog" aria-modal="true" aria-labelledby="job-center-title">
     <header className="job-center-header"><div><span className="audit-kicker">TRUNG TÂM TÁC VỤ</span><h3 id="job-center-title">Tác vụ đang chạy</h3><small>Theo dõi việc chuẩn bị tài liệu và câu trả lời</small></div><button type="button" aria-label="Đóng trung tâm tác vụ" onClick={onClose}><Icon name="close" size={15} /></button></header>
     <div className="job-center-summary"><span><i></i>{active.length} đang xử lý</span><small>Trạng thái được lưu bền theo tài khoản</small></div>
-    <div className="job-center-list">{jobs.length ? jobs.map((job) => <article className="job-center-row" key={job.id}><div className={`job-center-status ${job.status}`}><span></span></div><div className="job-center-main"><strong>{["document_extraction", "extract_document"].includes(job.kind) ? "Chuẩn bị tài liệu" : ["answer_generation", "generate_answer"].includes(job.kind) ? "Tạo câu trả lời" : "Tác vụ đang chạy"}</strong><small>{job.status === "queued" ? "Đang chờ xử lý" : job.status === "running" ? "Đang xử lý" : job.status === "failed" ? "Cần thử lại" : "Đã hoàn tất"}{job.error_code ? ` · ${job.error_code}` : ""}</small></div><div className="job-center-actions">{["queued", "running"].includes(job.status) && <button type="button" onClick={() => onAction(job, "cancel")} disabled={busy}>Huỷ</button>}{job.status === "failed" && <button type="button" onClick={() => onAction(job, "retry")} disabled={busy}>Thử lại</button>}</div></article>) : <div className="job-center-empty"><span>✓</span><p>Không có tác vụ gần đây.</p><small>Khi tải PDF hoặc hỏi AI, trạng thái sẽ xuất hiện ở đây.</small></div>}</div>
-  </section>;
-}
-
-// What the number is: table row and column, or chart category and series.
-function evidenceName(evidence) {
-  const { row_header: row, column_header: column } = evidence.table_locator ?? {};
-  const { category_label: category, series_label: series } = evidence.chart_read ?? {};
-  return [row, column, category, series].filter(Boolean).join(" · ");
-}
-
-function EvidenceDrawer({ data, busy, onClose, onFocus, onSave }) {
-  const [editingKey, setEditingKey] = useState(null);
-  const [value, setValue] = useState("");
-  const [reason, setReason] = useState("");
-  if (!data) return null;
-  const beginEdit = (evidence) => { setEditingKey(evidence.evidence_key); setValue(evidence.current_numeric_value ?? ""); setReason(""); };
-  return <section className="evidence-drawer" role="dialog" aria-label="Dữ liệu số và lịch sử sửa">
-    <header className="audit-drawer-header"><div><span className="audit-kicker">DATA REVISION</span><h3>Dữ liệu đầu vào</h3><small>revision {data.data_revision ?? 0} · giá trị gốc không bị ghi đè</small></div><button aria-label="Đóng dữ liệu" onClick={onClose}><Icon name="close" size={15} /></button></header>
-    <div className="evidence-drawer-body">{data.evidences?.length ? data.evidences.map((evidence) => <article className="evidence-record" key={evidence.evidence_key}>
-      <button className="evidence-record-main" onClick={() => onFocus(evidence)}><span>p.{evidence.page_number} · {evidence.method_label}</span><b>{evidence.current_numeric_value ?? evidence.raw_text ?? "Chưa đọc được"}</b>{evidenceName(evidence) && <small>{evidenceName(evidence)}</small>}<small>Gốc: {evidence.original_numeric_value ?? evidence.raw_text ?? "chưa xác định"} · {evidence.revision_count} revision{evidence.data_status && evidence.data_status !== "valid" ? " · Cần kiểm tra" : ""}</small><code>{evidence.evidence_key}</code></button>
-      {editingKey === evidence.evidence_key ? <form className="evidence-edit-form" onSubmit={(event) => { event.preventDefault(); onSave(evidence, value, reason).then(() => setEditingKey(null)).catch(() => {}); }}><label>Giá trị mới<input autoFocus value={value} onChange={(event) => setValue(event.target.value)} required /></label><label>Lý do sửa<textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength="3" required placeholder="Ví dụ: Đối chiếu lại PDF gốc" /></label><div><button type="button" onClick={() => setEditingKey(null)}>Hủy</button><button type="submit" disabled={busy}>Lưu revision</button></div></form> : <button className="evidence-edit-button" onClick={() => beginEdit(evidence)} disabled={busy}>Sửa số</button>}
-    </article>) : <p className="evidence-empty">Chưa có số liệu trích xuất để sửa.</p>}</div>
+    <div className="job-center-list">{jobs.length ? jobs.map((job) => <article className="job-center-row" key={job.id}><div className={`job-center-status ${job.status}`}><span></span></div><div className="job-center-main"><strong>{["document_extraction", "extract_document"].includes(job.kind) ? "Chuẩn bị tài liệu" : ["answer_generation", "generate_answer"].includes(job.kind) ? "Tạo câu trả lời" : "Tác vụ đang chạy"}</strong><small>{job.status === "queued" ? "Đang chờ xử lý" : job.status === "running" ? "Đang xử lý" : job.status === "failed" ? "Cần thử lại" : "Đã hoàn tất"}</small></div><div className="job-center-actions">{["queued", "running"].includes(job.status) && <button type="button" onClick={() => onAction(job, "cancel")} disabled={busy}>Huỷ</button>}{job.status === "failed" && <button type="button" onClick={() => onAction(job, "retry")} disabled={busy}>Thử lại</button>}</div></article>) : <div className="job-center-empty"><span>✓</span><p>Không có tác vụ gần đây.</p><small>Khi tải PDF hoặc hỏi AI, trạng thái sẽ xuất hiện ở đây.</small></div>}</div>
   </section>;
 }
 
@@ -220,32 +246,82 @@ function RetrievalExcerpt({ answer }) {
   </section>;
 }
 
-function StructuredAnswer({ answer, fallback, onCitation }) {
+function StructuredAnswer({ answer, fallback, onCitation, evidenceByKey, busy, onAsk }) {
   if (answer?.pending) return <div className="typing-indicator" aria-live="polite"><span className="typing-dots"><i></i><i></i><i></i></span><span>Đang tạo câu trả lời</span></div>;
   if (!answer && typeof fallback === "string" && fallback.startsWith("Không thể tạo câu trả lời:")) return <div className="answer-failure" role="alert"><Icon name="refresh" size={14} /><span>{fallback}</span></div>;
   if (!answer) return <p>{fallback}</p>;
   if (answer.presentation === "retrieval_excerpt") return <div className="structured-answer retrieval-answer">
-    <p className="answer-lead">{answer.answer}</p>
+    <AnswerText text={answer.answer} />
     {answer.summary && <p className="answer-summary">{answer.summary}</p>}
     <RetrievalExcerpt answer={answer} />
     {answer.warnings?.filter(Boolean).length > 0 && <div className="answer-status-note"><Icon name="trace" size={13} /><span>{answer.warnings.filter(Boolean)[0]}</span></div>}
   </div>;
   const warnings = answer.warnings?.filter(Boolean) ?? [];
+  // A clarifying question offers answers; choosing one asks it as the next question.
+  const options = (answer.options ?? []).filter((option) => typeof option === "string" && option.trim());
   return <div className="structured-answer">
-    <p className="answer-lead">{answer.answer}</p>
-    {answer.evidence?.length > 0 && <EvidenceList items={answer.evidence} onCitation={onCitation} />}
+    <AnswerText text={answer.answer} />
+    {options.length > 0 && onAsk && <div className="answer-options" role="group" aria-label="Chọn một câu trả lời">{options.map((option) => <button type="button" key={option} disabled={busy} onClick={() => onAsk(option)}>{option}</button>)}</div>}
+    {answer.evidence?.length > 0 && <EvidenceList items={answer.evidence} evidenceByKey={evidenceByKey} onCitation={onCitation} />}
     {answer.summary && <p className="answer-summary">{answer.summary}</p>}
-    {answer.claims?.length > 0 && <section className="answer-section answer-claims"><h4>Claims và căn cứ</h4>{answer.claims.map((claim, index) => <div className="claim-card" key={`${claim.claim}-${index}`}>
+    {answer.claims?.length > 0 && <section className="answer-section answer-claims"><h4>Nhận định và căn cứ</h4>{answer.claims.map((claim, index) => <div className="claim-card" key={`${claim.claim}-${index}`}>
       <p>{claim.claim}</p>
-      {claim.evidence_quotes?.map((quote, quoteIndex) => <button className="evidence-quote" key={`${quote}-${quoteIndex}`} onClick={() => onCitation?.(claim.evidence_pages?.[quoteIndex] ?? claim.evidence_pages?.[0], quote)}><span className="evidence-quote-label"><Icon name="link" size={12} /> Evidence</span><span>“{quote}”</span></button>)}
+      {claim.evidence_quotes?.map((quote, quoteIndex) => <button className="evidence-quote" key={`${quote}-${quoteIndex}`} onClick={() => onCitation?.(claim.evidence_pages?.[quoteIndex] ?? claim.evidence_pages?.[0], quote)}><span className="evidence-quote-label"><Icon name="link" size={12} /> Trích dẫn</span><span>“{quote}”</span></button>)}
       {claim.evidence_pages?.length > 0 && <div className="evidence-pages">{claim.evidence_pages.map((page) => <button className="citation" key={page} onClick={() => onCitation?.(page, claim.evidence_quotes?.[0] ?? "")}><Icon name="link" size={12} /> Trang {page}</button>)}</div>}
     </div>)}</section>}
     {answer.sections?.map((section, index) => <section className="answer-section" key={`${section.heading}-${index}`}><h4>{section.heading}</h4>{section.points?.filter(Boolean).length > 0 && <ul>{section.points.filter(Boolean).map((point, pointIndex) => <li key={pointIndex}>{point}</li>)}</ul>}</section>)}
-    {answer.formulas?.length > 0 && <section className="answer-section"><h4>Công thức và tính toán</h4>{answer.formulas.map((formula, index) => formula.inputs ? <ScriptCard formula={formula} onCitation={onCitation} key={`script-${index}`} /> : <div className="formula-card" key={`${formula.name}-${index}`}><strong>{formula.name}</strong><code>{formula.expression}</code><span>Thay số: {formula.substitution || "Chưa đủ toán hạng"}</span><b>Kết quả: {formula.result ?? "Không xác định"}{formula.unit ? ` ${formula.unit}` : ""}</b>{["verified", "succeeded"].includes(formula.calculation?.status) ? <em className="formula-verified">✓ Calculator: {formula.calculation.computed_result} {formula.calculation.unit}</em> : <em className="formula-unverified">Calculator: {formula.calculation?.status ?? "chưa chạy"}</em>}</div>)}</section>}
+    {answer.formulas?.length > 0 && <section className="answer-section"><h4>Công thức và tính toán</h4>{distinctFormulas(answer.formulas).map((formula, index) => formula.inputs ? <ScriptCard formula={formula} onCitation={onCitation} key={`script-${index}`} /> : <div className="formula-card" key={`${formula.name}-${index}`}><strong>{formula.name}</strong><code>{formula.expression}</code><span>Thay số: {formula.substitution || "Chưa đủ toán hạng"}</span><b>Kết quả: {formatNumber(formula.result) || "Không xác định"}{formula.unit ? ` ${formula.unit}` : ""}</b>{["verified", "succeeded"].includes(formula.calculation?.status) ? <em className="formula-verified">✓ Đã tính lại: {formatNumber(formula.calculation.computed_result)}{formula.calculation.unit ? ` ${formula.calculation.unit}` : ""}</em> : <em className="formula-unverified">Chưa tính lại được</em>}</div>)}</section>}
     {answer.tables?.map((table, index) => <section className="answer-section" key={`${table.title}-${index}`}><h4>{table.title}</h4><div className="answer-table-wrap"><table className="answer-table"><thead><tr>{table.columns?.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{table.rows?.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div></section>)}
     {warnings.length > 0 && <div className="answer-warnings"><strong>Lưu ý</strong><ul>{warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}
   </div>;
 }
+
+function ChatMessage({ message, busy, evidenceByKey, onCitation, onStop, onRetry, onEditQuestion, onCopy, onAsk }) {
+  const isUser = message.role === "user";
+  const failed = message.failed || message.status === "failed";
+  const processing = !isUser && message.status === "processing";
+  const done = !isUser && message.body && !message.pending && !failed && !processing;
+  return <article data-message-id={message.id} className={`message ${message.role} ${failed ? "failed" : ""}`}>
+    <span className="message-avatar" aria-hidden="true">{isUser ? "B" : "S"}</span>
+    <div>
+      <small>{isUser ? "Bạn" : "Trợ lý SourceLens"}</small>
+      {!isUser && message.failed
+        ? <div className="answer-failure" role="alert"><Icon name="refresh" size={14} /><span>{message.body}</span></div>
+        : <StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} evidenceByKey={evidenceByKey} onCitation={onCitation} busy={busy} onAsk={onAsk} />}
+      {processing && <button className="retry-answer-button" type="button" onClick={() => onStop(message)}>Dừng trả lời</button>}
+      {failed && !isUser && <button className="retry-answer-button" type="button" onClick={() => onRetry(message)} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}
+      {isUser && !message.pending && <button className="message-icon-button" type="button" aria-label="Sửa câu hỏi" title="Sửa câu hỏi" onClick={() => onEditQuestion(message.body)}><Icon name="edit" size={14} /></button>}
+      {done && <button className="message-icon-button" type="button" aria-label="Sao chép câu trả lời" title="Sao chép câu trả lời" onClick={() => onCopy(message.body)}><Icon name="copy" size={14} /></button>}
+      {message.needs_update && <div className="answer-status-note stale-answer"><Icon name="refresh" size={13} /><span>Dữ liệu nguồn đã thay đổi; câu trả lời này cần được cập nhật.</span></div>}
+      {!message.structured_answer?.evidence?.length && message.citations?.map((citation, index) => <button className="citation" type="button" key={index} onClick={() => onCitation(citation.page, citation.quote ?? "", citation.bbox)}><Icon name="link" size={12} /> Trang {citation.page}</button>)}
+    </div>
+  </article>;
+}
+
+/** Scrolls a page area into view when part of it is off screen (stacked layout on narrow screens). */
+function bringIntoView(node) {
+  const rect = node?.getBoundingClientRect();
+  if (rect && (rect.top < 0 || rect.bottom > window.innerHeight)) node.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
+const PDF_ERRORS = {
+  open: "Không mở được tệp PDF. Hãy thử lại.",
+  invalid: "Tệp này không phải PDF hợp lệ hoặc đã bị hỏng.",
+  draw: "Không vẽ được trang PDF này.",
+};
+
+// pdf.js fetches the file itself and keeps only the HTTP status of a failed
+// request. Ask the server again, for one byte, so the reader shows the
+// server's own message like every other request does.
+async function pdfOpenError(reason, path) {
+  if (reason?.status) {
+    try { await request(path, { headers: { Range: "bytes=0-0" } }); }
+    catch (error) { return error.message; }
+  }
+  return reason?.name === "InvalidPDFException" ? PDF_ERRORS.invalid : PDF_ERRORS.open;
+}
+
+const clampScale = (value) => Math.max(.35, Math.min(2.5, value));
 
 function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceBbox, onReextract, reextractDisabled }) {
   const viewportRef = useRef(null);
@@ -253,7 +329,12 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
   const renderTaskRef = useRef(null);
   const [pdf, setPdf] = useState(null);
   const [page, setPage] = useState(1);
-  const [scale, setScale] = useState(1.05);
+  // "fit" follows the pane width; a number is a zoom the user chose.
+  const [zoom, setZoom] = useState("fit");
+  const [fitScale, setFitScale] = useState(1);
+  const fitScaleRef = useRef(1);
+  const scale = zoom === "fit" ? fitScale : zoom;
+  const zoomBy = (step) => setZoom((current) => clampScale((current === "fit" ? fitScale : current) + step));
   const [rotation, setRotation] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -262,16 +343,18 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
   const [citationQuote, setCitationQuote] = useState("");
   const [citationBbox, setCitationBbox] = useState(null);
   const dragRef = useRef(null);
+  // Set by a new citation; cleared once its highlight is scrolled into view.
+  const centerHighlightRef = useRef(false);
 
   useEffect(() => {
     let disposed = false;
-    setPdf(null); setPage(1); setError(""); setTextItems([]); setTextViewport(null); setCitationQuote(""); setCitationBbox(null);
+    setPdf(null); setPage(1); setZoom("fit"); setError(""); setTextItems([]); setTextViewport(null); setCitationQuote(""); setCitationBbox(null);
     if (!document) { setLoading(false); return undefined; }
     const relativeFileUrl = document.file_url || `/api/v1/sessions/${sessionId}/documents/${document.id}/file`;
     let fileUrl;
     try { fileUrl = new URL(relativeFileUrl, API).toString(); } catch { fileUrl = ""; }
     if (!relativeFileUrl || relativeFileUrl.includes("undefined") || !/^https?:/.test(fileUrl)) {
-      setLoading(false); setError("Thiếu URL file PDF của tài liệu này"); return undefined;
+      setLoading(false); setError(PDF_ERRORS.open); return undefined;
     }
     setLoading(true);
     let task;
@@ -284,8 +367,9 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
       return task.promise;
     }).then((loaded) => {
       if (loaded && !disposed) { setPdf(loaded); setLoading(false); }
-    }).catch((reason) => {
-      if (!disposed) { setError(reason?.message || "Không thể đọc PDF"); setLoading(false); }
+    }).catch(async (reason) => {
+      const message = await pdfOpenError(reason, relativeFileUrl);
+      if (!disposed) { setError(message); setLoading(false); }
     });
     return () => { disposed = true; task?.destroy(); };
   }, [document?.id, document?.file_url, sessionId]);
@@ -293,6 +377,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
   useEffect(() => {
     if (!pdf || !canvasRef.current) return undefined;
     let cancelled = false;
+    setTextItems([]);
     pdf.getPage(page).then((pdfPage) => {
       if (cancelled) return;
       const viewport = pdfPage.getViewport({ scale, rotation });
@@ -302,75 +387,96 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
       canvas.height = Math.floor(viewport.height * ratio);
       canvas.style.width = `${viewport.width}px`;
       canvas.style.height = `${viewport.height}px`;
-      setTextViewport({ width: viewport.width, height: viewport.height, transform: viewport.transform, rotation, scale });
+      setTextViewport({ width: viewport.width, height: viewport.height, transform: viewport.transform, rotation, scale, page });
       if (rotation === 0) pdfPage.getTextContent().then((content) => setTextItems(content.items.filter((item) => item.str?.trim()))).catch(() => setTextItems([]));
       else setTextItems([]);
       const context = canvas.getContext("2d");
       renderTaskRef.current?.cancel();
       renderTaskRef.current = pdfPage.render({ canvasContext: context, viewport, transform: ratio === 1 ? null : [ratio, 0, 0, ratio, 0, 0] });
-      renderTaskRef.current.promise.catch((reason) => { if (reason?.name !== "RenderingCancelledException") setError(reason?.message || "Không thể vẽ trang PDF"); });
-    }).catch((reason) => { if (!cancelled) setError(reason?.message || "Không thể tải trang PDF"); });
+      renderTaskRef.current.promise.catch((reason) => { if (reason?.name !== "RenderingCancelledException") setError(PDF_ERRORS.draw); });
+    }).catch(() => { if (!cancelled) setError(PDF_ERRORS.draw); });
     return () => { cancelled = true; renderTaskRef.current?.cancel(); };
   }, [pdf, page, scale, rotation]);
+
+  // The page fills the pane width, and keeps filling it when the pane resizes.
+  useEffect(() => {
+    const node = viewportRef.current;
+    if (!pdf || !node) return undefined;
+    let pageWidth = 0;
+    let cancelled = false;
+    const measure = () => {
+      const mat = node.querySelector(".canvas-mat");
+      const style = mat ? getComputedStyle(mat) : null;
+      const padding = style ? parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) : 0;
+      if (!pageWidth || !node.clientWidth) return;
+      fitScaleRef.current = clampScale((node.clientWidth - padding) / pageWidth);
+      setFitScale(fitScaleRef.current);
+    };
+    pdf.getPage(page).then((pdfPage) => { if (!cancelled) { pageWidth = pdfPage.getViewport({ scale: 1, rotation }).width; measure(); } }).catch(() => {});
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    observer?.observe(node);
+    return () => { cancelled = true; observer?.disconnect(); };
+  }, [pdf, page, rotation]);
 
   useEffect(() => {
     if (!citationPage || !pdf) return;
     setCitationQuote(evidenceQuote || "");
     setCitationBbox(normalizedBbox(evidenceBbox));
     setPage(Math.min(Math.max(1, citationPage), pdf.numPages));
-    viewportRef.current?.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    // A page fitted to a phone's width prints numbers a few pixels tall:
+    // show a citation at full size, centred on it, instead.
+    setZoom((current) => (current === "fit" && fitScaleRef.current < 1 ? 1 : current));
+    centerHighlightRef.current = true;
   }, [citationPage, evidenceQuote, evidenceBbox, pdf]);
 
-  const compact = (value) => String(value ?? "").normalize("NFKC").replace(/\s+/g, "").toLocaleLowerCase("vi");
-  const compactItems = textItems.map((item) => compact(item.str));
-  const joinedItems = compactItems.join("");
-  const quoteCompact = compact(citationQuote);
-  const quoteStart = quoteCompact ? joinedItems.indexOf(quoteCompact) : -1;
-  const itemRanges = [];
-  let itemCursor = 0;
-  compactItems.forEach((value) => { itemRanges.push([itemCursor, itemCursor + value.length]); itemCursor += value.length; });
-  const derivedBoxes = textViewport ? textItems.flatMap((item, index) => {
-    const transformed = multiplyTransform(textViewport.transform, item.transform || [1, 0, 0, 1, 0, 0]);
-    const fontSize = Math.max(6, Math.hypot(transformed[2], transformed[3]));
-    const [rangeStart, rangeEnd] = itemRanges[index] || [0, 0];
-    const hit = quoteStart >= 0 && rangeEnd > quoteStart && rangeStart < quoteStart + quoteCompact.length;
-    if (!hit) return [];
-    const left = Math.max(0, Math.min(1, transformed[4] / textViewport.width));
-    const top = Math.max(0, Math.min(1, (transformed[5] - fontSize) / textViewport.height));
-    const right = Math.max(left, Math.min(1, (transformed[4] + Math.max(2, Number(item.width || 0) * textViewport.scale)) / textViewport.width));
-    const bottom = Math.max(top, Math.min(1, (transformed[5] + Math.max(6, fontSize * .18)) / textViewport.height));
-    return [[left, top, right, bottom]];
-  }) : [];
-  const derivedBox = derivedBoxes.length ? derivedBoxes.reduce((box, item) => [Math.min(box[0], item[0]), Math.min(box[1], item[1]), Math.max(box[2], item[2]), Math.max(box[3], item[3])]) : null;
-  // evidence-hit is the legacy text-span marker; evidence-box is now normalized and scale invariant.
-  const evidenceBoxes = rotation === 0 ? (citationBbox ? [citationBbox] : derivedBox ? [derivedBox] : []) : [];
+  const derivedBoxes = textViewport ? quoteBoxes(textItems, textViewport, citationQuote) : [];
+  // The quote found in the page text is the most exact place; the stored box
+  // covers numbers (no quote) and pages whose text cannot be matched.
+  const evidenceBoxes = rotation === 0 ? (derivedBoxes.length ? derivedBoxes : citationBbox ? [citationBbox] : []) : [];
+  const highlightKey = evidenceBoxes.map((box) => box.join(",")).join(";");
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const box = viewport?.querySelector(".evidence-box");
+    // Wait until the cited page itself is laid out at the current zoom.
+    if (!centerHighlightRef.current || !box || textViewport?.page !== page || textViewport?.scale !== scale) return;
+    centerHighlightRef.current = false;
+    const boxRect = box.getBoundingClientRect();
+    const viewRect = viewport.getBoundingClientRect();
+    // Centre the box vertically. Sideways, move only as far as needed to show
+    // it, so the row labels to its left stay in view whenever they fit.
+    const margin = 24;
+    const boxLeft = viewport.scrollLeft + boxRect.left - viewRect.left;
+    let left = viewport.scrollLeft;
+    if (boxLeft + boxRect.width > left + viewport.clientWidth - margin) left = boxLeft + boxRect.width - viewport.clientWidth + margin;
+    if (boxLeft < left + margin) left = boxLeft - margin;
+    viewport.scrollTo({
+      top: viewport.scrollTop + boxRect.top - viewRect.top - (viewport.clientHeight - boxRect.height) / 2,
+      left: Math.max(0, left),
+      behavior: "smooth",
+    });
+  }, [highlightKey, page, scale, textViewport]);
   const textLayer = textViewport && <div className="pdf-text-layer" aria-hidden="true" style={{ width: textViewport.width, height: textViewport.height, left: "50%", top: 30, transform: "translateX(-50%)" }}><div className="evidence-box-layer">{evidenceBoxes.map((box, index) => <span className="evidence-box" key={`${box.join("-")}-${index}`} style={{ left: `${box[0] * 100}%`, top: `${box[1] * 100}%`, width: `${(box[2] - box[0]) * 100}%`, height: `${(box[3] - box[1]) * 100}%` }} />)}</div></div>;
-
-  const fitWidth = useCallback(async () => {
-    if (!pdf || !viewportRef.current) return;
-    const pdfPage = await pdf.getPage(page);
-    const base = pdfPage.getViewport({ scale: 1, rotation });
-    setScale(Math.max(.35, Math.min(2.5, (viewportRef.current.clientWidth - 56) / base.width)));
-  }, [pdf, page, rotation]);
 
   if (!document) return <div className="empty-reader"><div className="empty-icon">PDF</div><h2>Chọn hoặc thêm tài liệu</h2><p>Tài liệu được lưu theo phiên làm việc và mở trực tiếp trong trình đọc PDF.</p></div>;
 
   return <section className="reader-shell">
     <header className="reader-toolbar">
       <div className="reader-file"><strong>{document.file_name}</strong><span>{formatBytes(document.byte_size)} · {processingLabel(document.extraction_status)}</span></div>
-      {onReextract && !["queued", "processing"].includes(document.extraction_status) && <button className="reextract-button" type="button" title="Đọc lại tài liệu; kết quả cũ được lưu trữ" disabled={reextractDisabled} onClick={() => onReextract(document)}><Icon name="refresh" size={13} /> Trích xuất lại</button>}
+      {["queued", "processing"].includes(document.extraction_status)
+        ? <span className="reextract-status" role="status"><span className="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>{processingLabel(document.extraction_status)}…</span>
+        : onReextract && <button className="reextract-button" type="button" title="Đọc lại tài liệu và lập lại bảng số liệu" disabled={reextractDisabled} onClick={() => onReextract(document)}><Icon name="refresh" size={13} /> Trích xuất lại</button>}
       <div className="page-control"><button aria-label="Trang trước" title="Trang trước" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}><Icon name="arrowLeft" /></button><span>{page} / {pdf?.numPages ?? document.page_count ?? "—"}</span><button aria-label="Trang sau" title="Trang sau" disabled={!pdf || page >= pdf.numPages} onClick={() => setPage((value) => value + 1)}><Icon name="arrowRight" /></button></div>
-      <div className="zoom-control"><button aria-label="Thu nhỏ" title="Thu nhỏ" onClick={() => setScale((value) => Math.max(.35, value - .15))}><Icon name="minus" /></button><span>{Math.round(scale * 100)}%</span><button aria-label="Phóng to" title="Phóng to" onClick={() => setScale((value) => Math.min(2.5, value + .15))}><Icon name="plus" /></button><button aria-label="Vừa chiều rộng" title="Vừa chiều rộng" onClick={fitWidth}><Icon name="fit" /></button><button aria-label="Xoay tài liệu" title="Xoay tài liệu" onClick={() => setRotation((value) => (value + 90) % 360)}><Icon name="rotate" /></button></div>
+      <div className="zoom-control"><button aria-label="Thu nhỏ" title="Thu nhỏ" onClick={() => zoomBy(-.15)}><Icon name="minus" /></button><span>{Math.round(scale * 100)}%</span><button aria-label="Phóng to" title="Phóng to" onClick={() => zoomBy(.15)}><Icon name="plus" /></button><button aria-label="Vừa chiều rộng" title="Vừa chiều rộng" aria-pressed={zoom === "fit"} onClick={() => setZoom("fit")}><Icon name="fit" /></button><button aria-label="Xoay tài liệu" title="Xoay tài liệu" onClick={() => setRotation((value) => (value + 90) % 360)}><Icon name="rotate" /></button></div>
     </header>
     <div className={`pdf-viewport ${dragRef.current ? "dragging" : ""}`} ref={viewportRef}
       onPointerDown={(event) => { const node = viewportRef.current; dragRef.current = { x: event.clientX, y: event.clientY, left: node.scrollLeft, top: node.scrollTop }; node.setPointerCapture(event.pointerId); }}
       onPointerMove={(event) => { if (!dragRef.current) return; const node = viewportRef.current; node.scrollLeft = dragRef.current.left - (event.clientX - dragRef.current.x); node.scrollTop = dragRef.current.top - (event.clientY - dragRef.current.y); }}
       onPointerUp={() => { dragRef.current = null; }}
       onPointerCancel={() => { dragRef.current = null; }}
-      onWheel={(event) => { if (!event.ctrlKey) return; event.preventDefault(); setScale((value) => Math.max(.35, Math.min(2.5, value + (event.deltaY < 0 ? .1 : -.1)))); }}>
+      onWheel={(event) => { if (!event.ctrlKey) return; event.preventDefault(); zoomBy(event.deltaY < 0 ? .1 : -.1); }}>
       {loading && <div className="reader-loading" role="status">Đang mở tài liệu…</div>}
-      {error && <div className="reader-error" role="alert">Không thể render PDF: {error}</div>}
-      <div className="canvas-mat"><canvas ref={canvasRef} />{textLayer}</div>
+      {error && <div className="reader-error" role="alert">{error}</div>}
+      <div className="canvas-mat"><canvas key={document.id} ref={canvasRef} />{textLayer}</div>
     </div>
   </section>;
 }
@@ -382,7 +488,18 @@ function ProfileMenu({ user, onSignOut, onNavigate }) {
   const [displayName, setDisplayName] = useState(user?.display_name ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const menuRef = useRef(null);
+  const nameId = useId();
   useEffect(() => { setProfile(user); setDisplayName(user?.display_name ?? ""); }, [user]);
+  // Escape or a click outside closes the menu, like the other popovers.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointer = (event) => { if (!menuRef.current?.contains(event.target)) setOpen(false); };
+    const onKey = (event) => { if (event.key === "Escape") { setOpen(false); menuRef.current?.querySelector(".profile-chip")?.focus(); } };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onPointer); document.removeEventListener("keydown", onKey); };
+  }, [open]);
   const initial = (profile?.display_name || profile?.email || "S").trim().slice(0, 1).toUpperCase();
   const saveProfile = async (event) => {
     event.preventDefault();
@@ -391,21 +508,22 @@ function ProfileMenu({ user, onSignOut, onNavigate }) {
     try {
       const body = await request("/api/v1/settings/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ display_name: displayName.trim() }) });
       setProfile(body.user); setEditing(false);
-    } catch (reason) { setError(reason.message || "Không thể lưu hồ sơ."); }
+    } catch (reason) { setError(reason.message); }
     finally { setSaving(false); }
   };
-  return <div className="profile-menu">
-    <button className="profile-chip" type="button" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((value) => !value)}>
+  const accountName = profile?.display_name || profile?.email || "Workspace cá nhân";
+  return <div className="profile-menu" ref={menuRef}>
+    <button className="profile-chip" type="button" aria-expanded={open} aria-label={`Tài khoản: ${accountName}`} onClick={() => setOpen((value) => !value)}>
       <span className="profile-avatar">{initial}</span>
       <span className="profile-copy"><b>{profile?.display_name || "Workspace cá nhân"}</b><small>{profile?.email || "Chế độ demo"}</small></span>
       <Icon name="chevronDown" size={13} />
     </button>
-    {open && <div className="profile-popover" role="menu">
+    {open && <div className="profile-popover">
       <div className="profile-summary"><span className="profile-avatar large">{initial}</span><div><b>{profile?.display_name || "Workspace cá nhân"}</b><small>{profile?.email || "Không yêu cầu đăng nhập"}</small></div></div>
       <div className="profile-meta"><Icon name="user" size={14} /><span>Tài khoản và dữ liệu được phân tách theo phiên làm việc.</span></div>
       {onNavigate && !editing && <><button className="profile-manage" type="button" onClick={() => { setOpen(false); onNavigate("/app/settings/profile"); }}><Icon name="user" size={14} /> Hồ sơ tài khoản</button><button className="profile-manage" type="button" onClick={() => { setOpen(false); onNavigate("/app/settings/preferences"); }}><Icon name="settings" size={14} /> Tuỳ chọn giao diện</button><button className="profile-manage" type="button" onClick={() => { setOpen(false); onNavigate("/app/settings/security"); }}><Icon name="trace" size={14} /> Bảo mật</button></>}
       {onSignOut && !editing && <button className="profile-manage" type="button" onClick={() => setEditing(true)}><Icon name="edit" size={14} /> Chỉnh sửa nhanh</button>}
-      {onSignOut && editing && <form className="profile-edit-form" onSubmit={saveProfile}><label>Tên hiển thị<input autoFocus value={displayName} maxLength={120} onChange={(event) => setDisplayName(event.target.value)} /></label>{error && <p role="alert">{error}</p>}<div><button type="button" onClick={() => { setDisplayName(profile?.display_name ?? ""); setEditing(false); setError(""); }}>Hủy</button><button type="submit" disabled={saving || !displayName.trim()}>{saving ? "Đang lưu…" : "Lưu hồ sơ"}</button></div></form>}
+      {onSignOut && editing && <form className="profile-edit-form" onSubmit={saveProfile}><label htmlFor={nameId}>Tên hiển thị</label><input id={nameId} autoFocus value={displayName} maxLength={120} onChange={(event) => setDisplayName(event.target.value)} />{error && <p role="alert">{error}</p>}<div><button type="button" onClick={() => { setDisplayName(profile?.display_name ?? ""); setEditing(false); setError(""); }}>Hủy</button><button type="submit" disabled={saving || !displayName.trim()}>{saving ? "Đang lưu…" : "Lưu hồ sơ"}</button></div></form>}
       {onSignOut && <button className="profile-signout" type="button" onClick={onSignOut}><Icon name="logout" size={15} /> Đăng xuất</button>}
     </div>}
   </div>;
@@ -423,7 +541,7 @@ function ActionMenu({ label, onRename, onDelete }) {
       if (triggerRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
       setOpen(false);
     };
-    const closeOnKey = (event) => { if (event.key === "Escape") setOpen(false); };
+    const closeOnKey = (event) => { if (event.key === "Escape") { setOpen(false); triggerRef.current?.focus(); } };
     document.addEventListener("pointerdown", closeOnPointer);
     document.addEventListener("keydown", closeOnKey);
     return () => {
@@ -431,6 +549,9 @@ function ActionMenu({ label, onRename, onDelete }) {
       document.removeEventListener("keydown", closeOnKey);
     };
   }, [open]);
+  // Focus goes back to the trigger before the chosen action opens a dialog,
+  // so the dialog can hand it back there when it closes.
+  const choose = (action) => { setOpen(false); triggerRef.current?.focus(); action(); };
   const toggle = () => {
     if (open) { setOpen(false); return; }
     const rect = triggerRef.current?.getBoundingClientRect();
@@ -445,24 +566,45 @@ function ActionMenu({ label, onRename, onDelete }) {
   return <>
     <button ref={triggerRef} className="item-menu-trigger" type="button" aria-label={`Tùy chọn ${label}`} aria-expanded={open} onClick={(event) => { event.stopPropagation(); toggle(); }}><Icon name="more" size={16} /></button>
     {open && createPortal(<div ref={menuRef} className="resource-menu-popover" role="menu" style={{ top: position.top, left: position.left }}>
-      <button type="button" role="menuitem" onClick={() => { setOpen(false); onRename(); }}><Icon name="edit" size={13} /> Đổi tên</button>
-      <button type="button" role="menuitem" className="danger" onClick={() => { setOpen(false); onDelete(); }}><Icon name="trash" size={13} /> Xóa</button>
+      <button type="button" role="menuitem" onClick={() => choose(onRename)}><Icon name="edit" size={13} /> Đổi tên</button>
+      <button type="button" role="menuitem" className="danger" onClick={() => choose(onDelete)}><Icon name="trash" size={13} /> Xóa</button>
     </div>, document.body)}
   </>;
 }
 
+// One dialog for confirmations: "rename-*" asks for a name, "delete-*" is
+// destructive, anything else is a plain confirmation with its own wording.
+// It is a form, so Enter confirms; Escape, Hủy and the backdrop cancel. When
+// it closes, focus goes back to what had it when the dialog opened.
 function ResourceDialog({ dialog, busy, onClose, onConfirm }) {
+  const inputId = useId();
   const [value, setValue] = useState(dialog?.value ?? "");
   useEffect(() => setValue(dialog?.value ?? ""), [dialog?.kind, dialog?.value]);
+  useEffect(() => {
+    if (!dialog) return undefined;
+    const onKey = (event) => { if (event.key === "Escape" && !busy) onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [dialog, busy, onClose]);
+  const returnFocus = dialog?.returnFocus;
+  useEffect(() => {
+    if (!returnFocus) return undefined;
+    return () => { if (returnFocus.isConnected) returnFocus.focus(); };
+  }, [returnFocus]);
   if (!dialog) return null;
   const isDelete = dialog.kind.startsWith("delete");
-  return <div className="resource-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="resource-dialog-title">
-      <div className={`resource-modal-icon ${isDelete ? "danger" : ""}`}><Icon name={isDelete ? "trash" : "edit"} size={19} /></div>
-      <div><p className="dialog-kicker">{isDelete ? "XÁC NHẬN THAO TÁC" : "CHỈNH SỬA"}</p><h2 id="resource-dialog-title">{dialog.title}</h2><p>{dialog.description}</p></div>
-      {isDelete ? <div className="dialog-warning">Thao tác này sẽ ẩn mục khỏi workspace. Dữ liệu nguồn được archive để bảo toàn lịch sử.</div> : <label className="dialog-input-label">Tên hiển thị<input autoFocus value={value} onChange={(event) => setValue(event.target.value)} maxLength={dialog.maxLength ?? 255} /></label>}
-      <div className="resource-modal-actions"><button type="button" className="dialog-secondary" onClick={onClose} disabled={busy}>Hủy</button><button type="button" className={isDelete ? "dialog-danger" : "dialog-primary"} disabled={busy || (!isDelete && !value.trim())} onClick={() => onConfirm(dialog, value.trim())}>{busy ? "Đang lưu…" : isDelete ? "Xóa khỏi workspace" : "Lưu thay đổi"}</button></div>
-    </section>
+  const needsName = dialog.kind.startsWith("rename");
+  const confirmLabel = dialog.confirmLabel ?? (isDelete ? "Xóa khỏi workspace" : "Lưu thay đổi");
+  const submit = (event) => { event.preventDefault(); if (!busy && (!needsName || value.trim())) onConfirm(dialog, value.trim()); };
+  return <div className="resource-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+    <form className="resource-modal" role="dialog" aria-modal="true" aria-labelledby="resource-dialog-title" aria-describedby="resource-dialog-description" onSubmit={submit}>
+      <div className={`resource-modal-icon ${isDelete ? "danger" : ""}`}><Icon name={dialog.icon ?? (isDelete ? "trash" : "edit")} size={19} /></div>
+      <div><p className="dialog-kicker">{needsName ? "CHỈNH SỬA" : "XÁC NHẬN THAO TÁC"}</p><h2 id="resource-dialog-title">{dialog.title}</h2><p id="resource-dialog-description">{dialog.description}</p></div>
+      {isDelete && <div className="dialog-warning">Thao tác này sẽ ẩn mục khỏi workspace. Dữ liệu nguồn được archive để bảo toàn lịch sử.</div>}
+      {needsName && <div className="dialog-input-label"><label htmlFor={inputId}>Tên hiển thị</label><input id={inputId} autoFocus value={value} onChange={(event) => setValue(event.target.value)} maxLength={dialog.maxLength ?? 255} /></div>}
+      {dialog.error && <p className="dialog-error" role="alert">{dialog.error}</p>}
+      <div className="resource-modal-actions"><button type="button" className="dialog-secondary" onClick={onClose} disabled={busy}>Hủy</button><button type="submit" autoFocus={!needsName} className={isDelete ? "dialog-danger" : "dialog-primary"} disabled={busy || (needsName && !value.trim())}>{busy ? (dialog.busyLabel ?? "Đang lưu…") : confirmLabel}</button></div>
+    </form>
   </div>;
 }
 
@@ -489,23 +631,26 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const [busy, setBusy] = useState(false);
   const [booting, setBooting] = useState(() => !initialSessionSnapshot?.sessions?.length);
   const [connectionState, setConnectionState] = useState("checking");
-  const [runtimeHealth, setRuntimeHealth] = useState(null);
+  // undefined until the first health answer; null when the server did not answer.
+  const [runtimeHealth, setRuntimeHealth] = useState(undefined);
   const [bootError, setBootError] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState("info");
-  const [retryQuestion, setRetryQuestion] = useState("");
   const [search, setSearch] = useState("");
   const [citationPage, setCitationPage] = useState(null);
   const [citationQuote, setCitationQuote] = useState("");
   const [citationBbox, setCitationBbox] = useState(null);
+  // Data rows of the active document: the drawer lists them and answer cards
+  // use them to tell a user edit from the value read from the PDF.
   const [evidenceData, setEvidenceData] = useState(null);
-  const [evidenceBusy, setEvidenceBusy] = useState(false);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [pendingMessages, setPendingMessages] = useState([]);
   const [activeJobs, setActiveJobs] = useState([]);
   const [jobsOpen, setJobsOpen] = useState(false);
   const [requestMetrics, setRequestMetrics] = useState([]);
   const [performanceOpen, setPerformanceOpen] = useState(false);
   const [resourceDialog, setResourceDialog] = useState(null);
+  const openDialog = useCallback((dialog) => setResourceDialog({ ...dialog, returnFocus: document.activeElement }), []);
   const uploadRef = useRef(null);
   const bootedRef = useRef(false);
   const refreshSequenceRef = useRef(0);
@@ -513,7 +658,13 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const uploadQueryConsumedRef = useRef(false);
 
   const showNotice = useCallback((message, kind = "info") => { setNotice(userFacingError(message)); setNoticeKind(kind); }, []);
-  const clearNotice = useCallback(() => { setNotice(""); setRetryQuestion(""); }, []);
+  const clearNotice = useCallback(() => setNotice(""), []);
+  // Errors stay until the user closes them; other notices are confirmations.
+  useEffect(() => {
+    if (!notice || noticeKind === "error") return undefined;
+    const timer = window.setTimeout(clearNotice, NOTICE_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice, noticeKind, clearNotice]);
 
   useEffect(() => {
     const onRequest = (event) => setRequestMetrics((current) => [event.detail, ...current].slice(0, 40));
@@ -537,7 +688,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     return () => { disposed = true; window.clearTimeout(timer); };
   }, []);
 
-  const refresh = useCallback(async (preferredSession) => {
+  const loadSessions = useCallback(async (preferredSession) => {
     const refreshSequence = ++refreshSequenceRef.current;
     const response = await request("/api/v1/sessions");
     let next = response.sessions ?? [];
@@ -561,6 +712,15 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     setBootError("");
     if (selected !== activeSessionId) setActiveSessionId(selected);
   }, [activeSessionId]);
+
+  // One list refresh at a time: a refresh that finds no session creates the
+  // first one, so the next refresh must read the list after that create.
+  // Mount (twice under StrictMode) and the session effect both refresh.
+  const refresh = useCallback((preferredSession) => {
+    const run = sessionListQueue.catch(() => {}).then(() => loadSessions(preferredSession));
+    sessionListQueue = run;
+    return run;
+  }, [loadSessions]);
 
   const refreshSessionDetail = useCallback(async (sessionId) => {
     if (!sessionId) return false;
@@ -623,7 +783,19 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     window.setTimeout(() => uploadRef.current?.click(), 80);
   }, [activeSession?.id]);
   useEffect(() => { if (activeDocument && activeDocument.id !== activeDocumentId) setActiveDocumentId(activeDocument.id); }, [activeSession?.id, activeDocument?.id, activeDocumentId]);
-  useEffect(() => { setEvidenceData(null); setCitationPage(null); setCitationQuote(""); setCitationBbox(null); }, [activeSession?.id, activeDocument?.id]);
+  useEffect(() => { setEvidenceOpen(false); setCitationPage(null); setCitationQuote(""); setCitationBbox(null); }, [activeSession?.id, activeDocument?.id]);
+  const evidencePath = activeSession && activeDocument ? `/api/v1/sessions/${activeSession.id}/documents/${activeDocument.id}` : null;
+  const documentReady = activeDocument?.extraction_status === "ready";
+  const loadEvidence = useCallback(async () => {
+    if (!evidencePath || !documentReady) { setEvidenceData(null); return null; }
+    const data = await request(`${evidencePath}/evidences`);
+    setEvidenceData({ ...data, path: evidencePath });
+    return data;
+  }, [evidencePath, documentReady]);
+  useEffect(() => { loadEvidence().catch(() => setEvidenceData(null)); }, [loadEvidence]);
+  // Rows loaded for another document must never label this one.
+  const activeEvidence = evidenceData?.path === evidencePath ? evidenceData : null;
+  const evidenceByKey = useMemo(() => new Map((activeEvidence?.evidences ?? []).map((item) => [item.evidence_key, item])), [activeEvidence]);
   useEffect(() => {
     // The worker can expose both queued and processing. Stop polling only once
     // the document reaches a terminal state; otherwise the composer could stay
@@ -646,22 +818,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   // A polling response can arrive before the POST handler's own refresh. Merge
   // by stable server ID so the accepted turn never vanishes or appears twice.
   const persistedIds = new Set(persistedMessages.map((message) => message.id));
-  const combinedMessages = [...persistedMessages, ...pendingForActive.filter((message) => !persistedIds.has(message.id))];
-  // A legacy snapshot may have replies separated from their questions. Use
-  // the persisted reply link, while retaining the order of question turns.
-  const repliesByQuestion = new Map();
-  for (const message of combinedMessages) {
-    if (message.role === "assistant" && message.reply_to_message_id) {
-      const replies = repliesByQuestion.get(message.reply_to_message_id) ?? [];
-      replies.push(message);
-      repliesByQuestion.set(message.reply_to_message_id, replies);
-    }
-  }
-  const questionIds = new Set(combinedMessages.filter((message) => message.role === "user").map((message) => message.id));
-  const messages = combinedMessages.flatMap((message) => {
-    if (message.role === "assistant" && questionIds.has(message.reply_to_message_id)) return [];
-    return message.role === "user" ? [message, ...(repliesByQuestion.get(message.id) ?? [])] : [message];
-  });
+  const messages = orderConversation(persistedMessages, pendingForActive.filter((message) => !persistedIds.has(message.id)));
   useEffect(() => {
     if (!persistedMessages.length) return;
     const persistedIds = new Set(persistedMessages.map((message) => message.id));
@@ -692,19 +849,57 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     return () => { disposed = true; window.clearTimeout(timer); };
   }, [activeSession?.id, answerProcessing, refreshSessionDetail, showNotice]);
   const requestInFlightRef = useRef(false);
-  const forceChatScrollRef = useRef(false);
-  const retryMetaRef = useRef(null);
+  const chatBodyRef = useRef(null);
+  const chatViewRef = useRef({ scope: null, hadHistory: false, answer: null });
+  const [chatAnnouncement, setChatAnnouncement] = useState("");
+  const chatScope = `${activeSession?.id}:${activeDocument?.id}`;
+  const lastMessage = messages.at(-1);
+  const lastAnswer = [...messages].reverse().find((message) => message.role === "assistant");
+  const lastAnswerState = lastAnswer && !lastAnswer.pending && lastAnswer.status !== "processing" ? `${lastAnswer.id}:${lastAnswer.failed || lastAnswer.status === "failed" ? "failed" : "done"}` : null;
+  const savedCount = persistedMessages.length;
 
+  // A conversation opens at its newest turn; a new question scrolls to the
+  // bottom; a finished answer scrolls to its own first line.
+  // A conversation arrives in parts (this tab's unsent questions, then the
+  // saved history), so it is opened again when its saved history first
+  // arrives. Opening pins the view to the bottom while the turns finish
+  // laying out (fonts, evidence rows, narrow screens wrapping later), until
+  // the user scrolls or another rule moves the view.
+  const pinnedRef = useRef(false);
+  useLayoutEffect(() => {
+    const node = chatBodyRef.current;
+    const view = chatViewRef.current;
+    if (!node) return;
+    const opened = view.scope !== chatScope || (!view.hadHistory && savedCount > 0);
+    const previousAnswer = view.answer;
+    Object.assign(view, { scope: chatScope, hadHistory: savedCount > 0, answer: lastAnswerState });
+    if (opened) {
+      pinnedRef.current = true;
+      node.scrollTo({ top: node.scrollHeight, behavior: "instant" });
+    } else if (lastAnswerState && lastAnswerState !== previousAnswer) {
+      pinnedRef.current = false;
+      const article = node.querySelector(`[data-message-id="${CSS.escape(lastAnswer.id)}"]`);
+      node.scrollTo({ top: Math.max(0, (article?.offsetTop ?? node.scrollHeight) - 12), behavior: "smooth" });
+      setChatAnnouncement(lastAnswerState.endsWith("failed") ? "Chưa tạo được câu trả lời." : `Câu trả lời mới: ${presentationAnswer(lastAnswer)?.answer ?? lastAnswer.body ?? ""}`);
+    } else if (lastMessage?.role === "user" || lastMessage?.pending) {
+      pinnedRef.current = false;
+      node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+    } else if (pinnedRef.current) {
+      node.scrollTo({ top: node.scrollHeight, behavior: "instant" });
+    }
+  }, [chatScope, savedCount, messages.length, lastMessage?.id, lastAnswerState]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const node = document.querySelector(".chat-body");
-    if (!node) return undefined;
-    const nearBottom = node.scrollHeight - node.scrollTop - node.clientHeight < 120;
-    if (!forceChatScrollRef.current && !nearBottom) return undefined;
-    const force = forceChatScrollRef.current;
-    const frame = window.requestAnimationFrame(() => node.scrollTo({ top: node.scrollHeight, behavior: force ? "smooth" : "auto" }));
-    forceChatScrollRef.current = false;
-    return () => window.cancelAnimationFrame(frame);
-  }, [messages.length, messages.at(-1)?.id, messages.at(-1)?.body, messages.at(-1)?.status, activeSession?.id, activeDocument?.id]);
+    const node = chatBodyRef.current;
+    if (!node || typeof ResizeObserver !== "function") return undefined;
+    const keepPinned = () => { if (pinnedRef.current) node.scrollTo({ top: node.scrollHeight, behavior: "instant" }); };
+    const unpin = () => { pinnedRef.current = false; };
+    const observer = new ResizeObserver(keepPinned);
+    observer.observe(node);
+    for (const child of node.children) observer.observe(child);
+    const intents = ["wheel", "touchstart", "keydown", "pointerdown"];
+    intents.forEach((name) => node.addEventListener(name, unpin, { passive: true }));
+    return () => { observer.disconnect(); intents.forEach((name) => node.removeEventListener(name, unpin)); };
+  }, [chatScope, messages.length]);
 
   async function createSession() {
     if (busy) return;
@@ -763,10 +958,13 @@ function App({ user = null, onSignOut = null, onNavigate }) {
         setActiveDocumentId(null);
         refresh(activeSession.id).catch(() => {});
         showNotice("Đã đưa tài liệu vào lưu trữ.");
+      } else if (dialog.kind === "reextract-document" && activeSession) {
+        await startReextraction(dialog.document);
       }
       setResourceDialog(null);
     } catch (error) {
-      showNotice(error.message, "error");
+      // The dialog stays open so the reason is next to the action that failed.
+      setResourceDialog((current) => current && { ...current, error: userFacingError(error) });
     } finally { setBusy(false); }
   }
 
@@ -809,48 +1007,85 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     } catch (error) { showNotice(error.message, "error"); } finally { setBusy(false); if (uploadRef.current) uploadRef.current.value = ""; }
   }
 
-  async function submitQuestion(questionInput) {
+  // scope/idempotencyKey/after/replaces are set when re-sending a question
+  // that was already sent once (a retry, or an unsaved question after a reload).
+  async function submitQuestion(questionInput, { scope: givenScope, idempotencyKey = crypto.randomUUID(), after, replaces = [] } = {}) {
     const question = questionInput?.trim();
-    const idempotencyKey = retryMetaRef.current?.question === question ? retryMetaRef.current.key : crypto.randomUUID();
-    if (!question || requestInFlightRef.current || busy || !activeDocument || !activeSession) return;
-    if (activeDocument.extraction_status === "failed") {
+    const scope = givenScope ?? (activeSession && activeDocument ? { session_id: activeSession.id, document_id: activeDocument.id } : null);
+    if (!question || !scope || requestInFlightRef.current || busy) return;
+    const scopeDocument = sessions.find((session) => session.id === scope.session_id)?.documents.find((document) => document.id === scope.document_id);
+    if (scopeDocument?.extraction_status === "failed") {
       showNotice(`Tài liệu chưa thể đọc nên chưa thể trả lời. ${canReextract ? "Bấm Trích xuất lại ở thanh trên PDF." : "Hãy thử xử lý lại tài liệu trong Trung tâm tác vụ."}`, "error");
       return;
     }
     requestInFlightRef.current = true;
-    forceChatScrollRef.current = true;
-    const userId = crypto.randomUUID();
-    const pendingId = crypto.randomUUID();
-    const scope = { session_id: activeSession.id, document_id: activeDocument.id };
-    setPendingMessages((current) => [...current.filter((message) => !message.failed), { id: userId, role: "user", body: question, ...scope, pending: true }, { id: pendingId, role: "assistant", body: "", structured_answer: { pending: true }, ...scope, pending: true }]);
-    setQuery(""); setRetryQuestion(""); setBusy(true); clearNotice();
+    const unsaved = {
+      id: crypto.randomUUID(), answer_id: crypto.randomUUID(), ...scope, question, key: idempotencyKey, sent_at: Date.now(),
+      after: after !== undefined ? after : [...messages].reverse().find((message) => message.role === "user")?.id ?? null,
+    };
+    const userId = unsaved.id;
+    const pendingId = unsaved.answer_id;
+    setPendingMessages((current) => [...current.filter((message) => !replaces.includes(message.id)),
+      { id: userId, role: "user", body: question, ...scope, after_question_id: unsaved.after, pending: true },
+      { id: pendingId, role: "assistant", reply_to_message_id: userId, body: "", structured_answer: { pending: true }, ...scope, pending: true }]);
+    if (!givenScope) setQuery("");
+    setBusy(true);
+    updateUnsavedQuestions((items) => [...items.filter((item) => !replaces.includes(item.id)), unsaved]);
     try {
-      const result = await request(`/api/v1/sessions/${activeSession.id}/messages`, { method: "POST", body: JSON.stringify({ document_id: activeDocument.id, question }), headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey } });
+      const result = await request(`/api/v1/sessions/${scope.session_id}/messages`, { method: "POST", body: JSON.stringify({ document_id: scope.document_id, question }), headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey } });
       if (result.job) setActiveJobs((current) => [result.job, ...current.filter((job) => job.id !== result.job.id)]);
       // The API has accepted the turn; show its durable message IDs now and
       // release the composer while the background answer job is still running.
       setPendingMessages((current) => current.map((message) => message.id === userId
         ? { ...result.user_message, ...scope, pending: false }
         : message.id === pendingId ? { ...result.assistant_message, ...scope, pending: false } : message));
+      updateUnsavedQuestions((items) => items.filter((item) => item.id !== userId));
       requestInFlightRef.current = false;
       setBusy(false);
-      retryMetaRef.current = null;
       const firstCitation = result.assistant_message?.citations?.[0];
       if (firstCitation?.page) { setCitationPage(firstCitation.page); setCitationQuote(firstCitation.quote ?? ""); setCitationBbox(normalizedBbox(firstCitation.bbox)); }
-      try { await refreshSessionDetail(activeSession.id); }
+      try { await refreshSessionDetail(scope.session_id); }
       catch (refreshError) {
         showNotice(`Đã nhận câu trả lời nhưng chưa tải lại lịch sử: ${refreshError.message}`, "error");
       }
     } catch (error) {
-      // Keep a failed turn in the transcript. Removing it made a rejected or
-      // unreachable request look like the whole conversation had reset.
-      setPendingMessages((current) => current.map((message) => message.id === userId
-        ? { ...message, pending: false, failed: true, status: "failed" }
-        : message.id === pendingId ? { ...message, body: error.message, pending: false, failed: true, status: "failed", structured_answer: null } : message));
-      retryMetaRef.current = { question, key: idempotencyKey };
-      setRetryQuestion(question); showNotice(error.message, "error");
+      // The failed turn stays in the transcript, in its place and across a
+      // reload, with its own retry; the error is shown there, not in a toast.
+      // The retry reuses the key so a request that did finish on the server
+      // is not answered twice.
+      const failed = { ...unsaved, error: userFacingError(error) };
+      updateUnsavedQuestions((items) => items.map((item) => item.id === userId ? failed : item));
+      const [failedQuestion, failedAnswer] = failedTurn(failed);
+      setPendingMessages((current) => current.map((message) => message.id === userId ? failedQuestion : message.id === pendingId ? failedAnswer : message));
     } finally { requestInFlightRef.current = false; setBusy(false); }
   }
+
+  function retryAnswer(message) {
+    if (message.retry) {
+      const { question, ...options } = message.retry;
+      submitQuestion(question, options);
+      return;
+    }
+    // A failed answer saved by the server: ask its question again.
+    const question = messages.find((item) => item.id === message.reply_to_message_id);
+    if (question?.role === "user") submitQuestion(question.body);
+  }
+
+  // After a reload, bring back the questions the server has not saved: send
+  // a young one that was still being sent again, show the others as failed.
+  const resumedRef = useRef(false);
+  useEffect(() => {
+    if (resumedRef.current || booting || !sessions.length) return;
+    resumedRef.current = true;
+    const known = (item) => sessions.some((session) => session.id === item.session_id && session.documents.some((document) => document.id === item.document_id));
+    const items = readUnsavedQuestions().filter(known);
+    updateUnsavedQuestions(() => items);
+    const resend = items.find((item) => !item.error && Date.now() - Number(item.sent_at) < RESEND_AFTER_RELOAD_MS);
+    const failed = items.filter((item) => item !== resend).map((item) => item.error ? item : { ...item, error: "Câu hỏi chưa được gửi xong trước khi tải lại trang. Hãy thử lại." });
+    updateUnsavedQuestions((current) => current.map((item) => failed.find((entry) => entry.id === item.id) ?? item));
+    if (failed.length) setPendingMessages((current) => [...current, ...failed.flatMap(failedTurn)]);
+    if (resend) submitQuestion(resend.question, { scope: { session_id: resend.session_id, document_id: resend.document_id }, idempotencyKey: resend.key, after: resend.after ?? null, replaces: [resend.id] });
+  }, [booting, sessions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function ask(event) { event.preventDefault(); await submitQuestion(query); }
 
@@ -868,47 +1103,74 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     } catch (error) { showNotice(error.message, "error"); }
   }
 
+  const closeEvidence = useCallback(() => setEvidenceOpen(false), []);
+
+  // Shows a cited place in the PDF. On narrow screens the reader sits above
+  // the chat, so bring it into view when it is off screen.
+  const readerRef = useRef(null);
+  function openCitation(page, quote = "", bbox = null) {
+    setCitationPage(page); setCitationQuote(quote ?? ""); setCitationBbox(normalizedBbox(bbox));
+    bringIntoView(readerRef.current);
+  }
+
+  // The number panel opens over the chat, which sits below the reader on
+  // narrow screens.
+  const chatColumnRef = useRef(null);
   async function openEvidence() {
-    if (!activeSession || !activeDocument || activeDocument.extraction_status !== "ready") return;
-    setEvidenceBusy(true);
-    try { setEvidenceData(await request(`/api/v1/sessions/${activeSession.id}/documents/${activeDocument.id}/evidences`)); }
+    if (!documentReady) return;
+    setEvidenceOpen(true);
+    bringIntoView(chatColumnRef.current);
+    try { await loadEvidence(); }
+    catch (error) { setEvidenceOpen(false); showNotice(error.message, "error"); }
+  }
+
+  async function evidenceSaved(evidence, result) {
+    const before = formatNumber(result.revision?.old_numeric_value ?? evidence.current_numeric_value) || "chưa có số";
+    const after = formatNumber(result.revision?.numeric_value);
+    showNotice(`Đã lưu ${before} → ${after}.${result.affected_message_ids?.length ? " Các câu trả lời dùng số này cần được tính lại." : ""}`);
+    try { await Promise.all([loadEvidence(), refreshSessionDetail(activeSession.id)]); }
     catch (error) { showNotice(error.message, "error"); }
-    finally { setEvidenceBusy(false); }
   }
 
-  // PostgreSQL keeps completed extractions immutable; there a failed document
-  // is retried from the job center instead.
-  const canReextract = runtimeHealth?.persistence_backend === "json";
+  // The server says whether it can re-read a document (not with PostgreSQL,
+  // where a failed document is retried from the job center instead).
+  const canReextract = runtimeHealth?.capabilities?.reextraction?.status === "available";
 
-  async function reextractDocument(document) {
-    if (!activeSession || !document) return;
-    if (document.extraction_status === "ready" && !window.confirm("Trích xuất lại tài liệu này? Kết quả cũ được lưu trữ, số đã sửa được giữ, các câu trả lời cũ sẽ được đánh dấu cần tính lại.")) return;
-    setBusy(true);
-    try {
-      const result = await request(`/api/v1/sessions/${activeSession.id}/documents/${document.id}/extraction`, { method: "POST" });
-      await refreshSessionDetail(activeSession.id);
-      setEvidenceData(null);
-      const affected = result.affected_message_ids?.length ?? 0;
-      showNotice(`Đang trích xuất lại ${document.file_name}.${affected ? ` ${affected} câu trả lời cũ cần tính lại.` : ""}`);
-    } catch (error) { showNotice(error.message, "error"); }
-    finally { setBusy(false); }
+  function reextractDocument(document) {
+    openDialog({
+      kind: "reextract-document", document, icon: "refresh", confirmLabel: "Đọc lại tài liệu", busyLabel: "Đang gửi yêu cầu…",
+      title: "Đọc lại tài liệu này?",
+      description: document.extraction_status === "ready"
+        ? `SourceLens sẽ đọc lại “${document.file_name}” và lập lại toàn bộ bảng số liệu. Một số bạn đã sửa chỉ được giữ khi số đó vẫn ở cùng vị trí và in giống hệt trong PDF. Khi đọc xong, chỉ câu trả lời dùng số đã thay đổi mới được đánh dấu cần cập nhật. Việc này có thể mất vài phút.`
+        : `SourceLens sẽ thử đọc lại “${document.file_name}”. Việc này có thể mất vài phút.`,
+    });
   }
 
-  async function saveEvidence(evidence, numeric_value, reason) {
-    if (!activeSession || !activeDocument) return;
-    setEvidenceBusy(true);
-    try {
-      const result = await request(`/api/v1/sessions/${activeSession.id}/documents/${activeDocument.id}/evidences/${encodeURIComponent(evidence.evidence_key)}/revisions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ numeric_value, reason, expected_revision_id: evidence.current_revision_id }) });
-      setEvidenceData(await request(`/api/v1/sessions/${activeSession.id}/documents/${activeDocument.id}/evidences`));
-      await refresh(activeSession.id);
-      showNotice(`Đã lưu ${result.revision.old_numeric_value} → ${result.revision.numeric_value}. ${result.affected_message_ids?.length ? "Câu trả lời liên quan cần tính lại." : ""}`);
-    } catch (error) { showNotice(error.message, "error"); }
-    finally { setEvidenceBusy(false); }
+  // Documents being re-read, so the end of the run can be announced.
+  const reextractingRef = useRef(new Set());
+  async function startReextraction(document) {
+    // Which answers to flag is known only once the new reading is ready.
+    await request(`/api/v1/sessions/${activeSession.id}/documents/${document.id}/extraction`, { method: "POST" });
+    reextractingRef.current.add(document.id);
+    showNotice(`Đang đọc lại ${document.file_name}…`);
+    await refreshSessionDetail(activeSession.id).catch(() => {});
   }
+  useEffect(() => {
+    const id = activeDocument?.id;
+    const status = activeDocument?.extraction_status;
+    if (!id || !reextractingRef.current.has(id) || !["ready", "failed"].includes(status)) return;
+    reextractingRef.current.delete(id);
+    if (status === "ready") showNotice(rereadSummary(activeDocument));
+    else {
+      const kept = activeDocument.pending_edits?.length ?? 0;
+      showNotice(`Chưa đọc lại được ${activeDocument.file_name}. Hãy thử lại sau.${kept ? ` ${kept} số bạn đã sửa vẫn được giữ cho lần đọc sau.` : ""}`, "error");
+    }
+  }, [activeDocument, showNotice]);
 
   const nextTheme = preference === "light" ? "dark" : preference === "dark" ? "system" : "light";
+  const nextThemeLabel = { light: "giao diện sáng", dark: "giao diện tối", system: "giao diện theo hệ thống" }[nextTheme];
   const activeJobCount = activeJobs.filter((job) => ["queued", "running"].includes(job.status)).length;
-  const readinessState = runtimeHealth?.readiness?.status ?? (runtimeHealth ? "checking" : "offline");
+  const readinessState = runtimeHealth === null ? "offline" : runtimeHealth?.readiness?.status ?? "checking";
   const readinessLabel = readinessState === "ready" ? "Sẵn sàng" : readinessState === "degraded" ? "Một số dịch vụ cần kiểm tra" : readinessState === "checking" ? "Đang kiểm tra" : "Kết nối gián đoạn";
   const readinessBlockers = runtimeHealth?.readiness?.blockers?.length ? "Một số dịch vụ chưa sẵn sàng" : "";
 
@@ -933,31 +1195,33 @@ function App({ user = null, onSignOut = null, onNavigate }) {
 
   return <div className="app-shell">
     <a className="skip-link" href="#main-content">Bỏ qua điều hướng</a>
+    <a className="skip-link" href="#chat-question">Đến ô đặt câu hỏi</a>
     <header className="topbar">
       <div className="brand"><span>S</span><div><strong>SourceLens</strong><small>Document intelligence</small></div></div>
       <div className="topbar-context"><span>WORKSPACE</span><strong>{activeDocument?.file_name ?? "Thư viện tài liệu"}</strong></div>
-      <nav className="top-nav" aria-label="Điều hướng chính"><button className="top-nav-item active" type="button"><Icon name="grid" size={14} /> Workspace</button><button className="top-nav-item" type="button" onClick={() => onNavigate?.("/app/library")}><Icon name="folder" size={14} /> Tài liệu</button></nav>
+      <nav className="top-nav" aria-label="Điều hướng chính"><button className="top-nav-item active" type="button" aria-current="page"><Icon name="grid" size={14} /> Workspace</button><button className="top-nav-item" type="button" onClick={() => onNavigate?.("/app/library")}><Icon name="folder" size={14} /> Tài liệu</button></nav>
       <div className="top-actions">
         <span className={`connection-pill ${readinessState === "ready" ? "online" : readinessState === "offline" ? "offline" : "checking"}`} title={readinessBlockers || readinessLabel}><i></i>{readinessLabel}</span>
         {activeJobs.length > 0 && <button className="job-pill" type="button" aria-label={`Mở trung tâm tác vụ, ${activeJobs.length} tác vụ`} onClick={() => setJobsOpen(true)}><i></i>{activeJobCount > 0 ? `${activeJobCount} đang xử lý` : "Trung tâm tác vụ"}</button>}
-        <button className="icon-button" type="button" title={`Chuyển giao diện sang ${nextTheme}`} aria-label={`Chuyển giao diện sang ${nextTheme}`} onClick={() => setPreference(nextTheme)}><Icon name={resolvedTheme === "dark" ? "moon" : "sun"} size={15} /></button>
-        <button className="audit-button" disabled={!activeDocument || activeDocument.extraction_status !== "ready" || evidenceBusy} onClick={openEvidence}><Icon name="link" size={14} /> Bằng chứng</button>
+        <button className="icon-button" type="button" title={`Chuyển sang ${nextThemeLabel}`} aria-label={`Chuyển sang ${nextThemeLabel}`} onClick={() => setPreference(nextTheme)}><Icon name={resolvedTheme === "dark" ? "moon" : "sun"} size={15} /></button>
+        <button className="audit-button" title="Mở bảng số liệu của tài liệu" disabled={!documentReady} onClick={openEvidence}><Icon name="link" size={14} /><span className="audit-button-label">Bằng chứng</span></button>
         <ProfileMenu user={user} onSignOut={onSignOut} onNavigate={onNavigate} />
         <input ref={uploadRef} type="file" accept="application/pdf,.pdf" hidden onChange={(event) => upload(event.target.files?.[0])} />
       </div>
     </header>
     <main className="workspace" id="main-content">
-      <SessionBrowser sessions={sessions} filteredSessions={filteredSessions} activeSession={activeSession} activeDocument={activeDocument} booting={booting} search={search} onSearch={setSearch} busy={busy} onSelectSession={(session) => { setActiveSessionId(session.id); setActiveDocumentId(session.documents[0]?.id ?? null); }} onSelectDocument={setActiveDocumentId} onCreate={createSession} onUpload={() => uploadRef.current?.click()} onDialog={setResourceDialog} onNavigate={onNavigate} />
-      <section className="reader-column"><PdfViewer document={activeDocument} sessionId={activeSession?.id} citationPage={citationPage} evidenceQuote={citationQuote} evidenceBbox={citationBbox} onReextract={canReextract ? reextractDocument : undefined} reextractDisabled={busy} />{notice && <div className={`toast ${noticeKind}`} role={noticeKind === "error" ? "alert" : "status"} aria-live="polite"><span>{notice}</span>{retryQuestion && <button onClick={() => submitQuestion(retryQuestion)} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}<button className="toast-close" aria-label="Đóng thông báo" onClick={clearNotice}><Icon name="close" size={13} /></button></div>}</section>
-      <aside className="chat-column">
+      <SessionBrowser sessions={sessions} filteredSessions={filteredSessions} activeSession={activeSession} activeDocument={activeDocument} booting={booting} search={search} onSearch={setSearch} busy={busy} onSelectSession={(session) => { setActiveSessionId(session.id); setActiveDocumentId(session.documents[0]?.id ?? null); }} onSelectDocument={setActiveDocumentId} onCreate={createSession} onUpload={() => uploadRef.current?.click()} onDialog={openDialog} onNavigate={onNavigate} />
+      <section className="reader-column" ref={readerRef}><PdfViewer document={activeDocument} sessionId={activeSession?.id} citationPage={citationPage} evidenceQuote={citationQuote} evidenceBbox={citationBbox} onReextract={canReextract ? reextractDocument : undefined} reextractDisabled={busy} />{notice && <div className={`toast ${noticeKind}`} role={noticeKind === "error" ? "alert" : "status"}><span>{notice}</span><button type="button" className="toast-close" aria-label="Đóng thông báo" onClick={clearNotice}><Icon name="close" size={13} /></button></div>}</section>
+      <aside className="chat-column" ref={chatColumnRef}>
         <header className="chat-header"><div className="ai-avatar">S</div><div><h2>Trợ lý tài liệu</h2><span>{activeDocument ? activeDocument.file_name : "Chưa chọn tài liệu"}</span></div><span className="mode-badge">{modeLabel}</span></header>
-        <div className="chat-body">
+        <div className="chat-body" ref={chatBodyRef}>
+          <p className="visually-hidden" aria-live="polite">{chatAnnouncement}</p>
           {!messages.length && <div className="welcome"><div className="welcome-mark"><Icon name="spark" size={18} /></div><h3>Bắt đầu với tài liệu của bạn</h3><p>Đặt câu hỏi để nhận câu trả lời có dẫn nguồn, trích dẫn theo trang và cấu trúc rõ ràng.</p>{activeDocument?.extraction_status === "ready" && <button onClick={() => setQuery("Tóm tắt nội dung chính của tài liệu")}>Tóm tắt tài liệu</button>}</div>}
-          {messages.map((message, index) => <article key={message.id} className={`message ${message.role} ${message.failed || message.status === "failed" ? "failed" : ""}`}><span className="message-avatar">{message.role === "user" ? "B" : "S"}</span><div><small>{message.role === "user" ? "Bạn" : "Trợ lý SourceLens"}</small><StructuredAnswer answer={presentationAnswer(message)} fallback={message.body} onCitation={(page, quote, bbox) => { setCitationPage(page); setCitationQuote(quote); setCitationBbox(normalizedBbox(bbox)); }} />{message.role === "assistant" && message.status === "processing" && <button className="retry-answer-button" type="button" onClick={() => stopAnswer(message)}>Dừng trả lời</button>}{(message.failed || message.status === "failed") && message.role === "assistant" && <button className="retry-answer-button" type="button" onClick={() => { const previous = messages.find((item) => item.id === message.reply_to_message_id) ?? messages[index - 1]; if (previous?.role === "user") submitQuestion(previous.body); }} disabled={busy}><Icon name="refresh" size={13} /> Thử lại</button>}{message.role === "user" && !message.pending && <button className="message-icon-button" type="button" aria-label="Sửa câu hỏi" title="Sửa câu hỏi" onClick={() => { setQuery(message.body); document.querySelector('.chat-composer textarea')?.focus(); }}><Icon name="edit" size={14} /></button>}{message.role === "assistant" && message.body && !message.pending && !message.failed && message.status !== "failed" && message.status !== "processing" && <button className="message-icon-button" type="button" aria-label="Sao chép câu trả lời" title="Sao chép câu trả lời" onClick={async () => { try { await navigator.clipboard.writeText(message.body); showNotice("Đã sao chép."); } catch { showNotice("Không thể sao chép.", "error"); } }}><Icon name="copy" size={14} /></button>}{message.needs_update && <div className="answer-status-note stale-answer"><Icon name="refresh" size={13} /><span>Dữ liệu nguồn đã thay đổi; câu trả lời này cần được cập nhật.</span></div>}{!message.structured_answer?.evidence?.length && message.citations?.map((citation, citationIndex) => <button className="citation" key={citationIndex} onClick={() => { setCitationPage(citation.page); setCitationQuote(""); setCitationBbox(normalizedBbox(citation.bbox)); }}><Icon name="link" size={12} /> Trang {citation.page}{citation.bbox ? " · vùng trích dẫn" : ""}</button>)}</div></article>)}
+          {messages.map((message) => <ChatMessage key={message.id} message={message} busy={busy} evidenceByKey={evidenceByKey} onCitation={openCitation} onStop={stopAnswer} onRetry={retryAnswer} onAsk={submitQuestion} onEditQuestion={(text) => { setQuery(text); document.getElementById("chat-question")?.focus(); }} onCopy={async (text) => { try { await navigator.clipboard.writeText(text); showNotice("Đã sao chép."); } catch { showNotice("Không thể sao chép.", "error"); } }} />)}
         </div>
-        <form className="chat-composer" onSubmit={ask}><textarea aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Thêm tài liệu để bắt đầu" : activeDocument.extraction_status === "ready" ? "Đặt câu hỏi về tài liệu…" : activeDocument.extraction_status === "failed" ? canReextract ? "Chưa thể đọc tài liệu, bấm Trích xuất lại" : "Chưa thể đọc tài liệu — mở Trung tâm tác vụ để thử lại" : "Đặt câu hỏi — trợ lý sẽ trả lời khi tài liệu sẵn sàng…"} disabled={!activeDocument || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Trợ lý sẵn sàng" : activeDocument?.extraction_status === "failed" ? "Tài liệu chưa đọc được" : activeDocument?.extraction_status === "queued" || activeDocument?.extraction_status === "processing" ? "Câu hỏi sẽ được xử lý sau khi đọc tài liệu" : "Chưa sẵn sàng"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status === "failed" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form>
+        <form className="chat-composer" onSubmit={ask}><textarea id="chat-question" aria-label="Câu hỏi về tài liệu" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={!activeDocument ? "Thêm tài liệu để bắt đầu" : activeDocument.extraction_status === "ready" ? "Đặt câu hỏi về tài liệu…" : activeDocument.extraction_status === "failed" ? canReextract ? "Chưa thể đọc tài liệu, bấm Trích xuất lại" : "Chưa thể đọc tài liệu — mở Trung tâm tác vụ để thử lại" : "Đặt câu hỏi — trợ lý sẽ trả lời khi tài liệu sẵn sàng…"} disabled={!activeDocument || busy} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }} /><div><span>{activeDocument?.extraction_status === "ready" ? "Trợ lý sẵn sàng" : activeDocument?.extraction_status === "failed" ? "Tài liệu chưa đọc được" : activeDocument?.extraction_status === "queued" || activeDocument?.extraction_status === "processing" ? "Câu hỏi sẽ được xử lý sau khi đọc tài liệu" : "Chưa sẵn sàng"}</span><button aria-label="Gửi câu hỏi" title="Gửi câu hỏi" disabled={!activeDocument || activeDocument.extraction_status === "failed" || busy || !query.trim()}><Icon name="send" size={15} /></button></div></form>
+        <EvidenceDrawer data={evidenceOpen ? activeEvidence : null} basePath={evidencePath} onClose={closeEvidence} onReload={() => loadEvidence().catch(() => {})} onSaved={evidenceSaved} onFocus={(evidence) => openCitation(evidence.page_number, "", evidence.bbox)} />
       </aside>
-      <EvidenceDrawer data={evidenceData} busy={evidenceBusy} onClose={() => setEvidenceData(null)} onFocus={(evidence) => { setCitationPage(evidence.page_number); setCitationQuote(""); setCitationBbox(normalizedBbox(evidence.bbox)); }} onSave={saveEvidence} />
       <ResourceDialog dialog={resourceDialog} busy={busy} onClose={() => setResourceDialog(null)} onConfirm={confirmResourceAction} />
       <JobCenterDrawer jobs={jobsOpen ? activeJobs : null} busy={busy} onClose={() => setJobsOpen(false)} onAction={handleJobAction} />
     </main>

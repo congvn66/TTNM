@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from report_qa.application.numeric_extraction import canonical_decimal
+from report_qa.application.numeric_extraction import HEADER_JOIN, canonical_decimal, is_value_text
 
 
 NUMBER_RE = re.compile(r"(?<![\w/])[-+]?(?:\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,]\d+)?%?")
@@ -57,21 +57,39 @@ def _page_bbox(box: Any, width: float, height: float) -> list[float] | None:
 
 
 def _header_count(values: list[list[str | None]]) -> int:
-    first_data = next(
-        (index for index, row in enumerate(values) if any(cell and NUMBER_RE.search(str(cell)) for cell in row)),
-        len(values),
-    )
-    count = max(1, first_data)
-    if first_data == 0:
-        # "4 Units" or "Q1/2024" in the top row does not make it data. The
-        # rows below it that hold only text still belong to the header.
-        while (
-            count < len(values) - 1
-            and sum(1 for cell in values[count] if cell) >= 2
-            and not any(cell and NUMBER_RE.search(str(cell)) for cell in values[count])
-        ):
-            count += 1
+    """Header rows: the first row, then each next row with two or more filled cells and no value.
+
+    A period ("Quý 1/2026", "Q2/25") is not a value, so a second header
+    row of periods stays in the header.
+    """
+    count = 1
+    while (
+        count < len(values) - 1
+        and sum(1 for cell in values[count] if cell) >= 2
+        and not any(is_value_text(str(cell)) for cell in values[count] if cell)
+    ):
+        count += 1
     return count
+
+
+def _column_path(values: list[list[str | None]], rows: list[Any], header_count: int, cell_box: Any) -> list[str]:
+    """Each header row's text above a cell, outer to inner.
+
+    A merged header cell has one box over several columns and None for the
+    cells it covers, so the header of a column is the cell whose box spans the
+    column's middle, not the cell at the same index.
+    """
+    middle = (cell_box[0] + cell_box[2]) / 2
+    path = []
+    for header_values, header_row in zip(values[:header_count], rows[:header_count]):
+        text = next(
+            (cell for cell, box in zip(header_values, header_row.cells) if box is not None and box[0] <= middle <= box[2]),
+            None,
+        )
+        text = " ".join(str(text).split()) if text else ""
+        if text and text not in path:
+            path.append(text)
+    return path
 
 
 def _row_header(cells: list[str | None]) -> str | None:
@@ -146,12 +164,12 @@ class PdfPlumberTableExtractor:
                     bbox = _page_bbox(cell_box, width, height)
                     if bbox is None:
                         continue
-                    header_parts = [str(values[header_row][column_index]).strip() for header_row in range(header_count) if column_index < len(values[header_row]) and values[header_row][column_index]]
+                    header_parts = _column_path(values, rows, header_count, cell_box)
                     row_header = _row_header(row_values[:column_index])
                     raw = match.group(0)
                     digest = hashlib.sha256(f"complex:{page_number}:{table_index}:{row_index}:{column_index}:{raw}".encode()).hexdigest()[:16]
                     key = f"ev-{digest}"
-                    locator = {"table_region_key": f"page-{page_number}-complex-table-{table_index}", "row_index": row_index, "column_index": column_index, "row_header": row_header, "column_header": " / ".join(header_parts) or None}
+                    locator = {"table_region_key": f"page-{page_number}-complex-table-{table_index}", "row_index": row_index, "column_index": column_index, "row_header": row_header, "column_header": HEADER_JOIN.join(header_parts) or None}
                     context = " ".join(item for item in (row_header, locator["column_header"], str(cell_text)) if item)
                     evidences.append({"evidence_key": key, "source_region_key": f"page-{page_number}-complex-table-{table_index}-cell-{row_index}-{column_index}", "source_type": "table", "page_number": page_number, "bbox": bbox, "raw_text": raw, "numeric_value": _decimal(raw), "value_kind": "number", "data_status": "valid", "extraction_method": "table_cell", "method_label": "đọc từ ô bảng", "semantic": {"measure": "unknown", "subject": None, "period": None, "unit": "PERCENT" if raw.endswith("%") else None, "dimensions": {}}, "table_locator": locator, "chart_read": None, "confidence": 0.93})
                     contexts[key] = context

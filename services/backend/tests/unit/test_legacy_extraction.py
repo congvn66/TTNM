@@ -2,6 +2,7 @@
 
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import pymupdf
 import pytest
@@ -10,12 +11,13 @@ from report_qa.api import session_storage
 from report_qa.application.evidence_extraction import (
     _decimal_text,
     _measure,
-    _period_near,
     _private_use_share,
     _unit_near,
     extract_legacy_pdf_artifact,
 )
-from report_qa.application.table_extraction import _decimal, _header_count, _page_bbox, _row_header
+from report_qa.application.numeric_extraction import header_period
+from report_qa.application.numeric_extraction import period_near as _period_near
+from report_qa.application.table_extraction import _column_path, _decimal, _header_count, _page_bbox, _row_header
 from report_qa.domain.types import validate_decimal_text
 
 
@@ -143,11 +145,44 @@ def test_text_position_includes_the_transformation_matrix(tmp_path):
 
 
 def test_bare_quarter_takes_the_only_year_on_the_page():
-    from report_qa.application.evidence_extraction import _period_for
+    assert header_period(["Q3", "Doanh thu"], "2024")["label"] == "Q3/2024"
+    assert header_period(["Q3", "Doanh thu"], None) is None
+    assert header_period(["Doanh thu Q3/2023"], "2024")["label"] == "Q3/2023"
 
-    assert _period_for("Q3 Doanh thu 980.00", "980.00", "2024")["label"] == "Q3/2024"
-    assert _period_for("Q3 Doanh thu 980.00", "980.00", None) is None
-    assert _period_for("Doanh thu Q3/2023 980.00", "980.00", "2024")["label"] == "Q3/2023"
+
+@pytest.mark.parametrize("header, label, granularity", [
+    ("Q2/25", "Q2/2025", "quarter"),
+    ("Quý 2/2026", "Q2/2026", "quarter"),
+    ("Cuối quý 1/2026", "Q1/2026", "quarter"),
+    ("6T2026", "6T/2026", "half_year"),
+    ("2026F", "2026", "year"),
+])
+def test_header_periods_in_report_styles_are_parsed(header, label, granularity):
+    period = header_period(["DTT", header])
+    assert (period["label"], period["granularity"]) == (label, granularity)
+
+
+def test_a_cell_period_and_measure_come_from_its_headers_not_the_page_title():
+    from report_qa.application.evidence_extraction import cell_semantics
+
+    title = "Kết quả kinh doanh Q2/2026 doanh thu tăng"
+    assert cell_semantics(["LNST", "Q2/25"], title + " 4.257", "4.257", None) == ("loi_nhuan", header_period(["Q2/25"]))
+    assert cell_semantics(["Giá hiện tại"], title + " 22.100", "22.100", None) == ("unknown", None)
+    measure, period = cell_semantics([], title + " 1.250", "1.250", None)  # no header: nearby text
+    assert (measure, period["label"]) == ("doanh_thu", "Q2/2026")
+
+
+def test_two_header_rows_with_merged_cells_give_the_full_column_path():
+    # S1 "Bảng 1": "Doanh thu thuần" spans two quarter columns (pdfplumber cells).
+    values = [["Khu vực", "Doanh thu thuần", None, "Lợi nhuận gộp", None],
+              [None, "Quý 1/2026", "Quý 2/2026", "Quý 1/2026", "Quý 2/2026"],
+              ["Miền Bắc", "18.240", "21.350", "5.290", "6.405"]]
+    rows = [SimpleNamespace(cells=[(57, 410, 152, 456), (152, 410, 345, 433), None, (345, 410, 538, 433), None]),
+            SimpleNamespace(cells=[None, (152, 433, 249, 456), (249, 433, 345, 456), (345, 433, 441, 456), (441, 433, 538, 456)]),
+            SimpleNamespace(cells=[(57, 456, 152, 480), (152, 456, 249, 480), (249, 456, 345, 480), (345, 456, 441, 480), (441, 456, 538, 480)])]
+    assert _header_count(values) == 2
+    assert _column_path(values, rows, 2, rows[2].cells[2]) == ["Doanh thu thuần", "Quý 2/2026"]
+    assert _column_path(values, rows, 2, rows[2].cells[3]) == ["Lợi nhuận gộp", "Quý 1/2026"]
 
 
 def _player_table_pdf(path: Path) -> None:
@@ -256,3 +291,30 @@ def test_unreadable_glyph_codes_are_read_with_pymupdf(tmp_path, monkeypatch):
 
 def test_a_few_icon_characters_do_not_switch_the_reader():
     assert _private_use_share(" Doanh thu quý 2 tăng mạnh so với cùng kỳ") < 0.05
+
+
+def test_damaged_catalog_is_set_aside_not_overwritten(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(session_storage, "RUNTIME_ROOT", tmp_path)
+    monkeypatch.setattr(session_storage, "CATALOG_FILE", tmp_path / "sessions.json")
+    damaged = '{"sessions": {"a": {"id": "a"'
+    (tmp_path / "sessions.json").write_text(damaged, encoding="utf-8")
+
+    assert session_storage.load_catalog() == {"sessions": {}}
+    session_storage.save_catalog({"sessions": {}})
+
+    [kept] = tmp_path.glob("sessions.json.corrupt-*")
+    assert kept.read_text(encoding="utf-8") == damaged
+    assert "not valid" in caplog.text
+
+
+def test_catalog_save_syncs_before_replacing(tmp_path, monkeypatch):
+    monkeypatch.setattr(session_storage, "RUNTIME_ROOT", tmp_path)
+    monkeypatch.setattr(session_storage, "CATALOG_FILE", tmp_path / "sessions.json")
+    calls = []
+    real_fsync, real_replace = session_storage.os.fsync, session_storage.os.replace
+    monkeypatch.setattr(session_storage.os, "fsync", lambda fd: (calls.append("fsync"), real_fsync(fd))[1])
+    monkeypatch.setattr(session_storage.os, "replace", lambda a, b: (calls.append("replace"), real_replace(a, b))[1])
+
+    session_storage.save_catalog({"sessions": {}})
+
+    assert calls == ["fsync", "replace"]

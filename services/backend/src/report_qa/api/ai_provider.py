@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import math
 import os
 import re
 import time
@@ -43,12 +45,25 @@ def _load_local_env() -> None:
         return
 
 
-class ProviderError(RuntimeError):
-    """Safe, stable error raised at the provider boundary."""
+logger = logging.getLogger(__name__)
+MAX_ANSWER_CHARS = 12000
 
-    def __init__(self, code: str, message: str = "AI provider request failed") -> None:
+
+class ProviderError(RuntimeError):
+    """Safe, stable error raised at the provider boundary.
+
+    The message is for server logs; it never carries the provider's own text.
+    One classification for every mode: AI_INVALID_OUTPUT means the model's
+    own text is unusable and asking again may help. Every other code is a
+    provider failure: no usable model text arrived (network, HTTP status,
+    timeout, or a response that is not the provider's JSON envelope, which is
+    AI_PROVIDER_BAD_RESPONSE).
+    """
+
+    def __init__(self, code: str, message: str = "AI provider request failed", http_status: int | None = None) -> None:
         super().__init__(message)
         self.code = code
+        self.http_status = http_status
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,7 +118,7 @@ def _validated_pages(value: Any, allowed_pages: set[int]) -> list[int]:
 def validate_answer(payload: dict[str, Any], allowed_pages: set[int], *, provider: str, model: str, raw_response: str) -> ProviderAnswer:
     """Backward-compatible validator for the original two-field fixture."""
     answer_text = payload.get("answer_text")
-    if not isinstance(answer_text, str) or not answer_text.strip() or len(answer_text) > 12000:
+    if not isinstance(answer_text, str) or not answer_text.strip() or len(answer_text) > MAX_ANSWER_CHARS:
         raise ProviderError("AI_INVALID_OUTPUT", "answer_text must be a non-empty bounded string")
     return ProviderAnswer(answer_text=answer_text.strip(), cited_pages=_validated_pages(payload.get("cited_pages"), allowed_pages), provider=provider, model=model, response_sha256=hashlib.sha256(raw_response.encode("utf-8")).hexdigest())
 
@@ -145,7 +160,7 @@ def _lower_schema(value: Any) -> Any:
 OPENROUTER_RESPONSE_SCHEMA: dict[str, Any] = _lower_schema(GEMINI_RESPONSE_SCHEMA)
 
 
-def _string(value: Any, field: str, *, max_len: int = 12000) -> str:
+def _string(value: Any, field: str, *, max_len: int = MAX_ANSWER_CHARS) -> str:
     if not isinstance(value, str) or len(value) > max_len:
         raise ProviderError("AI_INVALID_OUTPUT", f"{field} must be a bounded string")
     return value.strip()
@@ -320,10 +335,10 @@ class GeminiProvider:
             except HTTPError as exc:
                 if attempt >= self.max_retries:
                     if exc.code == 404:
-                        raise ProviderError("AI_MODEL_UNAVAILABLE", f"Gemini model {self.model} is unavailable (HTTP 404)") from exc
+                        raise ProviderError("AI_MODEL_UNAVAILABLE", f"Gemini model {self.model} is unavailable (HTTP 404)", exc.code) from exc
                     if exc.code in {408, 429, 500, 502, 503, 504}:
-                        raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"Gemini provider is unavailable (HTTP {exc.code})") from exc
-                    raise ProviderError("AI_PROVIDER_HTTP_ERROR", f"Gemini provider rejected the request (HTTP {exc.code})") from exc
+                        raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"Gemini provider is unavailable (HTTP {exc.code})", exc.code) from exc
+                    raise ProviderError("AI_PROVIDER_HTTP_ERROR", f"Gemini provider rejected the request (HTTP {exc.code})", exc.code) from exc
             except (URLError, TimeoutError, OSError) as exc:
                 if attempt >= self.max_retries:
                     raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"Không kết nối được AI provider {self.base_url}; kiểm tra mạng, proxy hoặc API key") from exc
@@ -331,7 +346,7 @@ class GeminiProvider:
             envelope = json.loads(raw_response)
             content = envelope["candidates"][0]["content"]["parts"][0]["text"]
         except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
-            raise ProviderError("AI_INVALID_OUTPUT", "Gemini response envelope is invalid") from exc
+            raise ProviderError("AI_PROVIDER_BAD_RESPONSE", "Gemini response envelope is invalid") from exc
         page_text_by_page = {int(page["page"]): str(page.get("text", "")) for page in pages}
         try:
             result = validate_structured_answer(_json_from_content(content), allowed_pages, provider="gemini", model=self.model, raw_response=raw_response, page_text_by_page=page_text_by_page)
@@ -353,7 +368,7 @@ class GeminiProvider:
             except (HTTPError, URLError, TimeoutError, OSError) as exc:
                 raise ProviderError("AI_PROVIDER_UNAVAILABLE", "Gemini correction request failed") from exc
             except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
-                raise ProviderError("AI_INVALID_OUTPUT", "Gemini correction response envelope is invalid") from exc
+                raise ProviderError("AI_PROVIDER_BAD_RESPONSE", "Gemini correction response envelope is invalid") from exc
             result = validate_structured_answer(_json_from_content(content), allowed_pages, provider="gemini", model=self.model, raw_response=raw_response, page_text_by_page=page_text_by_page)
         return ProviderAnswer(answer_text=_display_text(result.structured or {}), cited_pages=result.cited_pages, provider=result.provider, model=result.model, response_sha256=result.response_sha256, structured=result.structured)
 
@@ -394,10 +409,10 @@ class OpenRouterProvider:
             except HTTPError as exc:
                 if attempt >= self.max_retries:
                     if exc.code in {408, 429, 500, 502, 503, 504}:
-                        raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"OpenRouter provider is unavailable (HTTP {exc.code})") from exc
+                        raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"OpenRouter provider is unavailable (HTTP {exc.code})", exc.code) from exc
                     if exc.code == 404:
-                        raise ProviderError("AI_MODEL_UNAVAILABLE", f"OpenRouter model {self.model} is unavailable (HTTP 404)") from exc
-                    raise ProviderError("AI_PROVIDER_HTTP_ERROR", f"OpenRouter rejected the request (HTTP {exc.code})") from exc
+                        raise ProviderError("AI_MODEL_UNAVAILABLE", f"OpenRouter model {self.model} is unavailable (HTTP 404)", exc.code) from exc
+                    raise ProviderError("AI_PROVIDER_HTTP_ERROR", f"OpenRouter rejected the request (HTTP {exc.code})", exc.code) from exc
             except (URLError, TimeoutError, OSError) as exc:
                 if attempt >= self.max_retries:
                     raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"Không kết nối được AI provider {self.base_url}; kiểm tra mạng, proxy hoặc API key") from exc
@@ -405,7 +420,7 @@ class OpenRouterProvider:
             envelope = json.loads(raw_response)
             content = envelope["choices"][0]["message"]["content"]
         except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
-            raise ProviderError("AI_INVALID_OUTPUT", "OpenRouter response envelope is invalid") from exc
+            raise ProviderError("AI_PROVIDER_BAD_RESPONSE", "OpenRouter response envelope is invalid") from exc
         page_text_by_page = {int(page["page"]): str(page.get("text", "")) for page in pages}
         try:
             result = validate_structured_answer(_json_from_content(content), allowed_pages, provider="openrouter", model=self.model, raw_response=raw_response, page_text_by_page=page_text_by_page)
@@ -423,7 +438,7 @@ class OpenRouterProvider:
             except (HTTPError, URLError, TimeoutError, OSError) as exc:
                 raise ProviderError("AI_PROVIDER_UNAVAILABLE", "OpenRouter correction request failed") from exc
             except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
-                raise ProviderError("AI_INVALID_OUTPUT", "OpenRouter correction response envelope is invalid") from exc
+                raise ProviderError("AI_PROVIDER_BAD_RESPONSE", "OpenRouter correction response envelope is invalid") from exc
             result = validate_structured_answer(_json_from_content(content), allowed_pages, provider="openrouter", model=self.model, raw_response=raw_response, page_text_by_page=page_text_by_page)
         return ProviderAnswer(answer_text=_display_text(result.structured or {}), cited_pages=result.cited_pages, provider=result.provider, model=result.model, response_sha256=result.response_sha256, structured=result.structured)
 
@@ -456,7 +471,7 @@ def planner_mode() -> str:
 
 
 def _provider_error_message(exc: HTTPError, secret: str) -> str:
-    """The provider's own error text (e.g. why a request was rejected), short and key-free."""
+    """The provider's own error text (e.g. why a request was rejected), short and key-free, for server logs."""
     try:
         payload = json.loads(exc.read().decode("utf-8", errors="replace") or "{}")
     except (OSError, ValueError):
@@ -491,7 +506,9 @@ class PlannerChatClient:
         if not self.api_key:
             raise ProviderError("AI_NOT_CONFIGURED", f"{key_name} is not configured")
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, timeout: float | None = None) -> str:
+        """One chat completion; a timeout bounds the whole call, retries and their waits included."""
+        deadline = time.monotonic() + timeout if timeout is not None else math.inf
         body = {"model": self.model, "temperature": 0, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
         if self.mode == "gemini":
             # Planner and document assistant both expect one JSON object; keep
@@ -504,28 +521,33 @@ class PlannerChatClient:
             headers.update({"HTTP-Referer": "http://127.0.0.1:4173", "X-Title": "SourceLens"})
         request = Request(f"{self.base_url}/chat/completions", data=json.dumps(body, ensure_ascii=False).encode("utf-8"), method="POST", headers=headers)
         for attempt in range(self.max_retries + 1):
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise ProviderError("AI_PROVIDER_TIMEOUT", f"{self.mode} planner request ran out of time")
             try:
-                with urlopen(request, timeout=self.timeout_seconds) as response:
-                    envelope = json.loads(response.read().decode("utf-8"))
+                with urlopen(request, timeout=min(self.timeout_seconds, left)) as response:
+                    raw = response.read()
                 break
             except HTTPError as exc:
                 retryable = exc.code in {408, 429, 500, 502, 503, 504}
                 if attempt >= self.max_retries or not retryable:
                     code = "AI_PROVIDER_UNAVAILABLE" if retryable else ("AI_MODEL_UNAVAILABLE" if exc.code == 404 else "AI_PROVIDER_HTTP_ERROR")
-                    detail = _provider_error_message(exc, self.api_key)
-                    raise ProviderError(code, f"{self.mode} planner request failed (HTTP {exc.code})" + (f": {detail}" if detail else "")) from exc
-                time.sleep(min(8.0, 2.0 * (attempt + 1)))
-            except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+                    logger.warning("%s planner request failed (HTTP %s): %s", self.mode, exc.code, _provider_error_message(exc, self.api_key) or "no error text")
+                    raise ProviderError(code, f"{self.mode} planner request failed (HTTP {exc.code})", exc.code) from exc
+                time.sleep(max(0.0, min(8.0, 2.0 * (attempt + 1), deadline - time.monotonic())))
+            except (URLError, TimeoutError, OSError) as exc:
                 if attempt >= self.max_retries:
                     raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"{self.mode} planner is unreachable") from exc
+        # A 200 whose body is not the chat envelope (e.g. a gateway HTML page)
+        # carries no model text: a provider failure, not bad model output.
         try:
-            content = envelope["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise ProviderError("AI_INVALID_OUTPUT", f"{self.mode} planner response envelope is invalid") from exc
+            content = json.loads(raw.decode("utf-8"))["choices"][0]["message"]["content"]
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise ProviderError("AI_PROVIDER_BAD_RESPONSE", f"{self.mode} planner response is not a chat completion") from exc
         if isinstance(content, list):
             content = "".join(str(part.get("text", "")) if isinstance(part, dict) else str(part) for part in content)
         if not isinstance(content, str):
-            raise ProviderError("AI_INVALID_OUTPUT", "planner output is not text")
+            raise ProviderError("AI_PROVIDER_BAD_RESPONSE", f"{self.mode} planner response carries no text")
         return content
 
 
@@ -539,4 +561,4 @@ def planner_client() -> PlannerChatClient | None:
         return None
 
 
-__all__ = ["PLANNER_PROVIDERS", "PlannerChatClient", "planner_client", "planner_mode", "GEMINI_RESPONSE_SCHEMA", "OPENROUTER_RESPONSE_SCHEMA", "GeminiProvider", "OpenRouterProvider", "ProviderAnswer", "ProviderError", "_json_from_content", "live_provider", "provider_mode", "validate_answer", "validate_structured_answer"]
+__all__ = ["MAX_ANSWER_CHARS", "PLANNER_PROVIDERS", "PlannerChatClient", "planner_client", "planner_mode", "GEMINI_RESPONSE_SCHEMA", "OPENROUTER_RESPONSE_SCHEMA", "GeminiProvider", "OpenRouterProvider", "ProviderAnswer", "ProviderError", "_json_from_content", "live_provider", "provider_mode", "validate_answer", "validate_structured_answer"]

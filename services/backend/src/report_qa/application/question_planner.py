@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 from uuid import uuid4
 
+from report_qa.api.ai_provider import ProviderError
 from report_qa.application.p0_pipeline import FORMULAS, build_question_plan
 
 ChatComplete = Callable[[str, str], str]
@@ -96,6 +97,9 @@ class PlanResult:
     planner: str
     fallback_code: str | None = None
     rules_applied: list[str] = field(default_factory=list)
+    # The fallback code when the provider call itself failed (no model text);
+    # None when the model answered, even with unusable output.
+    provider_error: str | None = None
 
 
 def _plain(value: str | None) -> str:
@@ -413,6 +417,10 @@ def _named_subject(question: str) -> str | None:
     if not match:
         return None
     first, *rest = match.group(1).split()
+    # A name is capitalised ("Bắc", "Hà Nội", "A") or a code with a digit
+    # ("1", "b2"); a lowercase word is the rest of the question ("nào", "là").
+    if not (first[0].isupper() or any(char.isdigit() for char in first)):
+        return None
     # Keep a multi-word proper name ("Hà Nội"), not the following verb ("là").
     for word in rest:
         if not word[0].isupper():
@@ -575,25 +583,29 @@ def plan_question(question: str, document_version_id: str, *, catalog: list[Cata
     catalog = catalog or []
     history = history or []
     chosen = _chosen_reason(prior_clarification_plan, question)
-    planner, fallback = "rules", None
+    planner, fallback, provider_error = "rules", None, None
     plan = None
     if complete is not None:
+        message = user_message(question, catalog, history)
         try:
-            message = user_message(question, catalog, history)
-            plan = plan_from_model_output(extract_json(complete(SYSTEM_PROMPT, message)), question, document_version_id, catalog)
-            planner = f"ai:{model_name}" if model_name else "ai"
-            if prior_clarification_plan and prior_clarification_plan.get("status") == "needs_clarification":
-                plan["original_question"] = f"{prior_clarification_plan['original_question']} ({question})"
-        except PlannerError as exc:
-            fallback = exc.code
+            reply = complete(SYSTEM_PROMPT, message)
         except Exception as exc:  # a provider failure must not stop the question; the rules still run
-            fallback = getattr(exc, "code", None) or "PLANNER_PROVIDER_FAILED"
+            reply = None
+            fallback = provider_error = exc.code if isinstance(exc, ProviderError) else "PLANNER_PROVIDER_FAILED"
+        if reply is not None:
+            try:
+                plan = plan_from_model_output(extract_json(reply), question, document_version_id, catalog)
+                planner = f"ai:{model_name}" if model_name else "ai"
+                if prior_clarification_plan and prior_clarification_plan.get("status") == "needs_clarification":
+                    plan["original_question"] = f"{prior_clarification_plan['original_question']} ({question})"
+            except Exception as exc:  # whatever the model wrote, the rules still run
+                fallback = exc.code if isinstance(exc, PlannerError) else "PLANNER_INVALID_OUTPUT"
     if plan is None:
         plan = build_question_plan(question, document_version_id, prior_clarification_plan)
     if plan.get("status") == "unsupported" and _is_document_structure_question(question):
         plan = document_lookup_plan(question, document_version_id)
     plan, applied = apply_rules(plan, question, catalog, history, chosen_reason=chosen)
-    return PlanResult(plan=plan, planner=planner, fallback_code=fallback, rules_applied=applied)
+    return PlanResult(plan=plan, planner=planner, fallback_code=fallback, rules_applied=applied, provider_error=provider_error)
 
 
 __all__ = ["CatalogEntry", "PlanResult", "PlannerError", "SYSTEM_PROMPT", "apply_rules", "build_catalog", "catalog_text", "clarification_plan",

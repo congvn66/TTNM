@@ -1,11 +1,14 @@
 from io import BytesIO
 import json
+from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from report_qa.api import main as api_main
+from report_qa.api.ai_provider import ProviderError
 from report_qa.api.main import app
 
 
@@ -73,6 +76,7 @@ def test_health_docs_and_openapi_expose_only_the_main_flow() -> None:
         "selected": "deterministic", "status": "available", "network_probe": "not_run"
     }
     assert health.headers["x-persistence-backend"] == "json"
+    assert health_body["capabilities"]["reextraction"] == {"status": "available"}
 
     assert client.get("/docs").status_code == 200
     schema = client.get("/openapi.json").json()
@@ -229,6 +233,28 @@ def test_upload_rejects_malformed_pdf_and_page_limit() -> None:
     finally:
         api_main.MAX_PDF_PAGES = previous_limit
         cleanup_session(created["id"])
+
+
+def test_password_protected_pdf_gets_its_own_error_code() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Encrypted"}).json()["session"]
+    try:
+        writer = PdfWriter()
+        writer.add_blank_page(width=595, height=842)
+        writer.encrypt("secret")
+        payload = BytesIO()
+        writer.write(payload)
+        uploaded = client.post(
+            f"/api/v1/sessions/{created['id']}/documents",
+            files={"file": ("locked.pdf", payload.getvalue(), "application/pdf")},
+        )
+        assert uploaded.status_code == 422
+        assert uploaded.json()["detail"]["code"] == "PDF_ENCRYPTED"
+        assert "mật khẩu" in uploaded.json()["detail"]["message"]
+        assert client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"] == []
+    finally:
+        cleanup_session(created["id"])
+
+
 def test_legacy_document_without_file_url_gets_a_reader_url() -> None:
     session_id = "legacy-url-test"
     document_id = "legacy-document"
@@ -321,6 +347,73 @@ def test_message_idempotency_replays_without_duplicate_answer() -> None:
         assert conflict.json()["detail"]["code"] == "IDEMPOTENCY_KEY_REUSED"
     finally:
         cleanup_session(created["id"])
+
+def test_client_worker_header_does_not_skip_storing_the_answer() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Worker header"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        asked = client.post(
+            f"/api/v1/sessions/{created['id']}/messages",
+            json={"document_id": document_id, "question": "What was revenue in Q1/2026?"},
+            headers={"X-Worker-Job": "1"},
+        )
+        assert asked.status_code == 200, asked.text
+        assert len(client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["messages"]) == 2
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_parallel_requests_with_one_idempotency_key_answer_once(monkeypatch) -> None:
+    import threading
+    import time
+
+    real_plan = api_main.plan_question
+
+    def slow_plan(*args, **kwargs):
+        time.sleep(0.3)
+        return real_plan(*args, **kwargs)
+
+    monkeypatch.setattr(api_main, "plan_question", slow_plan)
+    created = client.post("/api/v1/sessions", json={"title": "Parallel idempotency"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        payload = {"document_id": document_id, "question": "What was revenue in Q1/2026?"}
+        responses = []
+
+        def ask():
+            responses.append(client.post(f"/api/v1/sessions/{created['id']}/messages", json=payload, headers={"Idempotency-Key": "parallel-key"}))
+
+        threads = [threading.Thread(target=ask) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert [item.status_code for item in responses] == [200] * 4
+        assert len({item.json()["assistant_message"]["id"] for item in responses}) == 1
+        assert len(client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["messages"]) == 2
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_reading_evidences_never_saves_the_catalog(monkeypatch) -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Read-only GET"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        key = client.get(f"{base}/evidences").json()["evidences"][0]["evidence_key"]
+        saves = []
+        real_save = api_main.save_catalog
+        monkeypatch.setattr(api_main, "save_catalog", lambda *args: (saves.append(1), real_save(*args))[1])
+        assert client.get(f"{base}/evidences").status_code == 200
+        assert client.get(f"{base}/evidences/{key}/revisions").status_code == 200
+        assert saves == []
+        # The state is rebuilt from the artifact and the log; nothing is written.
+        api_main.catalog["sessions"][created["id"]]["documents"][0].pop("evidence_state")
+        assert client.get(f"{base}/evidences").status_code == 200
+        assert saves == []
+    finally:
+        cleanup_session(created["id"])
+
 
 def test_unmatched_question_is_rejected_instead_of_sent_to_ai() -> None:
     created = client.post("/api/v1/sessions", json={"title": "Retrieval guard"}).json()["session"]
@@ -583,7 +676,7 @@ class _FakePlanner:
     def __init__(self, reply):
         self.reply, self.calls = reply, []
 
-    def complete(self, system, user):
+    def complete(self, system, user, timeout=None):
         self.calls.append(user)
         if isinstance(self.reply, Exception):
             raise self.reply
@@ -639,6 +732,35 @@ def test_planner_provider_failure_falls_back_to_rules(monkeypatch):
         cleanup_session(created["id"])
 
 
+@pytest.mark.parametrize(("failure", "code"), [
+    (ProviderError("AI_PROVIDER_UNAVAILABLE", "fake planner is unreachable"), "AI_PROVIDER_UNAVAILABLE"),
+    (ProviderError("AI_PROVIDER_HTTP_ERROR", "fake planner rejected", 400), "AI_PROVIDER_HTTP_ERROR"),
+    (ProviderError("AI_MODEL_UNAVAILABLE", "fake model is gone", 404), "AI_MODEL_UNAVAILABLE"),
+    (ProviderError("AI_PROVIDER_BAD_RESPONSE", "gateway page"), "AI_PROVIDER_BAD_RESPONSE"),
+    (TimeoutError("slow"), "PLANNER_PROVIDER_FAILED"),
+])
+def test_a_failed_planner_is_reported_instead_of_calling_the_question_out_of_scope(monkeypatch, failure, code):
+    created, _, response = _ask_with_planner(monkeypatch, failure, "Tổng doanh thu Q1 và Q2?")
+    try:
+        assert response.status_code == 502
+        assert response.json()["detail"]["code"] == code
+        assert client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["messages"] == []
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_unusable_planner_output_on_an_unsupported_question_is_still_out_of_scope(monkeypatch):
+    created, _, response = _ask_with_planner(monkeypatch, {"status": "maybe"}, "Tổng doanh thu Q1 và Q2?")
+    try:
+        assert response.status_code == 200, response.text
+        assistant = response.json()["assistant_message"]
+        assert assistant["mode"] == "question_unsupported"
+        plan_event = next(e for e in assistant["trace"] if e["stage"] == "question_plan")
+        assert plan_event["planner_fallback"] == "PLANNER_INVALID_OUTPUT"
+    finally:
+        cleanup_session(created["id"])
+
+
 def _upload(session_id: str, text: str, name: str = "doc.pdf") -> str:
     uploaded = client.post(
         f"/api/v1/sessions/{session_id}/documents",
@@ -646,6 +768,23 @@ def _upload(session_id: str, text: str, name: str = "doc.pdf") -> str:
     )
     assert uploaded.status_code == 200, uploaded.text
     return uploaded.json()["document"]["id"]
+
+
+def test_upload_and_rename_names_keep_the_base_name_without_hidden_characters() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Names"}).json()["session"]
+    try:
+        names = {}
+        for sent in ("../../../../etc/passwd.pdf", "..\\..\\evil.pdf", "a" * 400 + ".pdf", "Báo cáo \u202e fdp.exe.pdf"):
+            document_id = _upload(created["id"], "Revenue Q1/2026 was 120.", sent)
+            names[sent] = next(item["file_name"] for item in client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"] if item["id"] == document_id)
+        assert names["../../../../etc/passwd.pdf"] == "passwd.pdf"
+        assert names["..\\..\\evil.pdf"] == "evil.pdf"
+        assert len(names["a" * 400 + ".pdf"]) == 255 and names["a" * 400 + ".pdf"].endswith(".pdf")
+        assert names["Báo cáo \u202e fdp.exe.pdf"] == "Báo cáo  fdp.exe.pdf"
+        renamed = client.patch(f"/api/v1/sessions/{created['id']}/documents/{document_id}", json={"file_name": "\u202eBáo cáo"})
+        assert renamed.status_code == 200 and renamed.json()["document"]["file_name"] == "Báo cáo.pdf"
+    finally:
+        cleanup_session(created["id"])
 
 
 def test_clarification_on_one_document_is_not_applied_to_another() -> None:
@@ -781,7 +920,8 @@ def test_reextracting_a_ready_document_archives_the_old_result_and_keeps_edits()
         ).json()["assistant_message"]
         base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
         item = next(row for row in client.get(f"{base}/evidences").json()["evidences"] if row["current_numeric_value"] == "100")
-        client.post(f"{base}/evidences/{item['evidence_key']}/revisions", json={"numeric_value": "110", "reason": "Đối chiếu PDF", "expected_revision_id": item["current_revision_id"]})
+        edited = client.post(f"{base}/evidences/{item['evidence_key']}/revisions", json={"numeric_value": "110", "reason": "Đối chiếu PDF", "expected_revision_id": item["current_revision_id"]})
+        assert answer["id"] in edited.json()["affected_message_ids"]
         stored = api_main.catalog["sessions"][created["id"]]["documents"][0]
         old_run_id = json.loads(api_main.extraction_path(stored["extraction_name"]).read_text(encoding="utf-8"))["evidence_batch"]["extraction_run_id"]
 
@@ -791,7 +931,11 @@ def test_reextracting_a_ready_document_archives_the_old_result_and_keeps_edits()
         previous = rerun.json()["previous_extraction"]
         assert (previous["status"], previous["extraction_run_id"]) == ("ready", old_run_id)
         assert api_main.extraction_path(previous["artifact"]).exists()  # archived, not overwritten
-        assert answer["id"] in rerun.json()["affected_message_ids"]
+        assert rerun.json()["affected_message_ids"] == []  # judged when the new reading is ready
+        history = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"]
+        # It used 100 and the carried-over edit says 110: still waiting for an update, but the edit already reported it.
+        assert history[-1]["affected_message_ids"] == []
+        assert next(m for m in api_main.catalog["sessions"][created["id"]]["messages"] if m["id"] == answer["id"])["needs_update"]
         after = next(row for row in client.get(f"{base}/evidences").json()["evidences"] if row["evidence_key"] == item["evidence_key"])
         assert (after["original_numeric_value"], after["current_numeric_value"]) == ("100", "110")
     finally:
@@ -837,5 +981,518 @@ def test_subject_only_lookup_without_matching_evidence_keeps_the_text_answer() -
         answer = client.post(f"/api/v1/sessions/{created['id']}/messages", json={"document_id": document_id, "question": "Revenue region North?"})
         assert answer.status_code == 200, answer.text
         assert answer.json()["assistant_message"]["mode"] == "deterministic_text_retrieval"
+    finally:
+        cleanup_session(created["id"])
+
+
+@pytest.mark.parametrize(
+    ("reply", "code", "provider_status"),
+    [
+        (ProviderError("AI_PROVIDER_HTTP_ERROR", "gemini planner request failed (HTTP 400)", 400), "AI_PROVIDER_HTTP_ERROR", 400),
+        ({"action": "unknown"}, "ASSISTANT_INCOMPLETE", None),
+    ],
+)
+def test_tools_mode_ai_failure_shows_a_vietnamese_message_and_keeps_the_code(monkeypatch, reply, code, provider_status):
+    from report_qa.api import document_assistant_flow
+
+    monkeypatch.setenv("REPORT_QA_ASSISTANT_MODE", "tools")
+    monkeypatch.setattr(document_assistant_flow, "planner_client", lambda: _FakePlanner(reply))
+    created = client.post("/api/v1/sessions", json={"title": "AI failure"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        response = client.post(f"/api/v1/sessions/{created['id']}/messages", json={"document_id": document_id, "question": "Revenue?"})
+        assert response.status_code == 502
+        detail = response.json()["detail"]
+        assert detail["code"] == code
+        assert detail["message"] == api_main.MESSAGES[code]
+        assert detail.get("provider_http_status") == provider_status
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_extraction_failure_logs_the_traceback_and_stores_a_stable_code(monkeypatch, caplog):
+    import logging
+
+    def broken(path, version):
+        raise KeyError("prov")
+
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", broken)
+    flow_logger = logging.getLogger("report_qa.flow")
+    flow_logger.addHandler(caplog.handler)
+    try:
+        result = api_main.extract_pdf_pages(api_main.document_path("missing.pdf"), "missing.json", "v")
+    finally:
+        flow_logger.removeHandler(caplog.handler)
+    assert result["status"] == "failed" and result["error"] == "KeyError"
+    assert any(record.exc_info and record.exc_info[0] is KeyError for record in caplog.records)
+
+
+def test_object_storage_errors_are_readable_vietnamese() -> None:
+    response = api_main.object_storage_error_handler(None, api_main.ObjectStorageError("down"))
+    assert json.loads(response.body)["detail"]["message"] == "Cloudflare R2 tạm thời không sẵn sàng; hãy thử lại sau."
+
+
+def test_every_error_response_carries_the_vietnamese_message_of_its_code(monkeypatch) -> None:
+    from report_qa.api.user_messages import MESSAGES
+
+    missing = f"/api/v1/sessions/{uuid4()}"
+    created = client.post("/api/v1/sessions", json={"title": "Errors"}).json()["session"]
+    try:
+        responses = {
+            "SESSION_NOT_FOUND": client.get(missing),
+            "DOCUMENT_NOT_FOUND": client.get(f"/api/v1/sessions/{created['id']}/documents/{uuid4()}/evidences"),
+            "MESSAGE_TRACE_NOT_FOUND": client.get(f"/api/v1/sessions/{created['id']}/messages/{uuid4()}/trace"),
+            "REQUEST_INVALID": client.post("/api/v1/sessions", json={"title": ""}),
+            "METHOD_NOT_ALLOWED": client.put("/api/v1/sessions"),
+        }
+        for code, response in responses.items():
+            assert response.json()["detail"]["code"] == code
+            assert response.json()["detail"]["message"] == MESSAGES[code]
+        assert responses["REQUEST_INVALID"].json()["detail"]["errors"][0]["loc"] == ["body", "title"]
+
+        def broken(*args, **kwargs):
+            raise RuntimeError("internal detail")
+        monkeypatch.setattr(api_main, "get_session", broken)
+        crashed = TestClient(app, raise_server_exceptions=False).get(missing, headers={"X-Trace-Id": "t-500"})
+        assert crashed.status_code == 500
+        assert crashed.json() == {"detail": {"code": "INTERNAL_ERROR", "message": MESSAGES["INTERNAL_ERROR"], "trace_id": "t-500"}}
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_session_payload_leaves_number_state_to_the_evidence_endpoints() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Small payload"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        assert client.get(f"/api/v1/sessions/{created['id']}/documents/{document_id}/evidences").json()["evidences"]
+        assert "evidence_state" in api_main.catalog["sessions"][created["id"]]["documents"][0]
+        document = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]
+        assert "evidence_state" not in document and "chart_extractions" not in document
+    finally:
+        cleanup_session(created["id"])
+
+
+def _reading(*numbers):
+    """A fake extraction: (key, raw_text, numeric_value, page) per number."""
+    evidences = [
+        {"evidence_key": key, "source_region_key": f"{key}-region", "source_type": "table", "page_number": page, "bbox": [0.1, 0.1, 0.2, 0.2],
+         "raw_text": raw, "numeric_value": value, "value_kind": "number", "data_status": "valid", "extraction_method": "table_cell",
+         "method_label": "đọc từ ô bảng", "semantic": {}, "table_locator": {"table_region_key": f"page-{page}-table-0", "row_index": 1, "column_index": 1},
+         "chart_read": None, "confidence": 0.9}
+        for key, raw, value, page in numbers
+    ]
+    # A page prints its numbers, as in a real extraction.
+    pages = [{"page": 1, "text": " ".join(["Doanh thu", *(raw for _, raw, _, _ in numbers)])}]
+    return lambda path, version: {"pages": pages, "evidence_batch": {
+        "schema_version": 2, "document_version_id": version, "extraction_run_id": str(uuid4()), "scope": "base_document",
+        "trigger": None, "evidences": evidences, "warnings": []}}
+
+
+def test_reextraction_rebuilds_numbers_and_carries_over_only_edits_at_the_same_place(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(
+        ("misread", "18.240", "18.24", 1), ("kept", "100", "100", 1), ("moved", "200", "200", 1), ("gone", "300", "300", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Re-extract rebuild"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        rows = {row["evidence_key"]: row for row in client.get(f"{base}/evidences").json()["evidences"]}
+        for key, value in (("kept", "110"), ("moved", "210"), ("gone", "310")):
+            edited = client.post(f"{base}/evidences/{key}/revisions", json={"numeric_value": value, "reason": "Đối chiếu PDF", "expected_revision_id": rows[key]["current_revision_id"]})
+            assert edited.status_code == 200, edited.text
+        stored = api_main.catalog["sessions"][created["id"]]["documents"][0]
+        stored["chart_extractions"] = [{"chart_region_key": "page-1-picture-0", "document_run_id": stored["extraction_run_id"], "evidence_batch": {"evidences": []}}]
+
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(
+            ("misread", "18.240", "18240", 1), ("kept", "100", "100", 1), ("moved", "200", "200", 2)))
+        rerun = client.post(f"{base}/extraction")
+
+        assert rerun.status_code == 200, rerun.text
+        assert sorted(edit["evidence_key"] for edit in rerun.json()["previous_extraction"]["user_edits"]) == ["gone", "kept", "moved"]
+        after = {row["evidence_key"]: row for row in client.get(f"{base}/evidences").json()["evidences"]}
+        assert after["misread"]["current_numeric_value"] == "18240"
+        assert (after["kept"]["original_numeric_value"], after["kept"]["current_numeric_value"]) == ("100", "110")
+        assert after["moved"]["current_numeric_value"] == "200"
+        assert "gone" not in after
+        entry = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"][-1]
+        assert entry["edits_carried_over"] == ["kept"]
+        assert sorted((item["evidence_key"], item["code"]) for item in entry["edits_not_carried_over"]) == [("gone", "NOT_IN_NEW_READING"), ("moved", "LOCATION_CHANGED")]
+        assert stored["chart_extractions"] == []
+        archived = [json.loads(line) for line in api_main.number_state_path(entry["number_state"]).read_text(encoding="utf-8").splitlines()]
+        assert [event["record"]["chart_region_key"] for event in archived if event["kind"] == "chart_read"] == ["page-1-picture-0"]
+        assert [event["revision"]["numeric_value"] for event in archived if event.get("evidence_key") == "gone"] == ["310"]
+    finally:
+        cleanup_session(created["id"])
+
+
+def _rerun_without_extracting(monkeypatch, base):
+    """Re-run extraction but leave the document queued, as while the new reading is still running."""
+    async def later(*args):
+        return None
+    monkeypatch.setattr(api_main, "_extract_in_background", later)
+    assert client.post(f"{base}/extraction").status_code == 200
+
+
+def test_a_request_that_started_before_a_reextraction_cannot_build_numbers_from_the_old_reading(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("misread", "18.240", "18.24", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "In-flight answer"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        document = api_main.catalog["sessions"][created["id"]]["documents"][0]
+        old_artifact = api_main._load_extraction_artifact(document["extraction_name"])
+        old_name = document["extraction_name"]
+        _rerun_without_extracting(monkeypatch, base)
+
+        # An answer still holding the old reading asks for its numbers.
+        with pytest.raises(api_main.ReadingNotCurrent):
+            api_main.extraction_with_evidence_revisions(document, old_artifact, old_artifact)
+        assert "evidence_state" not in document
+        assert api_main.extraction_path(old_name).exists()
+        assert client.get(f"{base}/evidences").json()["detail"]["code"] == "EXTRACTION_NOT_READY"
+        edit = client.post(f"{base}/evidences/misread/revisions", json={"numeric_value": "1", "reason": "Đối chiếu PDF", "expected_revision_id": "x"})
+        assert (edit.status_code, edit.json()["detail"]["code"]) == (409, "EXTRACTION_NOT_READY")
+
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("misread", "18.240", "18240", 1)))
+        api_main.complete_document_extraction(created["id"], document_id)
+        row = client.get(f"{base}/evidences").json()["evidences"][0]
+        assert row["current_numeric_value"] == "18240"
+        assert document["evidence_state"]["extraction_run_id"] == document["extraction_run_id"] != old_artifact["evidence_batch"]["extraction_run_id"]
+        with pytest.raises(api_main.ReadingNotCurrent):
+            api_main.extraction_with_evidence_revisions(document, old_artifact, old_artifact)
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_an_edit_whose_document_was_re_extracted_meanwhile_is_refused_not_lost(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("kept", "100", "100", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Edit race"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        row = client.get(f"{base}/evidences").json()["evidences"][0]
+        real_ready = api_main._ready_document
+
+        def ready_then_rerun(session, requested):
+            loaded = real_ready(session, requested)
+            with api_main.catalog_lock:  # the re-extraction lands between the check and the edit
+                api_main._archive_extraction(loaded[0], loaded[1])
+                loaded[0]["extraction_status"] = "queued"
+            return loaded
+
+        monkeypatch.setattr(api_main, "_ready_document", ready_then_rerun)
+        edit = client.post(f"{base}/evidences/kept/revisions", json={"numeric_value": "110", "reason": "Đối chiếu PDF", "expected_revision_id": row["current_revision_id"]})
+        assert (edit.status_code, edit.json()["detail"]["code"]) == (409, "EXTRACTION_NOT_READY")
+        assert api_main.catalog["sessions"][created["id"]]["documents"][0]["number_log"] == []
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_a_chart_read_made_on_an_earlier_reading_is_dropped(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("kept", "100", "100", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Stale chart read"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        document = api_main.catalog["sessions"][created["id"]]["documents"][0]
+        value = {**_reading(("chart-1", "5", "5", 1))("x", "v")["evidence_batch"]["evidences"][0], "source_type": "chart"}
+        chart = {"chart_region_key": "r", "created_at": api_main.utc_now(), "evidence_batch": {"evidences": [value]}}
+        document["chart_extractions"] = [{**chart, "document_run_id": "an-earlier-reading"}, {**chart, "document_run_id": document["extraction_run_id"]}]
+        api_main.save_catalog(api_main.catalog)
+        assert [record["document_run_id"] for record in document["chart_extractions"]] == [document["extraction_run_id"]]
+        assert [event["kind"] for event in document["number_log"]] == ["chart_read"]
+        assert "chart-1" in {row["evidence_key"] for row in client.get(f"/api/v1/sessions/{created['id']}/documents/{document_id}/evidences").json()["evidences"]}
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_a_crash_during_reextraction_never_leaves_a_ready_document_without_its_artifact(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("kept", "100", "100", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Crash window"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        name = api_main.catalog["sessions"][created["id"]]["documents"][0]["extraction_name"]
+
+        def crash(*args):
+            raise RuntimeError("killed before the catalog was saved")
+        monkeypatch.setattr(api_main, "save_catalog", crash)
+        with pytest.raises(RuntimeError):
+            client.post(f"{base}/extraction")
+        on_disk = api_main.load_catalog()["sessions"][created["id"]]["documents"][0]
+        assert on_disk["extraction_status"] == "ready" and on_disk["extraction_name"] == name
+        assert api_main.extraction_path(name).exists()
+    finally:
+        monkeypatch.undo()
+        cleanup_session(created["id"])
+
+
+def test_a_failed_reextraction_reports_every_edit_as_not_carried_over(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("kept", "100", "100", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Re-extract failed reading"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        row = client.get(f"{base}/evidences").json()["evidences"][0]
+        client.post(f"{base}/evidences/kept/revisions", json={"numeric_value": "110", "reason": "Đối chiếu PDF", "expected_revision_id": row["current_revision_id"]})
+
+        def broken(path, version):
+            raise RuntimeError("extractor bug")
+
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", broken)
+        assert client.post(f"{base}/extraction").status_code == 200
+        entry = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"][-1]
+        assert entry["edits_carried_over"] == []
+        assert entry["edits_not_carried_over"] == [{"evidence_key": "kept", "numeric_value": "110", "code": "NEW_READING_FAILED"}]
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_edits_stay_pending_through_failed_readings_until_a_reading_is_ready(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("kept", "100", "100", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Fail then retry"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        row = client.get(f"{base}/evidences").json()["evidences"][0]
+        assert client.post(f"{base}/evidences/kept/revisions", json={"numeric_value": "110", "reason": "Đối chiếu PDF", "expected_revision_id": row["current_revision_id"]}).status_code == 200
+
+        def broken(path, version):
+            raise RuntimeError("transient")
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", broken)
+        assert client.post(f"{base}/extraction").status_code == 200
+        second_failure = client.post(f"{base}/extraction")
+        assert [edit["numeric_value"] for edit in second_failure.json()["previous_extraction"]["user_edits"]] == ["110"]
+
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("kept", "100", "100", 1)))
+        retried = client.post(f"{base}/extraction")
+        assert [edit["numeric_value"] for edit in retried.json()["previous_extraction"]["user_edits"]] == ["110"]
+        assert client.get(f"{base}/evidences").json()["evidences"][0]["current_numeric_value"] == "110"
+        history = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"]
+        assert [(entry["status"], entry["edits_carried_over"], [item["code"] for item in entry["edits_not_carried_over"]]) for entry in history] == [
+            ("ready", [], ["NEW_READING_FAILED"]), ("failed", [], ["NEW_READING_FAILED"]), ("failed", ["kept"], [])]
+        assert api_main.catalog["sessions"][created["id"]]["documents"][0]["pending_edits"] == []
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_reextraction_flags_only_answers_whose_values_changed(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("a", "100", "100", 1), ("b", "200", "200", 1), ("c", "300", "300", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Stale answers"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        rows = {row["evidence_key"]: row for row in client.get(f"{base}/evidences").json()["evidences"]}
+        # "c" is edited and then put back to its printed value: not an edit any more.
+        first = client.post(f"{base}/evidences/c/revisions", json={"numeric_value": "310", "reason": "Thử", "expected_revision_id": rows["c"]["current_revision_id"]})
+        client.post(f"{base}/evidences/c/revisions", json={"numeric_value": "300.0", "reason": "Trả lại", "expected_revision_id": first.json()["revision"]["id"]})
+        session = api_main.catalog["sessions"][created["id"]]
+        answers = {name: {"id": name, "role": "assistant", "document_id": document_id, "answer_inputs": [{"evidence_key": key, "value": value}]}
+                   for name, key, value in (("uses-a", "a", "100"), ("uses-b", "b", "200"), ("uses-c", "c", "300"))}
+        session["messages"].extend(answers.values())
+
+        same = client.post(f"{base}/extraction")
+        assert same.json()["previous_extraction"]["user_edits"] == []
+        entry = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"][-1]
+        assert (entry["affected_message_ids"], entry["edits_carried_over"]) == ([], [])
+        assert not any(message.get("needs_update") for message in answers.values())
+
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("a", "100", "100", 1), ("b", "250", "250", 1)))
+        client.post(f"{base}/extraction")
+        entry = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"][-1]
+        assert sorted(entry["affected_message_ids"]) == ["uses-b", "uses-c"]
+        assert [name for name, message in answers.items() if message.get("needs_update")] == ["uses-b", "uses-c"]
+
+        # The next reading lists only answers it newly flags: the web told the user again about the same answers.
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("a", "150", "150", 1), ("b", "250", "250", 1)))
+        client.post(f"{base}/extraction")
+        entry = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"][-1]
+        assert entry["affected_message_ids"] == ["uses-a"]
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_an_edit_the_new_reading_already_has_is_not_carried_over(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("misread", "18.240", "18.24", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Fixed by the new reading"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        row = client.get(f"{base}/evidences").json()["evidences"][0]
+        client.post(f"{base}/evidences/misread/revisions", json={"numeric_value": "18240", "reason": "Đối chiếu PDF", "expected_revision_id": row["current_revision_id"]})
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("misread", "18.240", "18240", 1)))
+        client.post(f"{base}/extraction")
+        entry = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"][-1]
+        assert (entry["edits_carried_over"], entry["edits_not_carried_over"]) == ([], [])
+        revisions = client.get(f"{base}/evidences/misread/revisions").json()["revisions"]
+        assert [r["action"] for r in revisions] == ["initialize"]
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_at_most_the_configured_number_of_extractions_run_at_once(monkeypatch) -> None:
+    import asyncio
+    import threading
+    import time
+
+    import httpx
+    from report_qa.application.evidence_extraction import extract_legacy_pdf_artifact
+
+    created = client.post("/api/v1/sessions", json={"title": "Extraction slots"}).json()["session"]
+    lock, running, peak, processing_peak = threading.Lock(), [0], [0], [0]
+
+    def slow_extractor(path, version):
+        with lock:
+            running[0] += 1
+            peak[0] = max(peak[0], running[0])
+            documents = api_main.catalog["sessions"][created["id"]]["documents"]
+            processing_peak[0] = max(processing_peak[0], sum(item["extraction_status"] == "processing" for item in documents))
+        time.sleep(0.2)
+        with lock:
+            running[0] -= 1
+        return extract_legacy_pdf_artifact(path, version)
+
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", slow_extractor)
+
+    async def upload_six():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+            return await asyncio.gather(*[
+                async_client.post(f"/api/v1/sessions/{created['id']}/documents", files={"file": (f"doc{index}.pdf", pdf_with_text("Revenue Q1/2026 was 120."), "application/pdf")})
+                for index in range(6)
+            ])
+
+    try:
+        responses = asyncio.run(upload_six())
+        assert [response.status_code for response in responses] == [200] * 6
+        assert (peak[0], processing_peak[0]) == (2, 2)  # the default REPORT_QA_MAX_PARALLEL_EXTRACTIONS
+        assert {item["extraction_status"] for item in api_main.catalog["sessions"][created["id"]]["documents"]} == {"ready"}
+    finally:
+        cleanup_session(created["id"])
+
+
+def _document_with_numbers(monkeypatch, *numbers):
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(*numbers))
+    monkeypatch.delenv("PDF_NUMBER_LOCALE", raising=False)
+    created = client.post("/api/v1/sessions", json={"title": "Typed numbers"}).json()["session"]
+    document_id = _upload(created["id"], "Doanh thu.")
+    base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+    rows = {row["evidence_key"]: row for row in client.get(f"{base}/evidences").json()["evidences"]}
+    return created["id"], base, rows
+
+
+def test_typed_number_is_read_in_the_documents_number_format(monkeypatch) -> None:
+    session_id, base, rows = _document_with_numbers(monkeypatch, ("total", "1.234.567", "1234567", 1), ("target", "21,5", "21.5", 1))
+    try:
+        body = {"input_text": "21.500", "reason": "Đối chiếu PDF", "expected_revision_id": rows["target"]["current_revision_id"]}
+        preview = client.post(f"{base}/evidences/target/revisions?dry_run=true", json=body)
+        assert preview.status_code == 200, preview.text
+        assert preview.json() == {"parsed_value": "21500", "plain_value": "21500", "display": "21.500", "decimal_separator": ",", "locale": "vi"}
+        assert client.get(f"{base}/evidences/target/revisions").json()["revisions"][-1]["action"] == "initialize"
+        stale = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "expected_revision_id": "stale"})
+        assert stale.status_code == 409
+
+        saved = client.post(f"{base}/evidences/target/revisions", json=body)
+        assert saved.status_code == 200, saved.text
+        assert (saved.json()["revision"]["numeric_value"], saved.json()["display"]) == ("21500", "21.500")
+        old_client = client.post(f"{base}/evidences/total/revisions", json={"numeric_value": "1234568", "reason": "Đối chiếu PDF", "expected_revision_id": rows["total"]["current_revision_id"]})
+        assert (old_client.status_code, old_client.json()["display"]) == (200, "1.234.568")
+    finally:
+        cleanup_session(session_id)
+
+
+def test_typed_number_that_the_unknown_format_cannot_decide_is_refused(monkeypatch) -> None:
+    session_id, base, rows = _document_with_numbers(monkeypatch, ("target", "100", "100", 1))
+    try:
+        body = {"input_text": "1.250", "reason": "Đối chiếu PDF", "expected_revision_id": rows["target"]["current_revision_id"]}
+        refused = client.post(f"{base}/evidences/target/revisions", json=body)
+        assert refused.status_code == 422
+        assert refused.json()["detail"]["code"] == "NUMBER_FORMAT_AMBIGUOUS"
+        assert refused.json()["detail"]["readings"] == ["1250", "1.250"]
+        decided = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": "21,5"})
+        assert decided.json() == {"parsed_value": "21.5", "plain_value": "21.5", "display": "21.5", "decimal_separator": None, "locale": None}
+        both = client.post(f"{base}/evidences/target/revisions", json={**body, "numeric_value": "1250"})
+        assert both.status_code == 422
+    finally:
+        cleanup_session(session_id)
+
+
+def test_typed_number_must_be_well_formed_in_the_documents_format(monkeypatch) -> None:
+    session_id, base, rows = _document_with_numbers(monkeypatch, ("total", "1,234,567", "1234567", 1), ("target", "21.5", "21.5", 1))
+    try:
+        body = {"reason": "Đối chiếu PDF", "expected_revision_id": rows["target"]["current_revision_id"]}
+        for typed in ("1.234.567,89", "18,2.40", "21,500,", "1e5", "5%", "1" * 19, "１２", "1,23"):
+            refused = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": typed})
+            assert refused.status_code == 422, typed
+            assert refused.json()["detail"]["code"] == "INVALID_DECIMAL"
+        too_long = client.post(f"{base}/evidences/target/revisions", json={**body, "numeric_value": "1" * 80})
+        assert (too_long.status_code, too_long.json()["detail"]["code"]) == (422, "INVALID_DECIMAL")
+        preview = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": "1,234,567.89"})
+        assert preview.json() == {"parsed_value": "1234567.89", "plain_value": "1234567.89", "display": "1,234,567.89", "decimal_separator": ".", "locale": "en"}
+    finally:
+        cleanup_session(session_id)
+
+
+def test_an_edit_reads_its_number_without_copying_the_whole_reading(monkeypatch) -> None:
+    session_id, base, rows = _document_with_numbers(monkeypatch, ("target", "21.5", "21.5", 1))
+    try:
+        copies = []
+        real = api_main.with_chart_batches
+        monkeypatch.setattr(api_main, "with_chart_batches", lambda *args: (copies.append(1), real(*args))[1])
+        saved = client.post(f"{base}/evidences/target/revisions", json={"input_text": "22", "reason": "Đối chiếu PDF", "expected_revision_id": rows["target"]["current_revision_id"]})
+        assert saved.status_code == 200 and copies == []
+    finally:
+        cleanup_session(session_id)
+
+
+def test_a_percent_sign_is_accepted_only_for_a_percentage(monkeypatch) -> None:
+    def reading(path, version):
+        artifact = _reading(("share", "12,5%", "12.5", 1), ("count", "1.234.567", "1234567", 1))(path, version)
+        artifact["evidence_batch"]["evidences"][0]["semantic"] = {"unit": "PERCENT"}
+        return artifact
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", reading)
+    created = client.post("/api/v1/sessions", json={"title": "Percent"}).json()["session"]
+    try:
+        base = f"/api/v1/sessions/{created['id']}/documents/{_upload(created['id'], 'Doanh thu.')}"
+        rows = {row["evidence_key"]: row for row in client.get(f"{base}/evidences").json()["evidences"]}
+        share = client.post(f"{base}/evidences/share/revisions?dry_run=true", json={"input_text": "13,5%", "reason": "Đối chiếu", "expected_revision_id": rows["share"]["current_revision_id"]})
+        assert share.json()["parsed_value"] == "13.5"
+        count = client.post(f"{base}/evidences/count/revisions?dry_run=true", json={"input_text": "5%", "reason": "Đối chiếu", "expected_revision_id": rows["count"]["current_revision_id"]})
+        assert count.status_code == 422 and "phần trăm" in count.json()["detail"]["message"]
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_upload_body_the_multipart_parser_refuses_gets_the_upload_error_shape() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Long name"}).json()["session"]
+    try:
+        refused = client.post(f"/api/v1/sessions/{created['id']}/documents", files={"file": ("a" * 5000 + ".pdf", pdf_with_text("x"), "application/pdf")})
+        assert refused.status_code == 400
+        assert refused.json() == {"detail": {"code": "UPLOAD_FORM_INVALID", "message": api_main.MESSAGES["UPLOAD_FORM_INVALID"]}}
+        assert client.get("/api/v1/no-such-route").json() == {"detail": {"code": "NOT_FOUND", "message": api_main.MESSAGES["NOT_FOUND"]}}
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_a_reading_is_parsed_once_and_requests_leave_the_shared_copy_unchanged(monkeypatch) -> None:
+    from report_qa.api import document_assistant_flow
+    from report_qa.api.object_storage_runtime import read_extraction
+
+    created = client.post("/api/v1/sessions", json={"title": "Parsed once"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        name = api_main.catalog["sessions"][created["id"]]["documents"][0]["extraction_name"]
+        assert read_extraction(name) is read_extraction(name)
+        on_disk = json.loads(api_main.extraction_path(name).read_text(encoding="utf-8"))
+
+        row = client.get(f"{base}/evidences").json()["evidences"][0]
+        edited = client.post(f"{base}/evidences/{row['evidence_key']}/revisions",
+                             json={"numeric_value": "130", "reason": "Đối chiếu PDF", "expected_revision_id": row["current_revision_id"]})
+        assert edited.status_code == 200, edited.text
+        monkeypatch.setenv("REPORT_QA_ASSISTANT_MODE", "tools")
+        monkeypatch.setattr(document_assistant_flow, "planner_client", lambda: _FakePlanner(
+            {"action": "answer", "answer": "Doanh thu là 130.", "evidence_keys": [row["evidence_key"]]}))
+        answer = client.post(f"/api/v1/sessions/{created['id']}/messages", json={"document_id": document_id, "question": "Doanh thu?"})
+        assert answer.status_code == 200, answer.text
+        assert client.get(f"{base}/evidences").json()["evidences"][0]["current_numeric_value"] == "130"
+        assert read_extraction(name) == on_disk
     finally:
         cleanup_session(created["id"])

@@ -14,16 +14,21 @@ from typing import Any
 from uuid import uuid4
 
 from report_qa.domain.contracts import validate_document_evidence_v2
-from report_qa.application.numeric_extraction import canonical_decimal
+from report_qa.application.numeric_extraction import (
+    HEADER_JOIN,
+    PERIOD,
+    _period,
+    canonical_decimal,
+    header_period,
+    period_near,
+    quantities,
+    single_year,
+)
 from report_qa.application.ocr_extraction import TesseractPdfOcr
 from report_qa.application.table_extraction import PdfPlumberTableExtractor
 
 
 NUMBER_RE = re.compile(r"(?<![\w/])[-+]?(?:\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,]\d+)?%?")
-QUARTER_RE = re.compile(r"(?i)\b(?:q|quý\s*)([1-4])\s*[/\-\s]\s*((?:19|20)\d{2})\b")
-YEAR_RE = re.compile(r"(?<![/\d])((?:19|20)\d{2})(?!\d)")
-# "Q1" in a table header with no year next to it.
-BARE_QUARTER_RE = re.compile(r"(?i)\b(?:q|quý\s*)([1-4])\b(?!\s*[/\-]\s*(?:19|20)\d{2})")
 
 
 def _matrix_product(m: Any, n: Any) -> list[float]:
@@ -33,27 +38,6 @@ def _matrix_product(m: Any, n: Any) -> list[float]:
         m[2] * n[0] + m[3] * n[2], m[2] * n[1] + m[3] * n[3],
         m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5],
     ]
-
-
-def _single_year(text: str) -> str | None:
-    years = set(YEAR_RE.findall(text))
-    return years.pop() if len(years) == 1 else None
-
-
-def _period_for(context: str, raw: str, page_year: str | None) -> dict[str, Any] | None:
-    """Period next to the number; a bare "Q1" header takes the page's only year."""
-    period = _period_near(context, context.rfind(raw))
-    if period is None and page_year:
-        match = BARE_QUARTER_RE.search(context)
-        if match:
-            quarter = int(match.group(1))
-            period = {
-                "label": f"Q{quarter}/{page_year}",
-                "start": f"{page_year}-{(quarter - 1) * 3 + 1:02d}-01",
-                "end": None,
-                "granularity": "quarter",
-            }
-    return period
 
 
 def _keyword_text(text: str) -> str:
@@ -117,31 +101,89 @@ def _decimal_text(raw: str) -> str:
     return canonical_decimal(f"{sign}{value}")
 
 
-def _period_near(text: str, number_start: int) -> dict[str, Any] | None:
-    candidates: list[tuple[int, dict[str, Any]]] = []
-    for match in QUARTER_RE.finditer(text):
-        quarter, year = int(match.group(1)), int(match.group(2))
-        candidates.append(
-            (
-                abs(match.start() - number_start),
-                {
-                    "label": f"Q{quarter}/{year}",
-                    "start": f"{year}-{(quarter - 1) * 3 + 1:02d}-01",
-                    "end": None,
-                    "granularity": "quarter",
-                },
-            )
-        )
-    if not candidates:
-        for match in YEAR_RE.finditer(text):
-            year = match.group(1)
-            candidates.append(
-                (
-                    abs(match.start() - number_start),
-                    {"label": year, "start": f"{year}-01-01", "end": f"{year}-12-31", "granularity": "year"},
-                )
-            )
-    return min(candidates, key=lambda item: item[0])[1] if candidates else None
+def cell_semantics(headers: list[str | None], context: str, raw: str, page_year: str | None) -> tuple[str, dict[str, Any] | None]:
+    """(measure, period) of a number from its own table header path.
+
+    headers is the path outer to inner: row header, then each column header
+    level. Only a number with no header at all takes them from nearby text.
+    """
+    named = [header for header in headers if header]
+    if named:
+        return _measure(" ".join(named)), header_period(named, page_year)
+    return _measure(context), period_near(context, max(0, context.rfind(raw)))
+
+
+_SENTENCE_END = re.compile(r"[.!?;](?=\s)|\n")
+_CLAUSE_END = re.compile(r"[,:;–—()]")
+# What is written right after a number: "6,5%", "220 tỷ đồng", "33 nghìn đơn", "26.900 VND".
+_UNIT_AFTER = re.compile(r"\s*(?:(?P<scale>nghìn|ngàn|triệu|tỷ|tỉ|thousand|million|billion)\b\s*(?P<money>đồng|vnd)?|(?P<plain>đồng|vnd|usd)\b)", re.IGNORECASE)
+_SCALE_UNITS = {"nghìn": "THOUSAND", "ngàn": "THOUSAND", "triệu": "MILLION", "tỷ": "BILLION", "tỉ": "BILLION",
+                "thousand": "THOUSAND", "million": "MILLION", "billion": "BILLION"}
+# A unit note, read without diacritics because chart titles come from DePlot's OCR ("Don vì: nghin đồn").
+_UNIT_NOTE = re.compile(
+    r"don vi(?: tinh)?\s*:?\s*(?:(?P<percent>%|phan tram)|(?P<scale>nghin|ngan|trieu|ty|ti|thousand|million|billion)\b"
+    r"\s*(?P<money>dong|vnd)?|(?P<plain>dong|vnd|usd)\b)"
+)
+_FOLDED_SCALES = {"nghin": "THOUSAND", "ngan": "THOUSAND", "trieu": "MILLION", "ty": "BILLION", "ti": "BILLION",
+                  "thousand": "THOUSAND", "million": "MILLION", "billion": "BILLION"}
+SUBJECT_WORDS = 12  # a label, not the sentence
+
+
+def unit_after(text: str, end: int, raw: str) -> str | None:
+    """Unit written right after a number in text; None when nothing is written."""
+    if raw.endswith("%"):
+        return "PERCENT"
+    match = _UNIT_AFTER.match(text, end)
+    if not match:
+        return None
+    if match["plain"]:
+        return "USD" if match["plain"].casefold() == "usd" else "VND"
+    scale = _SCALE_UNITS[match["scale"].casefold()]
+    return f"VND_{scale}" if match["money"] else scale
+
+
+def _folded(text: str) -> str:
+    plain = "".join(c for c in unicodedata.normalize("NFD", _keyword_text(text)) if not unicodedata.combining(c))
+    return plain.replace("đ", "d")
+
+
+def unit_note(text: str) -> str | None:
+    """Unit an explicit note states: "(đơn vị: triệu đồng)", "Đơn vị: nghìn đơn", "Đơn vị: %"."""
+    match = _UNIT_NOTE.search(_folded(text))
+    if not match:
+        return None
+    if match["percent"]:
+        return "PERCENT"
+    if match["plain"]:
+        return "USD" if match["plain"] == "usd" else "VND"
+    scale = _FOLDED_SCALES[match["scale"]]
+    return f"VND_{scale}" if match["money"] else scale
+
+
+def sentence_semantics(text: str, position: int, raw: str, page_year: str | None) -> dict[str, Any]:
+    """Measure, subject, period and unit that a text number's own sentence states for it.
+
+    Only the sentence part before the number is read: its nearest measure word, its
+    nearest period (a bare quarter or month takes the page's year) and, as
+    subject, the opening words of the number's own phrase: from the clause
+    start or the previous number and its unit, whichever is later ("số đơn
+    hàng tháng 6 đạt" for 33). The unit is what is written right after the
+    number. Nothing is borrowed from other sentences of the paragraph.
+    """
+    start = max((m.end() for m in _SENTENCE_END.finditer(text, 0, position)), default=0)
+    before = text[start:position]
+    phrase_start = max((m.end() for m in _CLAUSE_END.finditer(before)), default=0)
+    for match in quantities(before):
+        phrase_start = max(phrase_start, (_UNIT_AFTER.match(before, match.end()) or match).end())
+    phrase = " ".join(before[phrase_start:].split()[:SUBJECT_WORDS])
+    periods = [period for match in PERIOD.finditer(before) if (period := _period(match, page_year))]
+    return {
+        "measure": _last_measure(before),
+        "subject": phrase if any(c.isalpha() for c in phrase) else None,
+        "period": periods[-1] if periods else None,
+        "unit": unit_after(text, position + len(raw), raw),
+        "dimensions": {},
+    }
 
 
 def _unit_near(text: str, raw: str) -> str | None:
@@ -165,19 +207,28 @@ def _unit_near(text: str, raw: str) -> str | None:
     return None
 
 
+_MEASURE_ALIASES = (
+    (("doanh thu", "revenue", "dtt"), "doanh_thu"),
+    (("lợi nhuận", "profit", "lnst"), "loi_nhuan"),
+    (("bookings",), "bookings"),
+    (("wer",), "wer"),
+    (("cer",), "cer"),
+)
+
+
 def _measure(text: str) -> str:
     lowered = _keyword_text(text)
-    aliases = (
-        (("doanh thu", "revenue"), "doanh_thu"),
-        (("lợi nhuận", "profit"), "loi_nhuan"),
-        (("bookings",), "bookings"),
-        (("wer",), "wer"),
-        (("cer",), "cer"),
-    )
-    for names, key in aliases:
+    for names, key in _MEASURE_ALIASES:
         if any(name in lowered for name in names):
             return key
     return "unknown"
+
+
+def _last_measure(text: str) -> str:
+    """The measure word written last in text: the one nearest a number that follows it."""
+    lowered = _keyword_text(text)
+    found = [(lowered.rfind(name), key) for names, key in _MEASURE_ALIASES for name in names if name in lowered]
+    return max(found)[1] if found else "unknown"
 
 
 def _bbox_in_box(box: list[float], length: int, start: int, end: int, page_width: float, page_height: float) -> list[float]:
@@ -296,7 +347,7 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
             if readable is not None:
                 page_text, spans, width, height = readable
         pages.append({"page": page_number, "text": page_text})
-        page_year = _single_year(page_text)
+        page_year = single_year(page_text)
 
         # OCR is intentionally page-scoped and only used when the PDF has no
         # usable text layer.  A missing engine becomes an explicit warning;
@@ -322,7 +373,7 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
                                 "evidence_key": evidence_key, "source_region_key": f"page-{page_number}-ocr-token-{token_index}", "source_type": "text",
                                 "page_number": page_number, "bbox": token["bbox"], "raw_text": raw, "numeric_value": _decimal_text(raw), "value_kind": "number",
                                 "data_status": "valid", "extraction_method": "ocr", "method_label": "đọc bằng OCR",
-                                "semantic": {"measure": _measure(str(token["text"])), "subject": None, "period": _period_near(str(token["text"]), match.start()), "unit": _unit_near(str(token["text"]), raw), "dimensions": {}},
+                                "semantic": {"measure": _measure(str(token["text"])), "subject": None, "period": period_near(str(token["text"]), match.start()), "unit": _unit_near(str(token["text"]), raw), "dimensions": {}},
                                 "table_locator": None, "chart_read": None, "confidence": float(token["confidence"]),
                             })
                             contexts[evidence_key] = str(token["text"])
@@ -394,6 +445,8 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
                     for item in (row_header, column_header, text)
                     if item
                 ) if is_table_cell else text
+                headers = [row_header, column_header] if is_table_cell else []
+                measure, period = cell_semantics(headers, text, raw, page_year)
                 evidences.append(
                     {
                         "evidence_key": evidence_key,
@@ -408,9 +461,9 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
                         "extraction_method": "table_cell" if is_table_cell else "text",
                         "method_label": "đọc từ ô bảng" if is_table_cell else "đọc từ văn bản",
                         "semantic": {
-                            "measure": _measure(semantic_context),
-                            "subject": None,
-                            "period": _period_for(semantic_context, raw, page_year),
+                            "measure": measure,
+                            "subject": row_header if is_table_cell else None,
+                            "period": period,
                             "unit": _unit_near(semantic_context, raw),
                             "dimensions": {},
                         },
@@ -446,15 +499,19 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
         evidences = [item for item in evidences if not inside_complex_region(item)]
         # pdfplumber cells arrive untagged (measure "unknown", no period);
         # tag them from their row/column headers like every other number.
-        page_years = {page["page"]: _single_year(page["text"]) for page in pages}
+        page_years = {page["page"]: single_year(page["text"]) for page in pages}
         for item in complex_tables.evidences:
             context = complex_tables.contexts.get(item["evidence_key"], item["raw_text"])
+            locator = item["table_locator"]
+            headers = [locator["row_header"], *(locator["column_header"] or "").split(HEADER_JOIN)]
+            measure, period = cell_semantics(headers, context, item["raw_text"], page_years.get(item["page_number"]))
             evidences.append({
                 **item,
                 "semantic": {
                     **item["semantic"],
-                    "measure": _measure(context),
-                    "period": _period_for(context, item["raw_text"], page_years.get(item["page_number"])),
+                    "measure": measure,
+                    "subject": locator["row_header"],
+                    "period": period,
                     "unit": _unit_near(context, item["raw_text"]),
                 },
             })

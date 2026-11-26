@@ -55,19 +55,35 @@ def predict_chart(image):
         return processor.decode(tokens[0], skip_special_tokens=True)
 
 
+_BYTE_TOKENS = re.compile(r"(?:<0x[0-9A-Fa-f]{2}>)+")
+
+
+def _decoded(raw: str) -> str:
+    """DePlot spells newlines and characters outside its vocabulary as UTF-8
+    byte tokens: "<0x0A>" is a newline, "Bi<0xE1><0xBB><0x83>u" is "Biểu"."""
+    return _BYTE_TOKENS.sub(
+        lambda run: bytes.fromhex(run.group(0).replace("<0x", "").replace(">", "")).decode("utf-8", errors="replace"),
+        raw,
+    )
+
+
 def parse_table(raw: str):
-    """Parse actual column names and category labels; never zip rows to facts."""
-    lines = [
-        [s.strip() for s in line.split("|")]
-        for line in re.split(r"<0x0A>|\n", raw)
-        if line.strip()
-    ]
-    title = ""
+    """Parse actual column names and category labels; never zip rows to facts.
+
+    The header is the first line with cells. Lines without cells before it
+    belong to the title: DePlot writes a chart's subtitle (e.g. its unit
+    line "Đơn vị: nghìn đơn") on its own line after the TITLE line.
+    """
+    lines = [[s.strip() for s in line.split("|")] for line in _decoded(raw).split("\n") if line.strip()]
+    title = []
     header = None
     rows = []
     for parts in lines:
-        if parts[0].casefold() == "title":
-            title = " ".join(parts[1:])
+        if header is None and parts[0].casefold() == "title":
+            title += parts[1:]
+            continue
+        if header is None and len(parts) == 1:
+            title += parts
             continue
         if header is None:
             header = parts
@@ -83,6 +99,7 @@ def parse_table(raw: str):
                 rows.append((parts[0], header[index], token, None))
             else:
                 rows.append((parts[0], header[index], token, format(number, "f")))
+    title = " ".join(title)
     if not header or not rows:
         raise ValueError("DePlot did not return a data table")
     return title, rows
@@ -172,9 +189,9 @@ class DeplotChartReader:
 
         from report_qa.application.evidence_extraction import (
             _measure,
-            _period_near,
             _unit_near,
         )
+        from report_qa.application.numeric_extraction import period_near
 
         evidence, warnings, outputs = [], [], []
         provider_failure = False
@@ -208,7 +225,7 @@ class DeplotChartReader:
                     warnings.append(
                         {
                             "code": "CHART_PROVIDER_UNAVAILABLE",
-                            "message": "DePlot khÃ´ng sáºµn sÃ ng; khÃ´ng publish giÃ¡ trá»‹ chart chÆ°a kiá»ƒm chá»©ng.",
+                            "message": "DePlot không sẵn sàng; không publish giá trị chart chưa kiểm chứng.",
                             "evidence_key": None,
                         }
                     )
@@ -370,7 +387,7 @@ class DeplotChartReader:
                             "semantic": {
                                 "measure": _measure(context),
                                 "subject": category,
-                                "period": _period_near(context, 0),
+                                "period": period_near(context, 0),
                                 "unit": axis.get("unit")
                                 or _unit_near(series, raw_value),
                                 "dimensions": {"category": category, "series": series},

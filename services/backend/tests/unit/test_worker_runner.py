@@ -39,7 +39,7 @@ def _extraction_setup(monkeypatch, *, result, persistence_error=False):
     monkeypatch.setattr(main, "catalog", {"sessions": {sid: {"documents": []}}})
     monkeypatch.setattr(main, "cache_pdf", lambda key: key)
     monkeypatch.setattr(main, "extract_pdf_pages", lambda *args: result)
-    monkeypatch.setattr(main, "cache_extraction", lambda key: SimpleNamespace(read_text=lambda **kwargs: "{}"))
+    monkeypatch.setattr(main, "read_extraction", lambda key: {"evidence_batch": {"extraction_run_id": "run-1", "evidences": []}})
     monkeypatch.setattr(main, "ensure_document_evidence_state", lambda *args: None)
     def save(*args):
         writes.append(document["extraction_status"])
@@ -50,7 +50,7 @@ def _extraction_setup(monkeypatch, *, result, persistence_error=False):
 
 
 def test_extraction_reloads_session_for_second_upload(monkeypatch):
-    result = {"status": "ready", "page_count": 2, "numeric_evidence_count": 3, "error": None}
+    result = {"status": "ready", "extraction_name": "file.run-1.json", "page_count": 2, "numeric_evidence_count": 3, "error": None}
     main, sid, did, owner, loads, writes = _extraction_setup(monkeypatch, result=result)
     main.complete_document_extraction(sid, did, owner_id=owner)
     assert len(loads) == 1
@@ -68,9 +68,28 @@ def test_failed_extraction_is_not_acknowledged_as_success(monkeypatch):
 
 def test_publish_error_leaves_visible_failed_state(monkeypatch):
     import pytest
-    result = {"status": "ready", "page_count": 2, "numeric_evidence_count": 3, "error": None}
+    result = {"status": "ready", "extraction_name": "file.run-1.json", "page_count": 2, "numeric_evidence_count": 3, "error": None}
     main, sid, did, owner, _, writes = _extraction_setup(monkeypatch, result=result, persistence_error=True)
     with pytest.raises(ValueError, match="invalid evidence"):
         main.complete_document_extraction(sid, did, owner_id=owner)
     assert writes == ["processing", "ready", "failed"]
 
+
+
+def test_answer_job_marks_its_request_as_the_worker(monkeypatch):
+    from report_qa.worker import runner
+
+    session = {"messages": [{"id": "placeholder", "status": "processing"}]}
+    seen = []
+
+    def ask(session_id, payload, request, response):
+        seen.append(getattr(request.state, "worker_job", False))
+        return {"user_message": {"id": "u"}, "assistant_message": {"id": "a", "body": "ok"}}
+
+    monkeypatch.setattr(runner, "get_session", lambda *args: session)
+    monkeypatch.setattr(runner, "ask_session_document", ask)
+    monkeypatch.setattr(runner, "save_catalog", lambda *args: None)
+
+    runner.complete_answer_job({"session_id": "s", "assistant_message_id": "placeholder", "owner_id": "o", "document_id": "d", "question": "q"})
+
+    assert seen == [True]

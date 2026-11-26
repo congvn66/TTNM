@@ -128,6 +128,7 @@ def test_10_bad_model_output_is_rejected_and_rules_take_over(reply):
         plan_from_model_output(extract_json(reply if isinstance(reply, str) else json.dumps(reply)), "q", "docv-1", CATALOG)
     result = plan("Doanh thu Q1/2026 tăng bao nhiêu phần trăm so với Q1/2025?", reply)
     assert result.planner == "rules" and result.fallback_code == "PLANNER_INVALID_OUTPUT"
+    assert result.provider_error is None  # the model answered; its output was unusable
 
 
 # --- behaviour around the model ---
@@ -147,7 +148,19 @@ def test_a_provider_failure_falls_back_to_rules():
 
     result = plan_question("By what percent did revenue change from Q1/2025 to Q1/2026?", "docv-1", catalog=CATALOG, complete=broken)
     assert result.planner == "rules" and result.fallback_code == "PLANNER_PROVIDER_FAILED"
+    assert result.provider_error == "PLANNER_PROVIDER_FAILED"
     assert result.plan["operation"]["formula_id"] == "growth_rate_v1"
+
+
+@pytest.mark.parametrize("code", ["AI_PROVIDER_UNAVAILABLE", "AI_PROVIDER_HTTP_ERROR", "AI_MODEL_UNAVAILABLE", "AI_PROVIDER_BAD_RESPONSE"])
+def test_every_provider_failure_is_reported_as_one(code):
+    from report_qa.api.ai_provider import ProviderError
+
+    def failing(system, user):
+        raise ProviderError(code, "x")
+
+    result = plan_question("Tổng doanh thu Q1 và Q2?", "docv-1", catalog=CATALOG, complete=failing)
+    assert result.provider_error == code and result.fallback_code == code
 
 
 def test_no_client_uses_rules_and_rules_still_ask_back():
@@ -285,3 +298,12 @@ def test_subject_named_in_the_question_is_kept_instead_of_asking():
         assert plan["status"] == "ready", question
         assert plan["facts"][0]["subject"] == subject
     assert plan_question("Doanh thu là bao nhiêu?", "doc", catalog=catalog).plan["status"] == "needs_clarification"
+
+
+def test_question_words_after_a_subject_word_are_not_taken_as_a_name():
+    catalog = [CatalogEntry("doanh_thu", f"Q{n}", None, None, f"Doanh thu / Q{n}", "table") for n in range(1, 5)]
+    for question in ["Doanh thu khu vực nào cao nhất?", "Doanh thu vùng nào lớn nhất?",
+                     "Doanh thu chi nhánh của công ty là bao nhiêu?", "Doanh thu miền là bao nhiêu?"]:
+        assert plan_question(question, "doc", catalog=catalog).plan["status"] == "needs_clarification", question
+    plan = plan_question("Doanh thu khu vực 2 là bao nhiêu?", "doc", catalog=catalog).plan
+    assert plan["status"] == "ready" and plan["facts"][0]["subject"] == "2"

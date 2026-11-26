@@ -323,6 +323,64 @@ def test_text_numbers_have_native_word_boxes_and_missing_metadata_stays_null(tmp
     validate_extraction_batch(batch)
 
 
+def _text_artifact(tmp_path, items, locale="vi"):
+    import pymupdf
+
+    path = tmp_path / "prose.pdf"
+    with pymupdf.open() as pdf:
+        page = pdf.new_page(width=600, height=400)
+        for i, (_, line) in enumerate(items):
+            page.insert_text((20, 40 + 30 * i), line, fontname="helv", fontsize=9)
+        pdf.save(path)
+    data = {"tables": [], "pictures": [], "texts": [
+        {"label": label, "text": line,
+         "prov": [{"page_no": 1, "bbox": {"l": 15, "t": 28 + 30 * i, "r": 590, "b": 45 + 30 * i, "coord_origin": "TOPLEFT"}}]}
+        for i, (label, line) in enumerate(items)
+    ]}
+    converter = Mock()
+    converter.convert.return_value = SimpleNamespace(status="ConversionStatus.SUCCESS",
+                                                     document=SimpleNamespace(export_to_dict=lambda: data))
+    return extract_docling_artifact(path, "version", locale=locale, converter=converter)["evidence_batch"]["evidences"]
+
+
+def test_a_number_ends_at_its_last_digit_not_at_the_punctuation_after_it(tmp_path):
+    # "Nhóm 7," came out as the row "7,"; a sentence-final "1.250." could not be read as a number at all.
+    evidences = _text_artifact(tmp_path, [("text", "Tai lieu do Nhom 7, doanh thu dat 1.250.")])
+    assert [(e["raw_text"], e["numeric_value"], e["data_status"]) for e in evidences] == [("7", "7", "valid"), ("1.250", "1250", "valid")]
+
+
+def test_numbers_are_read_in_the_format_the_page_text_proves_when_none_is_configured(tmp_path):
+    # S1 prints "6,5%", so its table's "18.240" is 18240, not a number the user must confirm.
+    evidences = _text_artifact(tmp_path, [("text", "Doanh thu 18.240 VND, chi phi 6,5% doanh thu.")], locale=None)
+    assert [(e["raw_text"], e["numeric_value"]) for e in evidences] == [("18.240", "18240"), ("6,5%", "6.5")]
+    mixed = _text_artifact(tmp_path, [("text", "Doanh thu 18.240 VND, chi phi 6,5%, lai 21.7%.")], locale=None)
+    assert mixed[0]["data_status"] == "ambiguous"
+
+
+def test_headings_and_period_numbers_are_not_published_as_values(tmp_path):
+    # "1.", "2." headings came out as Data rows marked "Cần kiểm tra"; "quý 2", "tháng 6" came out as values 2 and 6.
+    evidences = _text_artifact(tmp_path, [
+        ("section_header", "1. Pham vi"),
+        ("text", "Doanh thu tháng 6 cao trong quý 2 nam 2026, sau 6 tháng; muc tieu 220 VND."),
+    ])
+    assert [e["raw_text"] for e in evidences] == ["220"]
+
+
+def test_a_text_number_is_labelled_from_its_own_sentence(tmp_path):
+    # 6,5% and the 220 target were labelled "Doanh thu · 2026" from the paragraph's first measure word.
+    evidences = _text_artifact(tmp_path, [(
+        "text",
+        "Doanh thu quý 1 nam 2026 cao. Chi phi van chuyen trong quý 2 bang 6,5% tong doanh thu. "
+        "Muc tieu doanh thu nam 2026 la 220 VND.",
+    )])
+    rate, target = evidences
+    assert rate["raw_text"] == "6,5%"
+    assert rate["semantic"]["measure"] == "unknown" and rate["semantic"]["period"]["label"] == "Q2/2026"
+    assert rate["semantic"]["subject"] == "Chi phi van chuyen trong quý 2 bang" and rate["semantic"]["unit"] == "PERCENT"
+    assert target["semantic"]["measure"] == "doanh_thu" and target["semantic"]["period"]["label"] == "2026"
+    assert target["semantic"]["unit"] == "VND"
+
+
 def test_native_chart_label_has_source_word_bbox(tmp_path):
     import pymupdf
 
@@ -402,3 +460,47 @@ def test_axis_metadata_without_confirmation_of_absent_labels_is_not_enough():
     }
     result = DeplotChartReader(lambda image: RAW).read(request(chart_regions=(region,)))
     assert result["evidence_batch"]["evidences"][0]["numeric_value"] is None
+
+
+def test_docling_cell_semantics_come_from_its_own_header_path():
+    data = json.loads((FIXTURES / "docling-recorded.json").read_text())
+    cells = data["tables"][0]["data"]["table_cells"]
+    by_text = {c["text"]: c for c in cells}
+    by_text["Q1"]["text"] = "Q1/25"
+    by_text["1,120.00"]["text"] = "-"
+    numbers = {(e["table_locator"]["row_index"], e["table_locator"]["column_index"]): e
+               for e in artifact(data)["evidence_batch"]["evidences"] if e["source_type"] == "table"}
+    q1_cost = numbers[(1, 2)]
+    assert q1_cost["semantic"]["period"]["label"] == "Q1/2025"  # not the page's 2024
+    assert q1_cost["semantic"]["measure"] == "unknown"  # "Chi phí", not the page's "doanh thu"
+    assert numbers[(1, 1)]["semantic"]["measure"] == "doanh_thu"
+    assert numbers[(2, 3)]["table_locator"]["row_header"] == "Q2"  # the "-" cell left of it is a value
+    assert numbers[(2, 3)]["semantic"]["subject"] == "Q2"
+
+
+def test_a_cell_unit_comes_from_its_headers_or_the_table_note_not_nearby_prose():
+    # S1's table in triệu đồng was tagged PERCENT from "tỷ lệ phần trăm khách hàng" in the paragraph above it.
+    from report_qa.application.evidence_extraction import unit_after, unit_note
+
+    nearby = "Tỷ lệ khách hàng quay lại là tỷ lệ phần trăm khách hàng. Bảng 1. Doanh thu (đơn vị: triệu đồng)"
+    assert unit_note(nearby) == "VND_MILLION"
+    assert unit_note("Tỷ lệ phần trăm khách hàng quay lại.") is None
+    assert unit_after("đạt 33 nghìn đơn", 6, "33") == "THOUSAND"
+    assert unit_after("là 220 tỷ đồng.", 6, "220") == "VND_BILLION"
+    assert unit_after("đạt 33 đơn", 6, "33") is None
+
+
+def test_a_page_without_text_is_reported_in_readable_vietnamese(tmp_path):
+    import pymupdf
+
+    path = tmp_path / "scan.pdf"
+    with pymupdf.open() as pdf:
+        pdf.new_page(width=600, height=400)
+        pdf.save(path)
+    converter = Mock()
+    converter.convert.return_value = SimpleNamespace(status="ConversionStatus.SUCCESS",
+                                                     document=SimpleNamespace(export_to_dict=lambda: {"tables": [], "pictures": [], "texts": []}))
+    ocr = Mock(available=lambda: (False, "OCR_UNAVAILABLE"))
+    warnings = extract_docling_artifact(path, "version", locale="vi", converter=converter, ocr_engine=ocr)["evidence_batch"]["warnings"]
+    # The message was stored double-encoded ("khÃ´ng cÃ³ lá»›p chá»¯").
+    assert warnings[0]["message"] == "Trang 1 không có lớp chữ; chưa trích xuất số từ trang này."

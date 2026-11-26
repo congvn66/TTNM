@@ -10,9 +10,9 @@ import hashlib
 import json
 import math
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
 from uuid import uuid4
 
+from report_qa.api import session_storage
 from report_qa.api.ai_provider import _json_from_content
 from report_qa.application.deplot_reading import (
     _native_label,
@@ -32,8 +32,9 @@ hai tick lower_tick/upper_tick và đơn vị; label_bbox=null.
 Nếu DePlot mâu thuẫn với ảnh, không phân biệt được dãy số, biểu đồ ngoài phạm vi
 hoặc không đủ căn cứ: method="ambiguous", label_bbox=null. Không đoán.
 measure dùng doanh_thu cho Revenue/doanh thu, loi_nhuan cho profit/lợi nhuận,
-unknown nếu không rõ. unit VND_MILLION nếu million VND/triệu đồng, PERCENT cho %,
-null nếu ảnh không ghi. period=null nếu không có. Giữ nhãn category/series đúng
+unknown nếu không rõ. unit theo đơn vị ảnh ghi: VND, VND_THOUSAND, VND_MILLION, VND_BILLION
+cho đồng/nghìn/triệu/tỷ đồng; THOUSAND, MILLION, BILLION cho nghìn/triệu/tỷ của thứ khác
+(nghìn đơn, triệu tấn); PERCENT cho %; null nếu ảnh không ghi. period=null nếu không có. Giữ nhãn category/series đúng
 như DePlot. confidence 0..1 là đánh giá của mô hình, không phải xác nhận con người.
 """
 
@@ -70,9 +71,10 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
 
     from report_qa.application.evidence_extraction import (
         _measure,
-        _period_near,
         _unit_near,
+        unit_note,
     )
+    from report_qa.application.numeric_extraction import period_near
 
     key = region["chart_region_key"]
     number = region["page_number"]
@@ -97,7 +99,7 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
         from report_qa.application.deplot_reading import MODEL_ID, REVISION
 
         cache_key = hashlib.sha256(png + REVISION.encode()).hexdigest()
-        cache_root = Path(__file__).resolve().parents[5] / "runtime" / "chart-cache"
+        cache_root = session_storage.RUNTIME_ROOT / "chart-cache"
         cache_path = cache_root / (cache_key + ".json")
         raw = None
         if predictor is None and cache_path.is_file():
@@ -117,7 +119,7 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
                         ensure_ascii=False,
                     )
                 )
-        _title, predictions = parse_table(raw)
+        title, predictions = parse_table(raw)
         image = "data:image/png;base64," + base64.b64encode(png).decode()
         verification_raw = ""
         verification_error = None
@@ -147,10 +149,14 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
                     "evidence_key": None,
                 }
             )
+        seen: dict[tuple, int] = {}
         for category, series, token, value in predictions:
-            digest = hashlib.sha256(
-                f"{version}:{key}:{category}:{series}".encode()
-            ).hexdigest()[:20]
+            # DePlot can repeat a category; the repeat count keeps keys unique
+            # while a first occurrence keeps the key it always had.
+            repeat = seen.get((category, series), 0)
+            seen[(category, series)] = repeat + 1
+            identity = f"{version}:{key}:{category}:{series}" + (f":{repeat}" if repeat else "")
+            digest = hashlib.sha256(identity.encode()).hexdigest()[:20]
             # Not "chart-": the planner flow reads the same chart under that
             # prefix, and one key must never name two stored values.
             eid = "chart-tools-" + digest
@@ -258,8 +264,9 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
                     "semantic": {
                         "measure": str(r.get("measure") or _measure(series)),
                         "subject": category,
-                        "period": _period_near(str(r.get("period") or ""), 0),
-                        "unit": r.get("unit") or _unit_near(series, token),
+                        "period": period_near(str(r.get("period") or ""), 0),
+                        # The checker's reading of the unit, else the chart's own unit note, else the series name.
+                        "unit": r.get("unit") or unit_note(title or "") or _unit_near(series, token),
                         "dimensions": {"category": category, "series": series},
                     },
                     "table_locator": None,

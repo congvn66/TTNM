@@ -5,32 +5,36 @@
 .evidence-item:hover { border-color: var(--color-cta); }
 .evidence-item.text { border-left-color: var(--gold); }
 .evidence-item.unverified { border-left-color: var(--color-warning); }
-.evidence-index { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--green-soft); color: var(--color-success); font-size: 10px; font-weight: 800; }
+.evidence-index { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--green-soft); color: var(--color-success); font-size: var(--text-sm); font-weight: 800; }
 .evidence-body { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
-.evidence-meta { color: var(--muted); font-size: 9px; font-weight: 700; }
-.evidence-item q { font-size: 11px; line-height: 1.45; font-style: italic; }
-.evidence-data { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; font-size: 11px; }
+.evidence-meta { color: var(--muted); font-size: var(--text-xs); font-weight: 700; }
+.evidence-item q { font-size: var(--text-sm); line-height: 1.45; font-style: italic; }
+.evidence-data { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; font-size: var(--text-sm); }
 .evidence-data b, .script-input b { color: var(--ink); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.message .evidence-body small { margin: 0; color: var(--muted); font-size: 9px; }
+.message .evidence-body small { margin: 0; color: var(--muted); font-size: var(--text-xs); }
 .message .evidence-body small.evidence-warning { color: var(--color-warning); font-weight: 700; }
 .script-card { min-width: 0; gap: 7px; }
 .script-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .script-inputs { display: grid; gap: 3px; min-width: 0; }
-.script-input { display: grid; grid-template-columns: minmax(0, 1fr) auto 36px; gap: 8px; align-items: center; min-width: 0; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink-soft); font-size: 10px; text-align: left; overflow-wrap: anywhere; }
+.script-input { display: grid; grid-template-columns: minmax(0, 1fr) auto 36px; gap: 8px; align-items: center; min-width: 0; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink-soft); font-size: var(--text-sm); text-align: left; overflow-wrap: anywhere; }
 .script-input:hover { border-color: var(--color-cta); }
-.script-input.head { border: 0; background: transparent; color: var(--muted); font-size: 9px; font-weight: 700; }
-.message small.script-manual { margin: 0; color: var(--color-warning); font-size: 10px; font-weight: 700; }
-.script-card details summary { color: var(--muted); font-size: 10px; cursor: pointer; }
-.script-card pre { max-width: 100%; margin: 4px 0 0; padding: 8px 9px; overflow-x: auto; border-radius: 6px; background: #16202c; color: #e2eaf3; font: 10px/1.5 var(--font-mono); white-space: pre; }
+.script-input.head { border: 0; background: transparent; color: var(--muted); font-size: var(--text-xs); font-weight: 700; }
+.message small.script-manual { margin: 0; color: var(--color-warning); font-size: var(--text-sm); font-weight: 700; }
+.script-card details summary { color: var(--muted); font-size: var(--text-sm); cursor: pointer; }
+.script-card pre { max-width: 100%; margin: 4px 0 0; padding: 8px 9px; overflow-x: auto; border-radius: 6px; background: #16202c; color: #e2eaf3; font: var(--text-sm)/1.5 var(--font-mono); white-space: pre; }
+.script-result { display: grid; gap: 4px; }
+.script-result dl, .script-keys { display: grid; gap: 3px; margin: 0; }
+.script-result dl > div, .script-keys > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; }
+.script-result dt, .script-result dd, .script-keys dd { margin: 0; }
+.script-result dt { color: var(--ink-soft); }
+.script-result dd { color: var(--ink); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; }
+.script-keys { margin-top: 6px; color: var(--muted); font-size: var(--text-xs); }
+.script-keys code { color: var(--ink-soft); font-size: var(--text-xs); }
 .script-card pre.script-stdout { border: 1px dashed var(--border); background: var(--surface-soft); color: var(--ink-soft); white-space: pre-wrap; }
-/* .formula-card sets fixed dark-green text; the script card follows the theme. */
-.formula-card.script-card strong, .formula-card.script-card b { color: var(--ink); }
-.formula-card.script-card span { color: var(--ink-soft); }
+.formula-card.script-card strong { color: var(--ink); }
 .formula-card.script-card .script-input.head span { color: var(--muted); }
 [data-theme="dark"] .evidence-index, [data-theme="dark"] .script-card .formula-verified { color: #6ee7b7; }
-[data-theme="dark"] .evidence-item.unverified { border-left-color: #f59e0b; }
-[data-theme="dark"] .message .evidence-body small.evidence-warning, [data-theme="dark"] .message small.script-manual { color: #fbbf24; }
 
-.reextract-button { display: inline-flex; align-items: center; gap: 6px; min-height: 29px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface); color: var(--ink-soft); font-size: 10px; font-weight: 700; white-space: nowrap; }
+.reextract-button { display: inline-flex; align-items: center; gap: 6px; min-height: 29px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface); color: var(--ink-soft); font-size: var(--text-sm); font-weight: 700; white-space: nowrap; }
 .reextract-button:hover:not(:disabled) { border-color: var(--color-cta); color: var(--color-cta); }
-[data-theme="dark"] .reextract-button:hover:not(:disabled) { color: #7dd3fc; border-color: #7dd3fc; }
+.reextract-status { display: inline-flex; align-items: center; gap: 7px; min-height: 29px; padding: 0 10px; border: 1px solid var(--accent-border); border-radius: 7px; background: var(--accent-soft); color: var(--accent-strong); font-size: var(--text-sm); font-weight: 700; white-space: nowrap; }

@@ -60,13 +60,13 @@ export default function LibraryScreen({ onNavigate }) {
     let disposed = false;
     (async () => {
       try { await loadProjects(); }
-      catch (reason) { if (!disposed) setError(reason.message || "Không thể tải thư viện."); }
+      catch (reason) { if (!disposed) setError(reason.message); }
       finally { if (!disposed) setLoading(false); }
     })();
     return () => { disposed = true; };
   }, []);
 
-  useEffect(() => { if (projectId) loadLibrary(projectId).catch((reason) => setError(reason.message || "Không thể tải thư viện.")); }, [projectId]);
+  useEffect(() => { if (projectId) loadLibrary(projectId).catch((reason) => setError(reason.message)); }, [projectId]);
 
   const folders = library?.folders ?? [];
   const documents = useMemo(() => (library?.documents ?? []).filter((document) => {
@@ -82,7 +82,7 @@ export default function LibraryScreen({ onNavigate }) {
       const selected = await loadProjects(preferred);
       if (selected) await loadLibrary(selected);
     }
-    catch (reason) { setError(reason.message || "Không thể hoàn tất thao tác."); }
+    catch (reason) { setError(reason.message); }
     finally { setBusy(false); }
   }
 

@@ -69,3 +69,13 @@ def test_readiness_exposes_selected_external_adapter_blockers():
     state, blockers = readiness(capabilities)
     assert state == "degraded"
     assert blockers == ["pdf_extraction:missing_dependency", "database:unavailable", "storage:unavailable"]
+
+
+def test_health_capabilities_say_whether_reextraction_is_available(monkeypatch):
+    from dataclasses import replace
+
+    from report_qa.infrastructure import integrations
+
+    assert runtime_capabilities()["reextraction"] == {"status": "available"}
+    monkeypatch.setattr(integrations, "settings", replace(integrations.settings, persistence_backend="postgres"))
+    assert runtime_capabilities()["reextraction"] == {"status": "unsupported", "error_code": "REEXTRACTION_NOT_SUPPORTED"}

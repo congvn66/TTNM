@@ -17,29 +17,23 @@ export const API = (
   ?? (import.meta.env.DEV ? "http://127.0.0.1:8000" : window.location.origin)
 ).replace(/\/$/, "");
 
-const ERROR_MESSAGES = {
-  AI_PROVIDER_UNAVAILABLE: "Không kết nối được tới dịch vụ AI. Kiểm tra mạng hoặc thử lại sau.",
-  AI_PROVIDER_TIMEOUT: "Dịch vụ AI phản hồi quá lâu. Bạn có thể thử lại câu hỏi.",
-  AI_MODEL_UNAVAILABLE: "Mô hình AI hiện không khả dụng. Kiểm tra lại cấu hình model.",
-  AI_PROVIDER_HTTP_ERROR: "Dịch vụ AI từ chối yêu cầu. Kiểm tra API key và giới hạn sử dụng.",
-  AI_NOT_CONFIGURED: "Chưa cấu hình nhà cung cấp AI cho môi trường này.",
-  AI_INVALID_OUTPUT: "AI trả về dữ liệu không đúng định dạng. Hãy thử lại câu hỏi.",
-  AI_UNGROUNDED_CITATION: "AI trả về trích dẫn không nằm trong tài liệu. Hãy thử lại câu hỏi.",
-  AI_UNSUPPORTED_EVIDENCE: "AI chưa xác minh được evidence trong tài liệu. Hãy thử lại câu hỏi.",
-  QUEUE_UNAVAILABLE: "Hàng đợi xử lý chưa sẵn sàng. Hãy khởi động worker hoặc thử lại sau.",
-  DATABASE_UNAVAILABLE: "Dịch vụ dữ liệu tạm thời không sẵn sàng. Hãy thử lại sau.",
+// Text for errors the client creates itself. A server error shows the
+// server's own detail.message, the single source of user text for it.
+export const CLIENT_ERRORS = {
+  network: "Không thể kết nối tới máy chủ. Hãy thử lại sau ít phút.",
+  timeout: "Máy chủ phản hồi quá lâu. Hãy thử lại sau ít phút.",
+  unknown: "Máy chủ không xử lý được yêu cầu. Hãy thử lại.",
 };
 
 function extractError(body, status) {
-  const detail = body?.detail ?? body;
-  const code = detail && typeof detail === "object" ? detail.code : undefined;
-  const message = detail && typeof detail === "object" ? detail.message : detail;
-  const fallback = typeof message === "string" && message.trim() ? message : `HTTP ${status}`;
-  const error = new Error(code && ERROR_MESSAGES[code] ? ERROR_MESSAGES[code] : fallback);
+  const detail = body?.detail && typeof body.detail === "object" && !Array.isArray(body.detail) ? body.detail : {};
+  const message = typeof detail.message === "string" && detail.message.trim() ? detail.message.trim() : CLIENT_ERRORS.unknown;
+  const error = new Error(message);
   error.status = status;
-  error.code = code;
-  error.traceId = detail && typeof detail === "object" ? (detail.trace_id ?? detail.traceId) : undefined;
-  error.rawMessage = fallback;
+  error.code = detail.code;
+  error.traceId = detail.trace_id ?? detail.traceId;
+  // Extra fields some errors carry, e.g. the possible readings of an ambiguous number.
+  error.detail = detail;
   return error;
 }
 
@@ -62,8 +56,7 @@ export async function request(path, options = {}) {
     });
   } catch (error) {
     emitRequestMetric({ request_id: requestId, method, path, status: 0, ok: false, duration_ms: Math.round(performance.now() - startedAt), error: error?.name === "AbortError" ? "TIMEOUT" : "NETWORK_ERROR", at: new Date().toISOString() });
-    if (error?.name === "AbortError") throw new Error("Yêu cầu quá thời gian chờ. Hãy thử lại.");
-    throw new Error(`Không kết nối được tới backend tại ${API}. Kiểm tra API rồi thử lại.`);
+    throw new Error(error?.name === "AbortError" ? CLIENT_ERRORS.timeout : CLIENT_ERRORS.network);
   } finally {
     window.clearTimeout(timeout);
   }

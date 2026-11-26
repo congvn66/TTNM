@@ -22,3 +22,13 @@ def test_invalid_persistence_backend_fails_fast(monkeypatch) -> None:
 def test_revision_store_does_not_open_a_connection_until_a_transaction() -> None:
     store = PostgresRevisionStore("postgresql+psycopg://sourcelens:sourcelens-dev-only@127.0.0.1:5432/sourcelens")
     assert store._connection is None
+
+
+def test_parallel_extraction_limit_defaults_to_two_and_rejects_zero(monkeypatch) -> None:
+    import pytest
+
+    monkeypatch.delenv("REPORT_QA_MAX_PARALLEL_EXTRACTIONS", raising=False)
+    assert Settings.from_env().max_parallel_extractions == 2
+    monkeypatch.setenv("REPORT_QA_MAX_PARALLEL_EXTRACTIONS", "0")
+    with pytest.raises(RuntimeError, match="REPORT_QA_MAX_PARALLEL_EXTRACTIONS"):
+        Settings.from_env()
