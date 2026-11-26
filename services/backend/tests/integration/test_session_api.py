@@ -229,6 +229,28 @@ def test_upload_rejects_malformed_pdf_and_page_limit() -> None:
     finally:
         api_main.MAX_PDF_PAGES = previous_limit
         cleanup_session(created["id"])
+
+
+def test_password_protected_pdf_gets_its_own_error_code() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Encrypted"}).json()["session"]
+    try:
+        writer = PdfWriter()
+        writer.add_blank_page(width=595, height=842)
+        writer.encrypt("secret")
+        payload = BytesIO()
+        writer.write(payload)
+        uploaded = client.post(
+            f"/api/v1/sessions/{created['id']}/documents",
+            files={"file": ("locked.pdf", payload.getvalue(), "application/pdf")},
+        )
+        assert uploaded.status_code == 422
+        assert uploaded.json()["detail"]["code"] == "PDF_ENCRYPTED"
+        assert "mật khẩu" in uploaded.json()["detail"]["message"]
+        assert client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"] == []
+    finally:
+        cleanup_session(created["id"])
+
+
 def test_legacy_document_without_file_url_gets_a_reader_url() -> None:
     session_id = "legacy-url-test"
     document_id = "legacy-document"

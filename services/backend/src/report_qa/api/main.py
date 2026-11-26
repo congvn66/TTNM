@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, model_validator
 from pypdf import PdfReader
+from pypdf.errors import FileNotDecryptedError
 
 from report_qa.application.evidence_extraction import extract_pdf_artifact
 from report_qa.application.chart_reading import ChartReadRequest, PdfVectorChartReader
@@ -210,6 +211,7 @@ _load_local_env()
 MAX_PDF_BYTES = 100 * 1024 * 1024
 MAX_PDF_PAGES = 500
 MAX_FILE_NAME_CHARS = 255
+PDF_ENCRYPTED_MESSAGE = "PDF này được đặt mật khẩu nên không đọc được. Hãy gỡ mật khẩu rồi tải lên lại."
 # Control and text-direction characters: U+202E alone can show "fdp.exe" as
 # "exe.pdf" in the document list.
 _HIDDEN_NAME_CHARACTERS = re.compile("[\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
@@ -522,6 +524,9 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
         raise
     try:
         page_count = len(PdfReader(str(final_path), strict=False).pages)
+    except FileNotDecryptedError as exc:
+        final_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=422, detail={"code": "PDF_ENCRYPTED", "message": PDF_ENCRYPTED_MESSAGE}) from exc
     except Exception as exc:
         final_path.unlink(missing_ok=True)
         raise HTTPException(status_code=422, detail={"code": "INVALID_PDF", "message": "Không thể đọc cấu trúc PDF"}) from exc

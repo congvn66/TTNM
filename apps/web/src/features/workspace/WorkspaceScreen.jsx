@@ -90,6 +90,7 @@ const ERROR_COPY = {
   DOCUMENT_NOT_FOUND: "Không tìm thấy tài liệu này. Hãy tải lại danh sách.",
   DATABASE_UNAVAILABLE: "Dịch vụ dữ liệu tạm thời không sẵn sàng. Hãy thử lại sau.",
   INVALID_PDF: "Tệp không phải PDF hợp lệ hoặc không thể đọc được.",
+  PDF_ENCRYPTED: "PDF này được đặt mật khẩu nên không đọc được. Hãy gỡ mật khẩu rồi tải lên lại.",
   PDF_TOO_LARGE: "Tệp PDF vượt quá giới hạn 100 MiB.",
   PDF_TOO_MANY_PAGES: "Tài liệu vượt quá số trang cho phép.",
   EXTRACTION_NOT_READY: "Tài liệu đang được chuẩn bị. Bạn có thể đặt câu hỏi khi tài liệu sẵn sàng.",
