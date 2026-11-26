@@ -1,5 +1,5 @@
 import "./toolAnswer.css";
-import { dataStatusLabel, formatNumber, numbersDiffer, readableLabel, resultRows } from "./format.js";
+import { dataStatusLabel, formatNumber, numbersDiffer, readableLabel, scriptResultRows, withoutDecimalRepr } from "./format.js";
 
 // A number counts as edited when the value the answer used is not the value
 // first read from the PDF. Both are canonical decimals from the API; the PDF
@@ -34,10 +34,10 @@ export function EvidenceList({ items, evidenceByKey, onCitation }) {
   </section>;
 }
 
-function ScriptResult({ result }) {
-  const rows = resultRows(result);
+function ScriptResult({ formula }) {
+  const rows = scriptResultRows(formula);
   if (rows.length === 1 && !rows[0].name) return <b>Kết quả: {rows[0].value}</b>;
-  return <div className="script-result"><b>Kết quả</b><dl>{rows.map((row) => <div key={row.name}><dt>{row.name}</dt><dd>{row.value}</dd></div>)}</dl></div>;
+  return <div className="script-result"><b>Kết quả</b><dl>{rows.map((row, index) => <div key={`${row.name}-${index}`}><dt>{row.name}</dt><dd>{row.value}</dd></div>)}</dl></div>;
 }
 
 export function ScriptCard({ formula, onCitation }) {
@@ -53,7 +53,7 @@ export function ScriptCard({ formula, onCitation }) {
     <details><summary>Xem code Python</summary><pre>{formula.expression}</pre>
       {inputs.length > 0 && <dl className="script-keys" aria-label="Các số trong code">{inputs.map((input) => <div key={input.evidence_key}><dt><code>{input.evidence_key}</code></dt><dd>{itemLabel(input)} · {formatNumber(input.value)}</dd></div>)}</dl>}
     </details>
-    {formula.stdout && <pre className="script-stdout">{formula.stdout}</pre>}
-    <ScriptResult result={formula.result} />
+    {formula.stdout && <pre className="script-stdout">{withoutDecimalRepr(formula.stdout)}</pre>}
+    <ScriptResult formula={formula} />
   </div>;
 }

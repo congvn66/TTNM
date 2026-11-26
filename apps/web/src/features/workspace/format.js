@@ -74,20 +74,69 @@ export function dataStatusLabel(status) {
   return DATA_STATUS_LABELS[status] ?? "Cần kiểm tra";
 }
 
+// Python's text for a Decimal, e.g. Decimal('3110'). People never see it.
+const DECIMAL_REPR = /Decimal\((['"])(-?\d+(?:\.\d+)?(?:E[+-]?\d+)?)\1\)/gi;
+
+/** Script text with every Decimal('x') written as the plain number x. */
+export function withoutDecimalRepr(text) {
+  return String(text ?? "").replace(DECIMAL_REPR, "$2");
+}
+
+// JSON, or a Python dict/list literal such as {'diff': Decimal('3110')}.
+function parseLiteral(text) {
+  try { return JSON.parse(text); } catch { /* not JSON */ }
+  const json = text.replace(DECIMAL_REPR, "'$2'").replace(/'/g, '"')
+    .replace(/\bTrue\b/g, "true").replace(/\bFalse\b/g, "false").replace(/\bNone\b/g, "null");
+  try { return JSON.parse(json); } catch { return undefined; }
+}
+
+// One row per value; nested names are joined like Data labels ("a · b").
+function flatten(value, name, rows) {
+  const join = (part) => (name ? `${name} · ${part}` : part);
+  if (Array.isArray(value)) value.forEach((item, index) => flatten(item, join(String(index + 1)), rows));
+  else if (value && typeof value === "object") Object.entries(value).forEach(([key, item]) => flatten(item, join(readablePart(key) || key), rows));
+  else rows.push({ name, value: formatNumber(withoutDecimalRepr(value ?? "")) });
+  return rows;
+}
+
 /**
  * A script result as rows to show. The API sends plain values as text and
  * dicts/lists as JSON text, e.g. '{"diff": "2114", "percent": "49.66"}'.
+ * A dict or list is always shown as rows, never as a literal.
  */
 export function resultRows(result) {
-  const text = String(result ?? "").trim();
-  let parsed = text;
-  if (/^[[{]/.test(text)) {
-    try { parsed = JSON.parse(text); } catch { parsed = text; }
-  }
-  const value = (item) => (item && typeof item === "object" ? JSON.stringify(item) : formatNumber(item));
-  if (Array.isArray(parsed)) return parsed.map((item, index) => ({ name: String(index + 1), value: value(item) }));
-  if (parsed && typeof parsed === "object") return Object.entries(parsed).map(([name, item]) => ({ name: readablePart(name) || name, value: value(item) }));
-  return [{ name: "", value: formatNumber(parsed) }];
+  const text = withoutDecimalRepr(result).trim();
+  const parsed = /^[[{]/.test(text) ? parseLiteral(String(result ?? "").trim()) : undefined;
+  return flatten(parsed === undefined ? text : parsed, "", []);
+}
+
+/**
+ * The rows of an executed script. The API's result_rows name each value and
+ * the Data keys it came from; a value copied from one Data row takes that
+ * row's label. Without result_rows the result text is split into rows.
+ */
+export function scriptResultRows(formula) {
+  const rows = Array.isArray(formula?.result_rows) ? formula.result_rows : [];
+  if (!rows.length) return resultRows(formula?.result);
+  const inputs = new Map((formula.inputs ?? []).map((input) => [input.evidence_key, input]));
+  return rows.map((row) => {
+    const keys = Array.isArray(row.source_keys) ? row.source_keys : [];
+    const source = keys.length === 1 ? inputs.get(keys[0]) : null;
+    const copied = source && !numbersDiffer(row.value, source.value);
+    const name = row.label || (copied ? readableLabel(source.label) : "") || readableLabel(row.name);
+    return { name, value: formatNumber(withoutDecimalRepr(row.value ?? "")) };
+  });
+}
+
+/** Calculations with the same code and result are one calculation. */
+export function distinctFormulas(formulas) {
+  const seen = new Set();
+  return (formulas ?? []).filter((formula) => {
+    const key = JSON.stringify([formula.expression, formula.result]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export function formatDateTime(value) {

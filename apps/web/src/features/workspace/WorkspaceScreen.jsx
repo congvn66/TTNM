@@ -6,7 +6,7 @@ import { useTheme } from "../theme/ThemeProvider.jsx";
 import { EvidenceList, ScriptCard } from "./ToolAnswer.jsx";
 import { Icon } from "./Icon.jsx";
 import { EvidenceDrawer } from "./EvidenceDrawer.jsx";
-import { formatNumber } from "./format.js";
+import { distinctFormulas, formatNumber } from "./format.js";
 import { quoteBoxes } from "./pdfHighlight.js";
 
 const SESSION_KEY = "sourcelens-active-session";
@@ -256,7 +256,7 @@ function StructuredAnswer({ answer, fallback, onCitation, evidenceByKey }) {
       {claim.evidence_pages?.length > 0 && <div className="evidence-pages">{claim.evidence_pages.map((page) => <button className="citation" key={page} onClick={() => onCitation?.(page, claim.evidence_quotes?.[0] ?? "")}><Icon name="link" size={12} /> Trang {page}</button>)}</div>}
     </div>)}</section>}
     {answer.sections?.map((section, index) => <section className="answer-section" key={`${section.heading}-${index}`}><h4>{section.heading}</h4>{section.points?.filter(Boolean).length > 0 && <ul>{section.points.filter(Boolean).map((point, pointIndex) => <li key={pointIndex}>{point}</li>)}</ul>}</section>)}
-    {answer.formulas?.length > 0 && <section className="answer-section"><h4>Công thức và tính toán</h4>{answer.formulas.map((formula, index) => formula.inputs ? <ScriptCard formula={formula} onCitation={onCitation} key={`script-${index}`} /> : <div className="formula-card" key={`${formula.name}-${index}`}><strong>{formula.name}</strong><code>{formula.expression}</code><span>Thay số: {formula.substitution || "Chưa đủ toán hạng"}</span><b>Kết quả: {formatNumber(formula.result) || "Không xác định"}{formula.unit ? ` ${formula.unit}` : ""}</b>{["verified", "succeeded"].includes(formula.calculation?.status) ? <em className="formula-verified">✓ Đã tính lại: {formatNumber(formula.calculation.computed_result)}{formula.calculation.unit ? ` ${formula.calculation.unit}` : ""}</em> : <em className="formula-unverified">Chưa tính lại được</em>}</div>)}</section>}
+    {answer.formulas?.length > 0 && <section className="answer-section"><h4>Công thức và tính toán</h4>{distinctFormulas(answer.formulas).map((formula, index) => formula.inputs ? <ScriptCard formula={formula} onCitation={onCitation} key={`script-${index}`} /> : <div className="formula-card" key={`${formula.name}-${index}`}><strong>{formula.name}</strong><code>{formula.expression}</code><span>Thay số: {formula.substitution || "Chưa đủ toán hạng"}</span><b>Kết quả: {formatNumber(formula.result) || "Không xác định"}{formula.unit ? ` ${formula.unit}` : ""}</b>{["verified", "succeeded"].includes(formula.calculation?.status) ? <em className="formula-verified">✓ Đã tính lại: {formatNumber(formula.calculation.computed_result)}{formula.calculation.unit ? ` ${formula.calculation.unit}` : ""}</em> : <em className="formula-unverified">Chưa tính lại được</em>}</div>)}</section>}
     {answer.tables?.map((table, index) => <section className="answer-section" key={`${table.title}-${index}`}><h4>{table.title}</h4><div className="answer-table-wrap"><table className="answer-table"><thead><tr>{table.columns?.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{table.rows?.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div></section>)}
     {warnings.length > 0 && <div className="answer-warnings"><strong>Lưu ý</strong><ul>{warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}
   </div>;
