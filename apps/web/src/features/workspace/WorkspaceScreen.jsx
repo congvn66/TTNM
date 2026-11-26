@@ -61,6 +61,30 @@ function writeSessionSnapshot(sessions) {
   }
 }
 
+const EDIT_NOT_KEPT_REASONS = {
+  NOT_IN_NEW_READING: "không còn trong lần đọc mới",
+  LOCATION_CHANGED: "vị trí đã thay đổi",
+  NEW_READING_FAILED: "lần đọc mới không đọc được số",
+};
+
+/** What happened to the user's edits in the latest re-extraction. */
+function carriedEditsSummary(run) {
+  const kept = run?.edits_carried_over;
+  const lost = run?.edits_not_carried_over;
+  if (!Array.isArray(kept) || !Array.isArray(lost) || (!kept.length && !lost.length)) return "";
+  const parts = [];
+  if (kept.length) parts.push(`Giữ lại ${kept.length} số đã sửa`);
+  if (lost.length) {
+    const counts = new Map();
+    for (const item of lost) {
+      const reason = EDIT_NOT_KEPT_REASONS[item.code] ?? "không khớp lần đọc mới";
+      counts.set(reason, (counts.get(reason) ?? 0) + 1);
+    }
+    parts.push([...counts].map(([reason, count]) => `${count} số không giữ được vì ${reason}`).join(", "));
+  }
+  return ` ${parts.join("; ")}.`;
+}
+
 function formatBytes(value = 0) {
   if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`;
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
@@ -969,16 +993,16 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     catch (error) { showNotice(error.message, "error"); }
   }
 
-  // PostgreSQL keeps completed extractions immutable; there a failed document
-  // is retried from the job center instead.
-  const canReextract = runtimeHealth?.persistence_backend === "json";
+  // The server says whether it can re-read a document (not with PostgreSQL,
+  // where a failed document is retried from the job center instead).
+  const canReextract = runtimeHealth?.capabilities?.reextraction?.status === "available";
 
   function reextractDocument(document) {
     setResourceDialog({
       kind: "reextract-document", document, icon: "refresh", confirmLabel: "Đọc lại tài liệu", busyLabel: "Đang gửi yêu cầu…",
       title: "Đọc lại tài liệu này?",
       description: document.extraction_status === "ready"
-        ? `SourceLens sẽ đọc lại “${document.file_name}” và lập lại bảng số liệu. Số bạn đã sửa được giữ; các câu trả lời cũ dùng số liệu sẽ được đánh dấu cần tính lại. Việc này có thể mất vài phút.`
+        ? `SourceLens sẽ đọc lại “${document.file_name}” và lập lại toàn bộ bảng số liệu. Một số bạn đã sửa chỉ được giữ khi số đó vẫn ở cùng vị trí và in giống hệt trong PDF. Các câu trả lời cũ dùng số liệu sẽ được đánh dấu cần tính lại. Việc này có thể mất vài phút.`
         : `SourceLens sẽ thử đọc lại “${document.file_name}”. Việc này có thể mất vài phút.`,
     });
   }
@@ -997,7 +1021,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     const status = activeDocument?.extraction_status;
     if (!id || !reextractingRef.current.has(id) || !["ready", "failed"].includes(status)) return;
     reextractingRef.current.delete(id);
-    if (status === "ready") showNotice(`Đã đọc lại ${activeDocument.file_name}: ${activeDocument.numeric_evidence_count ?? 0} số liệu.`);
+    if (status === "ready") showNotice(`Đã đọc lại ${activeDocument.file_name}: ${activeDocument.numeric_evidence_count ?? 0} số liệu.${carriedEditsSummary(activeDocument.extraction_history?.at(-1))}`);
     else showNotice(`Chưa đọc lại được ${activeDocument.file_name}. ${ERROR_COPY[activeDocument.extraction_error] ?? "Hãy thử lại sau."}`, "error");
   }, [activeDocument?.id, activeDocument?.extraction_status, activeDocument?.file_name, activeDocument?.numeric_evidence_count, activeDocument?.extraction_error, showNotice]);
 

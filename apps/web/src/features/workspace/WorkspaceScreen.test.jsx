@@ -157,10 +157,10 @@ it("shows tools-mode evidence and the executed script, without duplicate citatio
   expect(screen.queryByText(/vùng trích dẫn/)).toBeNull();
 });
 
-it.each([["json", true], ["postgres", false]])("offers re-extraction only where the backend supports it (%s)", async (backend, offered) => {
+it.each([["available", true], ["unsupported", false]])("offers re-extraction only where the backend supports it (%s)", async (reextraction, offered) => {
   const doc = { id: "doc", file_name: "Broken.pdf", byte_size: 100, extraction_status: "failed" };
   const session = { id: "chat", title: "My session", documents: [doc], messages: [{ id: "a", role: "assistant", document_id: "doc", body: "Ready" }] };
-  requestMock.mockImplementation(async (path) => path === "/health" ? { persistence_backend: backend } : path === "/api/v1/sessions" ? { sessions: [{ ...session, messages: [] }] } : path === "/api/v1/sessions/chat" ? { session } : path.endsWith("/extraction") ? { affected_message_ids: [] } : { jobs: [] });
+  requestMock.mockImplementation(async (path) => path === "/health" ? { capabilities: { reextraction: { status: reextraction } } } : path === "/api/v1/sessions" ? { sessions: [{ ...session, messages: [] }] } : path === "/api/v1/sessions/chat" ? { session } : path.endsWith("/extraction") ? { affected_message_ids: [] } : { jobs: [] });
   render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
   await screen.findByText("Ready");
   if (!offered) { expect(screen.queryByText("Trích xuất lại")).toBeNull(); return; }
@@ -174,7 +174,7 @@ it("asks before re-reading a document and shows why the server refused", async (
   const doc = { id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: "ready" };
   const session = { id: "chat", title: "My session", documents: [doc], messages: [] };
   requestMock.mockImplementation(async (path) => {
-    if (path === "/health") return { persistence_backend: "json" };
+    if (path === "/health") return { capabilities: { reextraction: { status: "available" } } };
     if (path === "/api/v1/sessions") return { sessions: [session] };
     if (path === "/api/v1/sessions/chat") return { session };
     if (path.endsWith("/extraction")) throw Object.assign(new Error("Chưa hỗ trợ trích xuất lại khi lưu bằng PostgreSQL; hãy tải lại PDF."), { status: 409, code: "REEXTRACTION_NOT_SUPPORTED" });
@@ -183,7 +183,7 @@ it("asks before re-reading a document and shows why the server refused", async (
   render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
   fireEvent.click(await screen.findByText("Trích xuất lại"));
   const dialog = await screen.findByRole("dialog", { name: "Đọc lại tài liệu này?" });
-  expect(dialog.textContent).toContain("Số bạn đã sửa được giữ");
+  expect(dialog.textContent).toContain("chỉ được giữ khi số đó vẫn ở cùng vị trí");
   fireEvent.click(screen.getByRole("button", { name: "Đọc lại tài liệu" }));
   const alert = await screen.findByText("Máy chủ này chưa hỗ trợ đọc lại tài liệu. Hãy tải PDF lên lại để đọc từ đầu.");
   expect(alert.getAttribute("role")).toBe("alert");
@@ -293,4 +293,23 @@ it("opens a conversation at its newest message", async () => {
   await screen.findByText("Newest answer");
   const body = view.container.querySelector(".chat-body");
   await waitFor(() => expect(Element.prototype.scrollTo).toHaveBeenCalledWith({ top: body.scrollHeight, behavior: "instant" }));
+});
+
+it("tells which edited numbers a re-extraction kept", async () => {
+  let status = "ready";
+  const history = () => status === "ready" && requestMock.mock.calls.some(([path]) => path.endsWith("/extraction"))
+    ? [{ edits_carried_over: ["k1", "k2"], edits_not_carried_over: [{ evidence_key: "k3", numeric_value: "5", code: "LOCATION_CHANGED" }] }]
+    : [];
+  const session = () => ({ id: "chat", title: "My session", messages: [], documents: [{ id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: status, numeric_evidence_count: 50, extraction_history: history() }] });
+  requestMock.mockImplementation(async (path) => {
+    if (path === "/health") return { capabilities: { reextraction: { status: "available" } } };
+    if (path === "/api/v1/sessions") return { sessions: [session()] };
+    if (path === "/api/v1/sessions/chat") { const value = session(); if (status === "processing") status = "ready"; return { session: value }; }
+    if (path.endsWith("/extraction")) { status = "processing"; return { affected_message_ids: [] }; }
+    return { jobs: [] };
+  });
+  render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  fireEvent.click(await screen.findByText("Trích xuất lại"));
+  fireEvent.click(await screen.findByRole("button", { name: "Đọc lại tài liệu" }));
+  await screen.findByText("Đã đọc lại Report.pdf: 50 số liệu. Giữ lại 2 số đã sửa; 1 số không giữ được vì vị trí đã thay đổi.", {}, { timeout: 4000 });
 });

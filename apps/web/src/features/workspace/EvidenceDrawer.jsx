@@ -29,6 +29,7 @@ function RevisionHistory({ history }) {
       {revision.action === "edit"
         ? <span><b>{formatNumber(revision.old_numeric_value) || "trống"} → {formatNumber(revision.numeric_value)}</b>{revision.reason ? ` · ${revision.reason}` : ""}</span>
         : <span>{revision.action === "initialize" ? "Đọc từ PDF" : "Đọc lại"}: <b>{formatNumber(revision.numeric_value) || "chưa đọc được"}</b></span>}
+      {revision.carried_over_from_revision_id && <em>giữ lại sau khi đọc lại tài liệu</em>}
       <time dateTime={revision.created_at}>{formatDateTime(revision.created_at)}</time>
     </li>)}
   </ol>;
@@ -40,26 +41,37 @@ function EditForm({ evidence, basePath, onCancel, onSaved, onConflict }) {
   const [reason, setReason] = useState("");
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState("");
+  // Possible readings of an ambiguous number; the one the user picks is sent
+  // as numeric_value instead of the typed text.
+  const [readings, setReadings] = useState([]);
+  const [chosenValue, setChosenValue] = useState(null);
   const [working, setWorking] = useState(false);
   const path = `${basePath}/evidences/${encodeURIComponent(evidence.evidence_key)}/revisions`;
-  const body = () => JSON.stringify({ input_text: inputText.trim(), reason: reason.trim(), expected_revision_id: evidence.current_revision_id });
-  const post = (query = "") => request(`${path}${query}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: body() });
+  const post = (query = "", value = chosenValue) => request(`${path}${query}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...(value == null ? { input_text: inputText.trim() } : { numeric_value: value }), reason: reason.trim(), expected_revision_id: evidence.current_revision_id }),
+  });
 
   // Any change to the text invalidates the number we asked the user to confirm.
-  const change = (setter) => (event) => { setter(event.target.value); setPreview(null); setError(""); };
+  const change = (setter) => (event) => { setter(event.target.value); setPreview(null); setError(""); setReadings([]); setChosenValue(null); };
 
-  async function check(event) {
-    event.preventDefault();
-    setWorking(true); setError("");
-    try { setPreview(await post("?dry_run=true")); }
-    catch (reason_) { setError(editError(reason_)); if (reason_?.code === "EVIDENCE_REVISION_CONFLICT") onConflict(); }
+  async function requestPreview(value) {
+    setWorking(true); setError(""); setReadings([]);
+    try { setPreview(await post("?dry_run=true", value)); setChosenValue(value); }
+    catch (failure) {
+      setError(editError(failure));
+      if (failure?.code === "NUMBER_FORMAT_AMBIGUOUS") setReadings(failure.detail?.readings ?? []);
+      if (failure?.code === "EVIDENCE_REVISION_CONFLICT") onConflict();
+    }
     finally { setWorking(false); }
   }
+
+  function check(event) { event.preventDefault(); requestPreview(null); }
 
   async function save() {
     setWorking(true); setError("");
     try { onSaved(evidence, await post()); }
-    catch (reason_) { setError(editError(reason_)); setPreview(null); if (reason_?.code === "EVIDENCE_REVISION_CONFLICT") onConflict(); }
+    catch (failure) { setError(editError(failure)); setPreview(null); if (failure?.code === "EVIDENCE_REVISION_CONFLICT") onConflict(); }
     finally { setWorking(false); }
   }
 
@@ -69,6 +81,7 @@ function EditForm({ evidence, basePath, onCancel, onSaved, onConflict }) {
     <label htmlFor={`${ids}-reason`}>Lý do sửa</label>
     <textarea id={`${ids}-reason`} value={reason} onChange={change(setReason)} minLength="3" required placeholder="Ví dụ: Đối chiếu lại PDF gốc" />
     {error && <p className="evidence-edit-error" id={`${ids}-error`} role="alert">{error}</p>}
+    {readings.length > 0 && <div className="evidence-edit-readings" role="group" aria-label="Chọn số bạn muốn lưu"><span>Ý bạn là:</span>{readings.map((reading) => <button type="button" key={reading} disabled={working} onClick={() => requestPreview(reading)}>{formatNumber(reading)}</button>)}</div>}
     {preview && <p className="evidence-edit-preview" role="status">Sẽ lưu: <b>{preview.display ?? formatNumber(preview.parsed_value)}</b></p>}
     <div>
       <button type="button" onClick={onCancel} disabled={working}>Hủy</button>

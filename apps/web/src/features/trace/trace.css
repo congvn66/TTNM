@@ -140,6 +140,9 @@
 .evidence-history time { color: var(--muted); }
 .evidence-history-note { margin: 0; padding: 10px; border-top: 1px solid var(--border); color: var(--muted); font-size: 9px; }
 .evidence-edit-error { margin: 0; border-radius: 7px; padding: 7px 8px; background: var(--red-soft); color: var(--color-danger); font-size: 9px; line-height: 1.45; }
+.evidence-edit-readings { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--ink-soft); font-size: 9px; }
+.evidence-edit-readings button { border: 1px solid var(--accent-border); border-radius: 7px; padding: 5px 9px; background: var(--accent-soft); color: var(--accent-strong); font: 700 10px var(--font-mono); }
+.evidence-history em { color: var(--muted); font-style: normal; }
 .evidence-edit-preview { margin: 0; border-radius: 7px; padding: 7px 8px; background: var(--accent-soft); color: var(--ink-soft); font-size: 10px; }
 .evidence-edit-preview b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .evidence-edit-button { border: 1px solid #c9baa0; border-radius: 7px; padding: 6px 8px; background: var(--gold-soft); color: var(--gold-dark); font-size: 8px; font-weight: 750; }

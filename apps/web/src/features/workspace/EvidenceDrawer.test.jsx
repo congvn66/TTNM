@@ -116,3 +116,26 @@ it("marks a number in an answer as edited only after a real edit", async () => {
   expect(screen.queryByText(/ev-k1/)).toBeNull();
   expect(screen.getAllByText("Số ở trang 1")).toHaveLength(2);
 });
+
+it("offers the readings of an ambiguous number and sends the chosen one as numeric_value", async () => {
+  const bodies = [];
+  mockApi([
+    [`${base}/evidences/k1/revisions`, async (path, options) => {
+      const body = JSON.parse(options.body);
+      bodies.push(body);
+      if (body.input_text) throw Object.assign(new Error("Chưa rõ 1.250 là một nghìn hai trăm năm mươi hay một phẩy hai lăm."), { status: 422, code: "NUMBER_FORMAT_AMBIGUOUS", detail: { readings: ["1250", "1.250"] } });
+      return { parsed_value: body.numeric_value, display: body.numeric_value === "1250" ? "1.250" : "1,25", locale: "vi" };
+    }],
+    [`${base}/evidences`, async () => ({ evidences: [row("k1")] })],
+  ]);
+  const { drawer } = await openDrawer();
+  fireEvent.click(within(drawer).getByRole("button", { name: /^Sửa số/ }));
+  fireEvent.change(within(drawer).getByLabelText("Giá trị mới"), { target: { value: "1.250" } });
+  fireEvent.change(within(drawer).getByLabelText("Lý do sửa"), { target: { value: "Đối chiếu PDF" } });
+  fireEvent.click(within(drawer).getByRole("button", { name: "Kiểm tra số" }));
+  const choices = await within(drawer).findByRole("group", { name: "Chọn số bạn muốn lưu" });
+  fireEvent.click(within(choices).getByRole("button", { name: "1.250" }));
+  await within(drawer).findByText("1.250", { selector: ".evidence-edit-preview b" });
+  expect(bodies[1]).toEqual({ numeric_value: "1250", reason: "Đối chiếu PDF", expected_revision_id: "k1-r1" });
+  expect(bodies[0].input_text).toBe("1.250");
+});

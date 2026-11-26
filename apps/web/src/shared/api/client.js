@@ -43,6 +43,8 @@ function extractError(body, status) {
   error.code = code;
   error.traceId = detail && typeof detail === "object" ? (detail.trace_id ?? detail.traceId) : undefined;
   error.rawMessage = fallback;
+  // Extra fields some errors carry, e.g. the possible readings of an ambiguous number.
+  error.detail = detail && typeof detail === "object" ? detail : undefined;
   return error;
 }
 
