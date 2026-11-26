@@ -376,10 +376,15 @@ def _snapshot_events(items: dict[str, Any], chart_reads: list[dict[str, Any]]) -
 
 
 def _read_artifact(document: dict[str, Any]) -> dict[str, Any] | None:
+    """The document's extraction artifact when it is a reading with numbers, else None.
+
+    An artifact from before numbers were extracted holds pages only.
+    """
     try:
-        return json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
+        artifact = json.loads(extraction_path(document["extraction_name"]).read_text(encoding="utf-8"))
     except (KeyError, OSError, ValueError):
         return None
+    return artifact if isinstance(artifact, dict) and "extraction_run_id" in (artifact.get("evidence_batch") or {}) else None
 
 
 def _retire_old_number_state(document: dict[str, Any]) -> None:

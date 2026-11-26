@@ -256,3 +256,14 @@ def test_temporary_files_left_by_a_killed_process_are_removed_on_load(runtime):
 
     assert [path for path in left if path.exists()] == []
     assert kept.exists()
+
+
+def test_a_document_read_before_numbers_existed_loads(runtime):
+    # Its artifact holds pages only: reading its run id raised KeyError and the app did not start.
+    _write_artifact(runtime, {"pages": [{"page": 1, "text": "Doanh thu"}]})
+    document = {"id": "doc-1", "file_name": "a.pdf", "extraction_name": "doc-1.json", "extraction_status": "ready"}
+    (runtime / "sessions.json").write_text(json.dumps({"sessions": {"s1": {"id": "s1", "documents": [document], "messages": []}}}), encoding="utf-8")
+
+    loaded = session_storage.load_catalog()["sessions"]["s1"]["documents"][0]
+
+    assert loaded["number_log"] == [] and loaded["number_event_count"] == 0
