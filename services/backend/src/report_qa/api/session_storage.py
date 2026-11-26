@@ -192,8 +192,12 @@ def _save_session_file(session_id: str, session: dict[str, Any]) -> None:
 
 
 def _load_session_file(session_id: str, session: dict[str, Any]) -> bool:
-    """Read a session's messages; True when the file was missing or damaged (the index must be saved)."""
+    """Read a session's messages; True when the file was missing or damaged (the index must be saved).
+
+    A session whose file is missing or damaged loads with no messages.
+    """
     count = session.pop("message_count", 0)
+    session["messages"] = []
     path = session_file_path(session_id)
     if not path.exists():
         if count:

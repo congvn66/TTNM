@@ -221,7 +221,8 @@ def test_a_damaged_or_missing_session_file_is_reported_and_the_rest_loads(runtim
     loaded = session_storage.load_catalog()
 
     assert loaded["sessions"]["s2"] == catalog["sessions"]["s2"]
-    assert "messages" not in loaded["sessions"]["s0"] and "messages" not in loaded["sessions"]["s1"]
+    # The session loads with no messages, as one the app can answer in (session["messages"] raised KeyError: a 500).
+    assert loaded["sessions"]["s0"]["messages"] == [] and loaded["sessions"]["s1"]["messages"] == []
     assert list((runtime / "sessions").glob("s0.json.corrupt-*"))
     messages = [record.getMessage() for record in caplog.records if record.levelname == "CRITICAL"]
     assert any("Session file" in message and "s0.json" in message for message in messages)
