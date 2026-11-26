@@ -93,7 +93,7 @@ def test_a_number_no_source_contains_is_sent_back_with_the_list():
     "Tăng trưởng 17,05% so với 2025.",  # rounded vi percent of a python fraction, year from the question
     "Tăng trưởng 17.1%.",  # en separator, one decimal
     "Q2 là 1.250,5 nghìn đồng, chiếm 30% (trích 'chiếm 30%').",  # value with scale word, quote number
-    "Q2/2026 Miền Bắc đạt 1250500 đồng.",  # label numbers and the raw value
+    "Q2/2026 Miền Bắc đạt 1250500 đồng.",  # a period label and the raw value
 ])
 def test_numbers_traced_to_results_rows_quotes_and_question_are_accepted(answer):
     from report_qa.application.document_assistant import untraced_numbers
@@ -102,6 +102,34 @@ def test_numbers_traced_to_results_rows_quotes_and_question_are_accepted(answer)
            "table_locator": {"row_header": "Miền Bắc", "column_header": "Q2/2026"}}
     assert untraced_numbers(answer, question="So với 2025 thì sao?", evidences=[row],
                             quotes=["Miền Nam chiếm 30% doanh thu."], results=["0.170547"]) == []
+
+
+@pytest.mark.parametrize("answer", [
+    "Doanh thu là 10 tỷ đồng (trang 5).",  # a reference to a cited page
+    "Theo trang 5, doanh thu là 10 tỷ đồng.",
+    "Tính đến 31/12/2023, doanh thu là 10.",  # a date
+    "Trong Q3 và H1, 6T/2026, doanh thu là 10.",  # period labels glued to letters
+    "Doanh thu tháng 3/2026 và tháng 6 là 10.",  # months
+    "Năm 2019 và 2025 doanh thu là 10.",  # years written only in the pages
+    "Trong 6 tháng đầu năm 2026, có 4 quý, trung bình 3 năm là 10.",  # durations
+])
+def test_honest_non_quantities_are_not_checked(answer):
+    # Each of these was rejected: page refs, dates, period labels and counts were read as quantities.
+    from report_qa.application.document_assistant import untraced_numbers
+
+    row = {"evidence_key": "k", "numeric_value": "10", "raw_text": "10", "page_number": 5}
+    assert untraced_numbers(answer, question="Doanh thu?", evidences=[row], quotes=[], results=[], cited_pages={5}) == []
+
+
+def test_digits_inside_labels_and_uncited_page_refs_are_not_sources():
+    from report_qa.application.document_assistant import untraced_numbers
+
+    row = {"evidence_key": "k", "numeric_value": "10", "raw_text": "10", "page_number": 5,
+           "table_locator": {"row_header": "Doanh thu", "column_header": "Q4/2024"}}
+    assert untraced_numbers("Q4/2024 là 4 tỷ.", question="Q4/2024?", evidences=[row], quotes=[], results=[],
+                            cited_pages={5}) == ["4 tỷ"]
+    assert untraced_numbers("Doanh thu là 10 (trang 7).", question="?", evidences=[row], quotes=[], results=[],
+                            cited_pages={5}) == ["7"]
 
 
 def test_a_number_from_an_uncited_row_is_not_traced():

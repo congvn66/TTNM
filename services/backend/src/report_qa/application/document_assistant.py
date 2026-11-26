@@ -15,6 +15,7 @@ import time
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from report_qa.api.ai_provider import MAX_ANSWER_CHARS, ProviderError, _json_from_content
+from report_qa.application.numeric_extraction import quantities
 from report_qa.application.python_calculator import run_calculation
 from report_qa.application.text_evidence import match_quote, suggest_quote
 
@@ -133,9 +134,10 @@ def data_rows(evidences: list[dict]) -> list[dict]:
     ]
 
 
-_NUMERAL = re.compile(r"(?P<numeral>\d+(?:[.,]\d+)*)(?:\s*(?P<scale>%|nghìn|ngàn|triệu|tỷ|tỉ)(?!\w))?", re.IGNORECASE)
+_SCALE_WORD = re.compile(r"\s*(nghìn|ngàn|triệu|tỷ|tỉ)(?!\w)", re.IGNORECASE)
 _SCALE = {"%": Decimal("0.01"), "nghìn": Decimal(10**3), "ngàn": Decimal(10**3), "triệu": Decimal(10**6),
           "tỷ": Decimal(10**9), "tỉ": Decimal(10**9)}
+_PAGE_WORD = re.compile(r"(?:\btrang|\bpage)\s+$", re.IGNORECASE)
 
 
 def _readings(numeral: str) -> set[tuple[Decimal, int]]:
@@ -150,40 +152,53 @@ def _readings(numeral: str) -> set[tuple[Decimal, int]]:
     return readings
 
 
-def _written_numbers(text: str):
-    """(text as written, readings, scale or None) for every number in a text."""
-    for match in _NUMERAL.finditer(text):
-        scale = match.group("scale")
-        yield match.group(0), _readings(match.group("numeral")), _SCALE[scale.casefold()] if scale else None
+def _written_numbers(text, cited_pages=frozenset()):
+    """(text as written, readings, scale or None) for every quantity in a text.
+
+    Only quantities count (numeric_extraction.quantities): not periods,
+    dates, durations or digits glued to letters. "trang 5" is a page
+    reference, not a quantity, when page 5 is cited.
+    """
+    text = str(text or "")
+    for match in quantities(text):
+        token = match.group().rstrip(".,")
+        numeral = token.removesuffix("%").strip().strip("()").lstrip("+-").strip()
+        if numeral.isdigit() and int(numeral) in cited_pages and _PAGE_WORD.search(text[:match.start()]):
+            continue
+        word = None if token.endswith("%") else _SCALE_WORD.match(text, match.start() + len(token))
+        scale = _SCALE["%"] if token.endswith("%") else _SCALE[word.group(1).casefold()] if word else None
+        yield token + (word.group() if word else ""), _readings(numeral), scale
 
 
 def _text_values(text) -> set[Decimal]:
     """Every value a text can mean: each reading, with and without its scale word."""
     values = set()
-    for _, readings, scale in _written_numbers(str(text or "")):
+    for _, readings, scale in _written_numbers(text):
         for number, _ in readings:
             values.update({number, number * scale} if scale else {number})
     return values
 
 
-def untraced_numbers(answer: str, *, question: str, evidences: list[dict], quotes: list[str], results: list[str]) -> list[str]:
-    """Numbers written in the answer that no trusted source contains, in answer order.
+def untraced_numbers(answer: str, *, question: str, evidences: list[dict], quotes: list[str], results: list[str],
+                     cited_pages=frozenset()) -> list[str]:
+    """Quantities written in the answer that no trusted source contains, in answer order.
 
-    Trusted sources are the question, the cited Data rows (current value, raw
-    PDF text, label and period), the accepted quotes and the numbers of
-    succeeded python results that derive from Data rows. A written number is traced when one of its vi/en readings, taken
-    as is or with its scale word (%, nghìn, triệu, tỷ), equals a trusted value
-    rounded to the decimals written: "17,05%" traces to 17.0547 and to 0.170547.
-    Signs are ignored because Vietnamese writes them as words (giảm 5%).
+    Trusted sources are the question, the cited Data rows (current value and
+    raw PDF text), the accepted quotes and the numbers of succeeded python
+    results that derive from Data rows. Only quantities are checked, in the
+    answer and in every source: periods, dates, durations, digits inside a
+    label token ("Q4/2024") and references to a cited page are not
+    quantities. A written number is traced when one of its vi/en readings,
+    taken as is or with its scale word (%, nghìn, triệu, tỷ), equals a trusted
+    value rounded to the decimals written: "17,05%" traces to 17.0547 and to
+    0.170547. Signs are ignored because Vietnamese writes them as words (giảm 5%).
     """
     trusted = {Decimal(number) for number in results}
     trusted |= _text_values(question)
     for evidence in evidences:
         if evidence.get("numeric_value") is not None:
             trusted.add(Decimal(str(evidence["numeric_value"])))
-        period = (evidence.get("semantic") or {}).get("period") or {}
-        for text in (evidence.get("raw_text"), evidence_label(evidence), period.get("label")):
-            trusted |= _text_values(text)
+        trusted |= _text_values(evidence.get("raw_text"))
     for quote in quotes:
         trusted |= _text_values(quote)
     trusted = {abs(value) for value in trusted if value.is_finite()}
@@ -200,7 +215,8 @@ def untraced_numbers(answer: str, *, question: str, evidences: list[dict], quote
                         continue
         return False
 
-    return list(dict.fromkeys(text for text, readings, scale in _written_numbers(answer) if not traced(readings, scale)))
+    written = _written_numbers(answer, frozenset(cited_pages))
+    return list(dict.fromkeys(text for text, readings, scale in written if not traced(readings, scale)))
 
 
 def result_rows(rows: list[dict], by_key: dict) -> list[dict]:
@@ -370,9 +386,11 @@ class _Turn:
             self.reject("Answer must cite evidence_keys or verbatim sources, unless not_found=true; pages alone are not a citation")
             return None
         succeeded = [c for c in self.calculations if c["result"]["status"] == "succeeded"]
+        cited = [by_key[k] for k in keys]
         untraced = untraced_numbers(
-            answer, question=question, evidences=[by_key[k] for k in keys],
+            answer, question=question, evidences=cited,
             quotes=[s["quote"] for s in sources], results=[n for c in succeeded for n in c["result"]["traced_numbers"]],
+            cited_pages={e["page_number"] for e in cited} | {s["page"] for s in sources} | set(pages),
         ) if kind == "answer" else []
         if untraced:
             self.reject("Every number in the answer must come from a python result, a cited evidence key, "

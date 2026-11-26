@@ -58,13 +58,22 @@ def decimal_text(raw: str, locale: str | None = None) -> str:
 
 
 # A period written in a header or sentence: "Q2/25", "Quý 2/2026", "Q3" (no
-# year), "6T2026" (six months to date) or a year ("2026", "2026F").
+# year), "6T2026" or "6 tháng đầu năm 2026" (six months to date), "H1/2026",
+# a month ("tháng 3/2026", "tháng 6") or a year ("2026", "2026F").
 PERIOD = re.compile(
     r"(?i)(?<![\w/])(?:q|quý\s*)(?P<quarter>[1-4])"
     r"(?:\s*[/\-]\s*(?P<quarter_yy>\d{2})(?!\d)|\s*[/\-\s]\s*(?P<quarter_year>(?:19|20)\d{2})(?!\d))?(?!\w)"
-    r"|(?<![\w/])(?P<months>\d{1,2})t\s*/?\s*(?P<months_year>(?:19|20)\d{2}|\d{2})(?!\d)"
+    r"|(?<![\w/])(?P<months>\d{1,2})(?:t\s*/?|\s*tháng\s+đầu\s+năm)\s*(?P<months_year>(?:19|20)\d{2}|\d{2})(?!\d)"
+    r"|(?<![\w/])h(?P<half>[12])(?:\s*[/\-\s]\s*(?P<half_year>(?:19|20)\d{2}|\d{2})(?!\d))?(?!\w)"
+    r"|(?<![\w/])tháng\s*(?P<month>\d{1,2})(?:\s*[/\-]\s*(?P<month_year>(?:19|20)\d{2}))?(?![\d/])"
     r"|(?<![/\d])(?P<year>(?:19|20)\d{2})(?!\d)"
 )
+# A date ("31/12/2023", "31-12-2023") or a month of a year ("3/2026").
+DATE = re.compile(
+    r"(?<![\w/.,])(?:\d{1,2}(?P<sep>[/.\-])\d{1,2}(?P=sep)(?:19|20)?\d{2}|\d{1,2}/(?:19|20)\d{2})(?![\w/.,])"
+)
+# A length of time counted in periods: "4 quý", "3 năm", "6 tháng" (not "6 năm 2026").
+DURATION = re.compile(r"(?i)(?<![\w/.,])\d{1,3}\s*(?:năm|quý|tháng)(?!\w)(?!\s*(?:19|20)\d{2})")
 _DASHES = {"-", "—", "–"}
 # Joins the levels of a table header path: "Doanh thu thuần · Quý 2/2026".
 HEADER_JOIN = " · "
@@ -76,7 +85,21 @@ def _full_year(digits: str) -> str:
 
 
 def _period(match: re.Match, page_year: str | None = None) -> dict | None:
-    """Contract period for one PERIOD match; a bare quarter takes page_year when given."""
+    """Contract period for one PERIOD match; a bare quarter, half or month takes page_year when given."""
+    if match["half"]:
+        year = (match["half_year"] and _full_year(match["half_year"])) or page_year
+        if not year:
+            return None
+        first = match["half"] == "1"
+        return {"label": f"H{match['half']}/{year}", "start": f"{year}-{'01' if first else '07'}-01",
+                "end": f"{year}-{'06-30' if first else '12-31'}", "granularity": "half_year"}
+    if match["month"]:
+        month, year = int(match["month"]), match["month_year"] or page_year
+        if not (1 <= month <= 12 and year):
+            return None
+        last_day = calendar.monthrange(int(year), month)[1]
+        return {"label": f"T{month}/{year}", "start": f"{year}-{month:02d}-01", "end": f"{year}-{month:02d}-{last_day:02d}",
+                "granularity": "month"}
     if match["quarter"]:
         year = match["quarter_year"] or (match["quarter_yy"] and _full_year(match["quarter_yy"])) or page_year
         if not year:
@@ -121,6 +144,20 @@ def single_year(text: str) -> str | None:
     """The page's year when exactly one year is written on it."""
     years = {m["year"] for m in PERIOD.finditer(text) if m["year"]}
     return years.pop() if len(years) == 1 else None
+
+
+def quantities(text: str) -> list[re.Match]:
+    """NUMBER matches that state a quantity.
+
+    Digits glued to letters or slashes ("Q3", "H1", "6T") are never NUMBER
+    matches; periods, dates and durations ("quý 2/2026", "31/12/2023",
+    "4 quý") are labels of time, not quantities. Positions are those of text.
+    """
+    blanked = list(text)
+    for pattern in (PERIOD, DATE, DURATION):
+        for match in pattern.finditer(text):
+            blanked[match.start():match.end()] = " " * (match.end() - match.start())
+    return list(NUMBER.finditer("".join(blanked)))
 
 
 def is_value_text(text: str | None) -> bool:
