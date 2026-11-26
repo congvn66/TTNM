@@ -2,8 +2,10 @@
 
 A quote is accepted only if it occurs in the extracted page text, either
 exactly (ignoring whitespace, case, dash/quote styles) or, for small model
-copy errors, by snapping to the closest sentence on that page. The returned
-quote is always the document's own text, never the model's wording.
+copy errors, by snapping to the closest sentence on that page. A snap must
+keep the claim: the sentence has exactly the quote's numbers and polarity
+words, so "tăng 8%" never snaps to "giảm 8%" nor "2.250" to "1.250". The
+returned quote is always the document's own text, never the model's wording.
 """
 
 from __future__ import annotations
@@ -18,6 +20,9 @@ _FOLD = str.maketrans({
 })
 _SENTENCE_END = re.compile(r"(?<=[.!?;:])\s+|\n\s*\n")
 MIN_SNAP_SCORE = 0.85
+_CLAIM_TOKEN = re.compile(r"\d+(?:[.,]\d+)*|\w+")
+# Words that flip what a sentence claims: direction of change and negation.
+POLARITY_WORDS = frozenset({"tăng", "giảm", "sụt", "lãi", "lỗ", "cao", "thấp", "không", "chưa", "chẳng", "chả"})
 
 
 def _fold(text: str) -> tuple[str, list[int]]:
@@ -61,11 +66,19 @@ def _candidates(text: str):
         offset += len(line)
 
 
-def _closest(page_text: str, folded_quote: str, min_score: float):
+def _claim(folded_text: str) -> list[str]:
+    """Numbers and polarity words in order: the part of a sentence a snap may not change."""
+    return [t for t in _CLAIM_TOKEN.findall(folded_text) if t[0].isdigit() or t in POLARITY_WORDS]
+
+
+def _closest(page_text: str, folded_quote: str, min_score: float, *, same_claim: bool):
     best = None
+    claim = _claim(folded_quote)
     for start, end in _candidates(page_text):
         folded_candidate, _ = _fold(page_text[start:end])
         if not folded_candidate or len(folded_candidate) > 3 * len(folded_quote):
+            continue
+        if same_claim and _claim(folded_candidate) != claim:
             continue
         blocks = SequenceMatcher(None, folded_quote, folded_candidate, autojunk=False).get_matching_blocks()
         score = sum(block.size for block in blocks) / len(folded_quote)
@@ -90,14 +103,14 @@ def match_quote(page_text: str, quote: str) -> dict | None:
     if position >= 0:
         start, end = index[position], index[position + len(folded_quote) - 1] + 1
         return {"quote": _display(page_text[start:end]), "match": "exact"}
-    snapped = _closest(page_text, folded_quote, MIN_SNAP_SCORE)
+    snapped = _closest(page_text, folded_quote, MIN_SNAP_SCORE, same_claim=True)
     return {"quote": snapped, "match": "snapped"} if snapped else None
 
 
 def suggest_quote(page_text: str, quote: str) -> str | None:
     """Closest real sentence, shown to the model when its quote is rejected."""
     folded_quote = _folded_quote(quote)
-    return _closest(page_text, folded_quote, 0.5) if folded_quote else None
+    return _closest(page_text, folded_quote, 0.5, same_claim=False) if folded_quote else None
 
 
 def _first_hit(page, rects, quote: str) -> list:

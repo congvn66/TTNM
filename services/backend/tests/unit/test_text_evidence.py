@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
 from report_qa.application.document_assistant import run_assistant
 from report_qa.application.text_evidence import match_quote, quote_bbox, suggest_quote
 
@@ -24,8 +26,27 @@ def test_dash_and_quote_styles_do_not_break_exact_match():
 
 
 def test_small_copy_error_snaps_to_the_real_sentence():
-    match = match_quote(PAGE, "Biểu đồ đường thể hiện biến động của 5 khu vực A đến E")
+    match = match_quote(PAGE, "Biểu đồ đường thể hiện biến đông của năm khu vưc A đến E")
     assert match == {"quote": "Biểu đồ đường thể hiện biến động của năm khu vực A đến E.", "match": "snapped"}
+
+
+FACTS = "Doanh thu thuần năm 2024 đạt 1.250 tỷ đồng, tăng 15% so với cùng kỳ. Lợi nhuận sau thuế giảm 8% so với năm trước."
+
+
+@pytest.mark.parametrize("quote", [
+    "Lợi nhuận sau thuế tăng 8% so với năm trước.",  # direction flipped
+    "Doanh thu thuần năm 2024 đạt 2.250 tỷ đồng, tăng 15% so với cùng kỳ.",  # number changed
+    "Lợi nhuận sau thuế giảm 18% so với năm trước.",
+    "Lợi nhuận sau thuế không giảm 8% so với năm trước.",  # negation added
+    "Biểu đồ đường thể hiện biến động của 5 khu vực A đến E",  # a digit is not the word it replaces
+])
+def test_a_snap_never_changes_a_number_or_a_polarity_word(quote):
+    assert match_quote(FACTS + "\n" + PAGE, quote) is None
+
+
+def test_copy_noise_around_unchanged_numbers_still_snaps():
+    match = match_quote(FACTS, "Lợi nhuận sau thue giảm 8% so vói năm trước")
+    assert match == {"quote": "Lợi nhuận sau thuế giảm 8% so với năm trước.", "match": "snapped"}
 
 
 def test_paraphrase_or_invented_text_is_rejected_with_a_hint():
