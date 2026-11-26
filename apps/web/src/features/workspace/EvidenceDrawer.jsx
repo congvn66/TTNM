@@ -4,13 +4,9 @@ import { Icon } from "./Icon.jsx";
 import { dataStatusLabel, evidenceLabel, needsCheck, formatDateTime, formatNumber, numbersDiffer } from "./format.js";
 
 const REASON_MIN_LENGTH = 3;
-const EDIT_ERROR_FALLBACK = "Không đọc được số này. Hãy nhập lại, ví dụ 21.500 hoặc 21500.";
-
-// A 422 without a code is the server rejecting the shape of the typed text;
-// every other error already carries its own message.
-function editError(error) {
-  return error?.status === 422 && !error.code ? EDIT_ERROR_FALLBACK : error?.message || EDIT_ERROR_FALLBACK;
-}
+// The server's own limits; longer text could only be refused.
+const VALUE_MAX_LENGTH = 80;
+const REASON_MAX_LENGTH = 1000;
 
 // "21.500 (= 21500)": the number in the app's Vietnamese style, as the panel
 // will show it, and beside it the same number without thousands marks, so
@@ -91,7 +87,7 @@ function EditForm({ evidence, basePath, onCancel, onSaved, onConflict }) {
     setWorking(true); setError(""); setReadings([]);
     try { setPreview(await post("?dry_run=true", value)); setChosenValue(value); }
     catch (failure) {
-      setError(editError(failure));
+      setError(failure.message);
       if (failure?.code === "NUMBER_FORMAT_AMBIGUOUS") setReadings(failure.detail?.readings ?? []);
       if (failure?.code === "EVIDENCE_REVISION_CONFLICT") onConflict();
     }
@@ -103,17 +99,17 @@ function EditForm({ evidence, basePath, onCancel, onSaved, onConflict }) {
   async function save() {
     setWorking(true); setError("");
     try { onSaved(evidence, await post()); }
-    catch (failure) { setError(editError(failure)); setPreview(null); if (failure?.code === "EVIDENCE_REVISION_CONFLICT") onConflict(); }
+    catch (failure) { setError(failure.message); setPreview(null); if (failure?.code === "EVIDENCE_REVISION_CONFLICT") onConflict(); }
     finally { setWorking(false); }
   }
 
   const valueHelp = [missing.value && `${ids}-value-missing`, error && `${ids}-error`].filter(Boolean).join(" ") || undefined;
   return <form className="evidence-edit-form" onSubmit={check} noValidate aria-label={`Sửa số ${evidenceLabel(evidence) || `trang ${evidence.page_number}`}`}>
     <label htmlFor={`${ids}-value`}>Giá trị mới</label>
-    <input id={`${ids}-value`} ref={valueRef} autoFocus inputMode="decimal" value={inputText} onChange={change(setInputText, "value")} aria-required="true" aria-invalid={Boolean(missing.value || error)} aria-describedby={valueHelp} />
+    <input id={`${ids}-value`} ref={valueRef} autoFocus inputMode="decimal" maxLength={VALUE_MAX_LENGTH} value={inputText} onChange={change(setInputText, "value")} aria-required="true" aria-invalid={Boolean(missing.value || error)} aria-describedby={valueHelp} />
     {missing.value && <p className="evidence-field-error" id={`${ids}-value-missing`}>{missing.value}</p>}
     <label htmlFor={`${ids}-reason`}>Lý do sửa</label>
-    <textarea id={`${ids}-reason`} ref={reasonRef} value={reason} onChange={change(setReason, "reason")} aria-required="true" aria-invalid={Boolean(missing.reason)} aria-describedby={missing.reason ? `${ids}-reason-missing` : undefined} placeholder="Ví dụ: Đối chiếu lại PDF gốc" />
+    <textarea id={`${ids}-reason`} ref={reasonRef} maxLength={REASON_MAX_LENGTH} value={reason} onChange={change(setReason, "reason")} aria-required="true" aria-invalid={Boolean(missing.reason)} aria-describedby={missing.reason ? `${ids}-reason-missing` : undefined} placeholder="Ví dụ: Đối chiếu lại PDF gốc" />
     {missing.reason && <p className="evidence-field-error" id={`${ids}-reason-missing`}>{missing.reason}</p>}
     {error && <p className="evidence-edit-error" id={`${ids}-error`} role="alert">{error}</p>}
     {readings.length > 0 && <div className="evidence-edit-readings" role="group" aria-label="Chọn số bạn muốn lưu"><span>Ý bạn là:</span>{readings.map((reading) => <button type="button" key={reading} disabled={working} onClick={() => requestPreview(reading)}>{formatNumber(reading)}</button>)}</div>}
@@ -165,7 +161,7 @@ export function EvidenceDrawer({ data, basePath, onClose, onFocus, onSaved, onRe
       const result = await request(`${basePath}/evidences/${encodeURIComponent(key)}/revisions`);
       setHistories((current) => ({ ...current, [key]: { revisions: result.revisions ?? [] } }));
     } catch (error) {
-      setHistories((current) => ({ ...current, [key]: { error: error?.message || "Không tải được lịch sử sửa." } }));
+      setHistories((current) => ({ ...current, [key]: { error: error?.message } }));
     }
   }
 

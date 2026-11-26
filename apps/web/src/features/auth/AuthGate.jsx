@@ -92,7 +92,7 @@ export default function AuthGate({ children }) {
         setState({ status: "authenticated", user: body.user });
       }
     } catch (reason) {
-      setError(reason.message || "Không thể xác thực. Hãy thử lại.");
+      setError(reason.message);
     } finally { setBusy(false); }
   };
 

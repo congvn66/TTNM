@@ -8,7 +8,7 @@ const formatBytes = (value = 0) => value < 1024 * 1024 ? `${Math.max(1, Math.rou
 
 export default function LibraryScreen({ onNavigate }) {
   const [sessions, setSessions] = useState([]); const [query, setQuery] = useState(""); const [status, setStatus] = useState("all"); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
-  useEffect(() => { let disposed = false; request("/api/v1/sessions").then((body) => { if (!disposed) setSessions(body.sessions ?? []); }).catch((reason) => { if (!disposed) setError(reason.message || "Không thể tải thư viện tài liệu."); }).finally(() => { if (!disposed) setLoading(false); }); return () => { disposed = true; }; }, []);
+  useEffect(() => { let disposed = false; request("/api/v1/sessions").then((body) => { if (!disposed) setSessions(body.sessions ?? []); }).catch((reason) => { if (!disposed) setError(reason.message); }).finally(() => { if (!disposed) setLoading(false); }); return () => { disposed = true; }; }, []);
   const documents = useMemo(() => sessions.flatMap((session) => session.documents.map((document) => ({ ...document, sessionId: session.id, sessionTitle: session.title }))), [sessions]);
   const filtered = useMemo(() => documents.filter((document) => `${document.file_name} ${document.sessionTitle}`.toLowerCase().includes(query.trim().toLowerCase()) && (status === "all" || document.extraction_status === status)), [documents, query, status]);
   const openDocument = (document) => { localStorage.setItem(SESSION_KEY, document.sessionId); localStorage.setItem(DOCUMENT_KEY, document.id); onNavigate?.("/app/workspace"); };

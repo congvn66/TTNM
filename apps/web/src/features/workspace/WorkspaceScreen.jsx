@@ -499,7 +499,7 @@ function ProfileMenu({ user, onSignOut, onNavigate }) {
     try {
       const body = await request("/api/v1/settings/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ display_name: displayName.trim() }) });
       setProfile(body.user); setEditing(false);
-    } catch (reason) { setError(reason.message || "Không thể lưu hồ sơ."); }
+    } catch (reason) { setError(reason.message); }
     finally { setSaving(false); }
   };
   const accountName = profile?.display_name || profile?.email || "Workspace cá nhân";
