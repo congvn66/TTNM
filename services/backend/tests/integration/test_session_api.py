@@ -1174,3 +1174,14 @@ def test_typed_number_that_the_unknown_format_cannot_decide_is_refused(monkeypat
         assert both.status_code == 422
     finally:
         cleanup_session(session_id)
+
+
+def test_upload_body_the_multipart_parser_refuses_gets_the_upload_error_shape() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Long name"}).json()["session"]
+    try:
+        refused = client.post(f"/api/v1/sessions/{created['id']}/documents", files={"file": ("a" * 5000 + ".pdf", pdf_with_text("x"), "application/pdf")})
+        assert refused.status_code == 400
+        assert refused.json() == {"detail": {"code": "UPLOAD_FORM_INVALID", "message": api_main.UPLOAD_FORM_INVALID_MESSAGE}}
+        assert client.get("/api/v1/no-such-route").json() == {"detail": "Not Found"}
+    finally:
+        cleanup_session(created["id"])

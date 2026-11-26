@@ -18,10 +18,13 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, model_validator
 from pypdf import PdfReader
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.formparsers import MultiPartException
 from pypdf.errors import FileNotDecryptedError
 
 from report_qa.application.evidence_extraction import extract_pdf_artifact
@@ -218,6 +221,19 @@ app.add_middleware(
 @app.exception_handler(ObjectStorageError)
 def object_storage_error_handler(_: Request, __: ObjectStorageError) -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": {"code": "OBJECT_STORAGE_UNAVAILABLE", "message": "Cloudflare R2 tạm thời không sẵn sàng; hãy thử lại sau."}})
+
+
+UPLOAD_FORM_INVALID_MESSAGE = "Không đọc được tệp tải lên. Tên tệp có thể quá dài; hãy đổi tên tệp ngắn hơn (tối đa 255 ký tự) rồi tải lên lại."
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(request: Request, exc: StarletteHTTPException) -> Response:
+    # Starlette refuses a multipart body it cannot parse (e.g. a part header
+    # longer than python-multipart's 4 KB limit, which a long file name makes)
+    # before any endpoint runs. Give it the same JSON shape as other upload errors.
+    if isinstance(exc.__context__, MultiPartException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": {"code": "UPLOAD_FORM_INVALID", "message": UPLOAD_FORM_INVALID_MESSAGE}})
+    return await http_exception_handler(request, exc)
 
 
 @app.get(
