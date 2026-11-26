@@ -1,5 +1,6 @@
 from io import BytesIO
 import json
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1014,5 +1015,76 @@ def test_session_payload_leaves_number_state_to_the_evidence_endpoints() -> None
         assert "evidence_state" in api_main.catalog["sessions"][created["id"]]["documents"][0]
         document = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]
         assert "evidence_state" not in document and "chart_extractions" not in document
+    finally:
+        cleanup_session(created["id"])
+
+
+def _reading(*numbers):
+    """A fake extraction: (key, raw_text, numeric_value, page) per number."""
+    evidences = [
+        {"evidence_key": key, "source_region_key": f"{key}-region", "source_type": "table", "page_number": page, "bbox": [0.1, 0.1, 0.2, 0.2],
+         "raw_text": raw, "numeric_value": value, "value_kind": "number", "data_status": "valid", "extraction_method": "table_cell",
+         "method_label": "đọc từ ô bảng", "semantic": {}, "table_locator": {"table_region_key": f"page-{page}-table-0", "row_index": 1, "column_index": 1},
+         "chart_read": None, "confidence": 0.9}
+        for key, raw, value, page in numbers
+    ]
+    return lambda path, version: {"pages": [{"page": 1, "text": "Doanh thu"}], "evidence_batch": {
+        "schema_version": 2, "document_version_id": version, "extraction_run_id": str(uuid4()), "scope": "base_document",
+        "trigger": None, "evidences": evidences, "warnings": []}}
+
+
+def test_reextraction_rebuilds_numbers_and_carries_over_only_edits_at_the_same_place(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(
+        ("misread", "18.240", "18.24", 1), ("kept", "100", "100", 1), ("moved", "200", "200", 1), ("gone", "300", "300", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Re-extract rebuild"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        rows = {row["evidence_key"]: row for row in client.get(f"{base}/evidences").json()["evidences"]}
+        for key, value in (("kept", "110"), ("moved", "210"), ("gone", "310")):
+            edited = client.post(f"{base}/evidences/{key}/revisions", json={"numeric_value": value, "reason": "Đối chiếu PDF", "expected_revision_id": rows[key]["current_revision_id"]})
+            assert edited.status_code == 200, edited.text
+        stored = api_main.catalog["sessions"][created["id"]]["documents"][0]
+        stored["chart_extractions"] = [{"chart_region_key": "page-1-picture-0", "evidence_batch": {"evidences": []}}]
+
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(
+            ("misread", "18.240", "18240", 1), ("kept", "100", "100", 1), ("moved", "200", "200", 2)))
+        rerun = client.post(f"{base}/extraction")
+
+        assert rerun.status_code == 200, rerun.text
+        assert sorted(edit["evidence_key"] for edit in rerun.json()["previous_extraction"]["user_edits"]) == ["gone", "kept", "moved"]
+        after = {row["evidence_key"]: row for row in client.get(f"{base}/evidences").json()["evidences"]}
+        assert after["misread"]["current_numeric_value"] == "18240"
+        assert (after["kept"]["original_numeric_value"], after["kept"]["current_numeric_value"]) == ("100", "110")
+        assert after["moved"]["current_numeric_value"] == "200"
+        assert "gone" not in after
+        entry = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"][-1]
+        assert entry["edits_carried_over"] == ["kept"]
+        assert sorted((item["evidence_key"], item["code"]) for item in entry["edits_not_carried_over"]) == [("gone", "NOT_IN_NEW_READING"), ("moved", "LOCATION_CHANGED")]
+        assert stored["chart_extractions"] == []
+        archived = json.loads(api_main.number_state_path(entry["number_state"]).read_text(encoding="utf-8"))
+        assert archived["chart_extractions"][0]["chart_region_key"] == "page-1-picture-0"
+        assert archived["evidence_state"]["items"]["gone"]["revisions"][-1]["numeric_value"] == "310"
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_a_failed_reextraction_reports_every_edit_as_not_carried_over(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("kept", "100", "100", 1)))
+    created = client.post("/api/v1/sessions", json={"title": "Re-extract failed reading"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Doanh thu.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
+        row = client.get(f"{base}/evidences").json()["evidences"][0]
+        client.post(f"{base}/evidences/kept/revisions", json={"numeric_value": "110", "reason": "Đối chiếu PDF", "expected_revision_id": row["current_revision_id"]})
+
+        def broken(path, version):
+            raise RuntimeError("extractor bug")
+
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", broken)
+        assert client.post(f"{base}/extraction").status_code == 200
+        entry = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"][-1]
+        assert entry["edits_carried_over"] == []
+        assert entry["edits_not_carried_over"] == [{"evidence_key": "kept", "numeric_value": "110", "code": "NEW_READING_FAILED"}]
     finally:
         cleanup_session(created["id"])

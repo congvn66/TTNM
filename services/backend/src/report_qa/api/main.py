@@ -44,7 +44,20 @@ from report_qa.infrastructure.integrations import readiness as integration_readi
 from report_qa.infrastructure.integrations import runtime_capabilities
 from report_qa.infrastructure.postgres.runtime_store import PostgresRuntimeStore
 from report_qa.infrastructure.postgres.job_queue import PostgresJobQueue
-from .session_storage import EXTRACTION_ROOT, NUMBER_STATE_FIELDS, UPLOAD_ROOT, catalog_lock, document_path, extraction_path, load_catalog, save_catalog as disk_save_catalog, utc_now
+from .session_storage import (
+    EXTRACTION_ROOT,
+    NUMBER_STATE_FIELDS,
+    UPLOAD_ROOT,
+    catalog_lock,
+    document_path,
+    extraction_path,
+    load_catalog,
+    number_state,
+    number_state_path,
+    save_catalog as disk_save_catalog,
+    utc_now,
+    write_json_atomically,
+)
 from .object_storage_runtime import (
     ObjectStorageError,
     cache_extraction,
@@ -631,6 +644,7 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
         document.update({"extraction_status": extraction["status"], "page_count": extraction["page_count"], "numeric_evidence_count": extraction["numeric_evidence_count"], "extraction_error": extraction["error"]})
         if artifact is not None:
             ensure_document_evidence_state(document, artifact)
+        _carry_over_edits(document, artifact)
         session["updated_at"] = utc_now()
     try:
         save_catalog(catalog, owner)
@@ -886,23 +900,111 @@ def delete_session_document(session_id: str, document_id: str, request: Request)
 
 
 def _archive_extraction(document: dict[str, Any]) -> dict[str, Any]:
-    """Move the current artifact aside under its run id; completed extraction stays immutable."""
+    """Move the current reading aside under its run id: its artifact, its number state and the user's edits.
+
+    The document then has no number state until the new reading builds it.
+    """
     entry = {
         "status": document.get("extraction_status"), "error": document.get("extraction_error"),
         "page_count": document.get("page_count"), "numeric_evidence_count": document.get("numeric_evidence_count"),
-        "archived_at": utc_now(), "extraction_run_id": None, "artifact": None,
+        "archived_at": utc_now(), "extraction_run_id": None, "artifact": None, "number_state": None,
+        "user_edits": [], "edits_carried_over": None, "edits_not_carried_over": None,
     }
     current = extraction_path(document["extraction_name"])
+    artifact = None
     if current.exists():
         try:
-            run_id = json.loads(current.read_text(encoding="utf-8"))["evidence_batch"]["extraction_run_id"]
+            artifact = json.loads(current.read_text(encoding="utf-8"))
+            run_id = artifact["evidence_batch"]["extraction_run_id"]
         except (OSError, ValueError, KeyError, TypeError):
-            run_id = None
-        archived_name = f"{document['id']}.{run_id or uuid4()}.json"
-        os.replace(current, extraction_path(archived_name))
-        entry.update(extraction_run_id=run_id, artifact=archived_name)
+            artifact, run_id = None, None
+        entry["extraction_run_id"] = run_id
+    archived_name = f"{document['id']}.{entry['extraction_run_id'] or uuid4()}"
+    if current.exists():
+        os.replace(current, extraction_path(f"{archived_name}.json"))
+        entry["artifact"] = f"{archived_name}.json"
+    state = number_state(document)
+    if state:
+        entry["user_edits"] = _user_edits(document, artifact)
+        write_json_atomically(number_state_path(archived_name), state)
+        entry["number_state"] = archived_name
+    document.pop("evidence_state", None)
+    document["chart_extractions"] = []
     document.setdefault("extraction_history", []).append(entry)
     return entry
+
+
+def _evidence_location(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Where a number sits in the PDF and how it is printed there."""
+    chart = evidence.get("chart_read") or {}
+    return {
+        "page_number": evidence.get("page_number"),
+        "source_region_key": evidence.get("source_region_key"),
+        "table_locator": evidence.get("table_locator"),
+        "chart_locator": {key: chart.get(key) for key in ("chart_region_key", "series_label", "category_label")} if chart else None,
+        "raw_text": evidence.get("raw_text"),
+    }
+
+
+def _user_edits(document: dict[str, Any], artifact: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Numbers whose current value is a user edit, with where each one sat in this reading."""
+    reading = with_chart_batches(document, artifact or {"evidence_batch": {"evidences": []}})
+    evidences = {item["evidence_key"]: item for item in reading["evidence_batch"]["evidences"]}
+    edits = []
+    for key, item in ((document.get("evidence_state") or {}).get("items") or {}).items():
+        current = item["revisions"][-1]
+        if current.get("action") != "edit":
+            continue
+        edits.append({
+            "evidence_key": key, "numeric_value": current["numeric_value"], "reason": current.get("reason"),
+            "revision_id": current["id"], "location": _evidence_location(evidences[key]) if key in evidences else None,
+        })
+    return edits
+
+
+def _carry_over_edits(document: dict[str, Any], artifact: dict[str, Any] | None) -> None:
+    """Re-apply the archived user edits to the new reading. Call under catalog_lock.
+
+    An edit is carried over only when the new reading has the same key at the
+    same location with the same printed text; every other edit is listed as
+    not carried over. A failed reading carries over nothing.
+    """
+    history = document.get("extraction_history") or []
+    if not history or history[-1].get("edits_carried_over") is not None:
+        return
+    entry = history[-1]
+    evidences = {item["evidence_key"]: item for item in (artifact or {}).get("evidence_batch", {}).get("evidences", [])}
+    items = (document.get("evidence_state") or {}).get("items") or {}
+    carried, not_carried = [], []
+    for edit in entry.get("user_edits") or []:
+        key = edit["evidence_key"]
+        if artifact is None:
+            code = "NEW_READING_FAILED"
+        elif key not in evidences or key not in items:
+            code = "NOT_IN_NEW_READING"
+        elif edit["location"] != _evidence_location(evidences[key]):
+            code = "LOCATION_CHANGED"
+        else:
+            _append_carried_edit(document["evidence_state"], items[key], edit)
+            carried.append(key)
+            continue
+        not_carried.append({"evidence_key": key, "numeric_value": edit["numeric_value"], "code": code})
+    entry["edits_carried_over"] = carried
+    entry["edits_not_carried_over"] = not_carried
+
+
+def _append_carried_edit(state: dict[str, Any], item: dict[str, Any], edit: dict[str, Any]) -> None:
+    current = item["revisions"][-1]
+    if current["numeric_value"] is not None and Decimal(current["numeric_value"]) == Decimal(edit["numeric_value"]):
+        return  # the new reading already has the edited value
+    revision = {
+        "id": str(uuid4()), "revision_no": len(item["revisions"]) + 1, "action": "edit", "created_at": utc_now(),
+        "numeric_value": edit["numeric_value"], "old_numeric_value": current["numeric_value"], "previous_revision_id": current["id"],
+        "reason": edit["reason"], "carried_over_from_revision_id": edit["revision_id"],
+    }
+    item["revisions"].append(revision)
+    item["current_revision_id"] = revision["id"]
+    state["data_revision"] += 1
 
 
 @app.post(
@@ -910,9 +1012,10 @@ def _archive_extraction(document: dict[str, Any]) -> dict[str, Any]:
     tags=["sessions"],
     summary="Re-run extraction for an uploaded PDF",
     description=(
-        "Chay lai extraction bang extractor hien tai, vi du sau khi sua loi trich xuat. Ket qua cu duoc luu tru "
-        "(khong ghi de); revision so lieu da sua giu nguyen theo evidence_key; cau tra loi cu giu snapshot va duoc "
-        "danh dau needs_update. Tra 409 neu tai lieu dang duoc trich xuat."
+        "Chay lai extraction bang extractor hien tai. Lan doc cu (artifact, so lieu, bieu do da doc) duoc luu tru; "
+        "so lieu duoc dung lai tu lan doc moi. So da sua chi duoc giu khi lan doc moi co cung key, cung vi tri va cung "
+        "chu in; ket qua nam o extraction_history[-1].edits_carried_over / edits_not_carried_over. Cau tra loi cu "
+        "duoc danh dau needs_update. Tra 409 neu tai lieu dang duoc trich xuat."
     ),
     responses=OPENAPI_COMMON_ERRORS,
 )
@@ -1136,7 +1239,9 @@ def relevant_pages(document: dict[str, Any], question: str, limit: int = 3) -> l
 
 def ensure_document_evidence_state(document: dict[str, Any], extraction: dict[str, Any]) -> dict[str, Any]:
     """Initialize chat-local working copies without mutating base extraction."""
-    state = document.setdefault("evidence_state", {"data_revision": 0, "items": {}})
+    # A new reading starts with no state (see _archive_extraction), so the
+    # state built here belongs to this reading's run.
+    state = document.setdefault("evidence_state", {"data_revision": 0, "items": {}, "extraction_run_id": (extraction.get("evidence_batch") or {}).get("extraction_run_id")})
     state.setdefault("data_revision", 0)
     items = state.setdefault("items", {})
     for evidence in (extraction.get("evidence_batch") or {}).get("evidences", []):
