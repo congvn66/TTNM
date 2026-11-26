@@ -199,6 +199,11 @@ def _read(numeral, locale: str | None) -> tuple[Decimal, Decimal] | None:
     return None
 
 
+def stated_quantities(text, locale: str | None) -> set[tuple[Decimal, bool]]:
+    """(value, written as a percent) of each quantity a text states, read in the document's format."""
+    return {(r[0], unit == "%") for _, numeral, unit, _ in _written_numbers(text) if (r := _read(numeral, locale))}
+
+
 class _Source(NamedTuple):
     value: Decimal
     sign: int | None  # None: the source states a magnitude only

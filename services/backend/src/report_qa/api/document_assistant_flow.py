@@ -20,6 +20,7 @@ from report_qa.application.document_assistant import (
     data_rows,
     evidence_label,
     run_assistant,
+    stated_quantities,
     with_time_budget,
 )
 from report_qa.application.extraction_contract import validate_extraction_batch
@@ -135,18 +136,20 @@ def _quote_citation(pdf_path, source):
     return {"kind": "text", "page": source["page"], "bbox": bbox, "quote": source["quote"], "match": source["match"]}
 
 
-_NUMERAL = re.compile(r"\d+(?:[.,]\d+)*")
+def quoted_rows(sources, evidences, locale=None):
+    """Data rows a quote states: same page, and every quantity of the row's printed text is a quantity of the quote.
 
-
-def quoted_rows(sources, evidences):
-    """Data rows a quote states: same page, and every number of the row's raw PDF text is a number of the quote."""
+    Quantities are compared as values read in the document's number format
+    ("1250" is "1.250"), a percent only with a percent; years and other
+    periods are not quantities, so a row "2023" is never a quote's input.
+    """
     rows = []
     for source in sources:
-        quoted = set(_NUMERAL.findall(source["quote"]))
+        quoted = stated_quantities(source["quote"], locale)
         rows += [
             e for e in evidences
-            if e["page_number"] == source["page"] and (numerals := _NUMERAL.findall(e.get("raw_text") or ""))
-            and quoted.issuperset(numerals)
+            if e["page_number"] == source["page"] and (printed := stated_quantities(e.get("raw_text"), locale))
+            and quoted.issuperset(printed)
         ]
     return rows
 
@@ -371,7 +374,8 @@ def answer_document(
                 "page_number": e["page_number"],
                 "bbox": e["bbox"],
             }
-            for e in {e["evidence_key"]: e for e in used + quoted_rows(result["sources"], context["evidences"])}.values()
+            for e in {e["evidence_key"]: e for e in used + quoted_rows(result["sources"], context["evidences"],
+                                                                      context.get("number_locale"))}.values()
         ],
         "tool_calculations": result["calculations"],
         "tool_results": result["tool_results"],

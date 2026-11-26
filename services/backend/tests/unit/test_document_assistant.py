@@ -823,3 +823,16 @@ def test_the_same_script_run_twice_is_one_calculation():
     script = {"action": "python", "code": "result = value('a') + value('a')"}
     answer = _tools_answer(rows, script, script, {"action": "answer", "answer": "Gấp đôi là 36.480.", "evidence_keys": ["a"]})
     assert len(answer["formulas"]) == 1
+
+
+@pytest.mark.parametrize("locale", ["vi", None])
+def test_quoted_rows_compare_quantities_not_digit_strings(locale):
+    # Rows "8" and "2023" were marked as inputs of "tăng 8%" and raw "1250" was missed for "1.250".
+    from report_qa.api.document_assistant_flow import quoted_rows
+
+    rows = [{"evidence_key": key, "page_number": 1, "raw_text": raw}
+            for key, raw in [("eight", "8"), ("year", "2023"), ("printed", "1.250"), ("plain", "1250"), ("pct", "8%")]]
+    growth = [{"page": 1, "quote": "Doanh thu thuần năm 2023 tăng 8% so với năm trước."}]
+    profit = [{"page": 1, "quote": "Lợi nhuận sau thuế năm 2023 đạt 1.250 tỷ đồng."}]
+    assert [e["evidence_key"] for e in quoted_rows(growth, rows, locale)] == ["pct"]
+    assert [e["evidence_key"] for e in quoted_rows(profit, rows, locale)] == ["printed", "plain"]
