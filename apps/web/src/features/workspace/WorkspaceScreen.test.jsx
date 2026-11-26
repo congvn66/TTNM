@@ -4,7 +4,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 const { requestMock } = vi.hoisted(() => ({ requestMock: vi.fn() }));
 vi.mock("../../shared/api/client.js", async (importActual) => ({ ...await importActual(), API: "http://localhost:8000", request: requestMock }));
-vi.mock("pdfjs-dist", () => ({ GlobalWorkerOptions: {}, getDocument: () => ({ promise: Promise.reject(new Error("preview unavailable in test")), destroy: vi.fn() }) }));
+const { pdfFailure } = vi.hoisted(() => ({ pdfFailure: { current: null } }));
+vi.mock("pdfjs-dist", () => ({ GlobalWorkerOptions: {}, getDocument: () => ({ promise: Promise.reject(pdfFailure.current ?? new Error("preview unavailable in test")), destroy: vi.fn() }) }));
 import WorkspaceScreen from "./WorkspaceScreen.jsx";
 import { ThemeProvider } from "../theme/ThemeProvider.jsx";
 
@@ -13,7 +14,7 @@ beforeEach(() => {
   Element.prototype.scrollTo = vi.fn();
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(1) }));
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); requestMock.mockReset(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); requestMock.mockReset(); pdfFailure.current = null; });
 
 it("places replies after their linked questions even when the server returns them out of order", async () => {
   const doc = { id: "doc", file_name: "Report.pdf", byte_size: 100, extraction_status: "ready" };
@@ -426,4 +427,19 @@ it("renames with Enter and gives focus back to the opener when a dialog closes",
   await waitFor(() => expect(requestMock).toHaveBeenCalledWith("/api/v1/sessions/chat", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ title: "Báo cáo quý" }) })));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(document.activeElement).toBe(trigger);
+});
+
+it("shows the server's own message when the PDF file cannot be loaded", async () => {
+  pdfFailure.current = Object.assign(new Error("Unexpected server response (404)"), { name: "ResponseException", status: 404 });
+  const doc = { id: "doc", file_name: "Gone.pdf", byte_size: 100, extraction_status: "ready", file_url: "/api/v1/sessions/chat/documents/doc/file" };
+  const session = { id: "chat", title: "My session", documents: [doc], messages: [] };
+  requestMock.mockImplementation(async (path) => {
+    if (path === doc.file_url) throw Object.assign(new Error("Không tìm thấy tệp PDF đã lưu của tài liệu này."), { status: 404, code: "DOCUMENT_FILE_MISSING" });
+    return path === "/api/v1/sessions" ? { sessions: [session] } : path === "/api/v1/sessions/chat" ? { session } : { jobs: [] };
+  });
+  render(<ThemeProvider><WorkspaceScreen /></ThemeProvider>);
+  const error = await screen.findByText("Không tìm thấy tệp PDF đã lưu của tài liệu này.");
+  expect(error.getAttribute("role")).toBe("alert");
+  expect(requestMock).toHaveBeenCalledWith(doc.file_url, { headers: { Range: "bytes=0-0" } });
+  expect(screen.queryByText(/Unexpected server response/)).toBeNull();
 });

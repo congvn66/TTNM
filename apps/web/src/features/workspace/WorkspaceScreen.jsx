@@ -301,6 +301,23 @@ function bringIntoView(node) {
   if (rect && (rect.top < 0 || rect.bottom > window.innerHeight)) node.scrollIntoView({ block: "start", behavior: "smooth" });
 }
 
+const PDF_ERRORS = {
+  open: "Không mở được tệp PDF. Hãy thử lại.",
+  invalid: "Tệp này không phải PDF hợp lệ hoặc đã bị hỏng.",
+  draw: "Không vẽ được trang PDF này.",
+};
+
+// pdf.js fetches the file itself and keeps only the HTTP status of a failed
+// request. Ask the server again, for one byte, so the reader shows the
+// server's own message like every other request does.
+async function pdfOpenError(reason, path) {
+  if (reason?.status) {
+    try { await request(path, { headers: { Range: "bytes=0-0" } }); }
+    catch (error) { return error.message; }
+  }
+  return reason?.name === "InvalidPDFException" ? PDF_ERRORS.invalid : PDF_ERRORS.open;
+}
+
 const clampScale = (value) => Math.max(.35, Math.min(2.5, value));
 
 function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceBbox, onReextract, reextractDisabled }) {
@@ -333,7 +350,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
     let fileUrl;
     try { fileUrl = new URL(relativeFileUrl, API).toString(); } catch { fileUrl = ""; }
     if (!relativeFileUrl || relativeFileUrl.includes("undefined") || !/^https?:/.test(fileUrl)) {
-      setLoading(false); setError("Thiếu URL file PDF của tài liệu này"); return undefined;
+      setLoading(false); setError(PDF_ERRORS.open); return undefined;
     }
     setLoading(true);
     let task;
@@ -346,8 +363,9 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
       return task.promise;
     }).then((loaded) => {
       if (loaded && !disposed) { setPdf(loaded); setLoading(false); }
-    }).catch((reason) => {
-      if (!disposed) { setError(reason?.message || "Không thể đọc PDF"); setLoading(false); }
+    }).catch(async (reason) => {
+      const message = await pdfOpenError(reason, relativeFileUrl);
+      if (!disposed) { setError(message); setLoading(false); }
     });
     return () => { disposed = true; task?.destroy(); };
   }, [document?.id, document?.file_url, sessionId]);
@@ -371,8 +389,8 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
       const context = canvas.getContext("2d");
       renderTaskRef.current?.cancel();
       renderTaskRef.current = pdfPage.render({ canvasContext: context, viewport, transform: ratio === 1 ? null : [ratio, 0, 0, ratio, 0, 0] });
-      renderTaskRef.current.promise.catch((reason) => { if (reason?.name !== "RenderingCancelledException") setError(reason?.message || "Không thể vẽ trang PDF"); });
-    }).catch((reason) => { if (!cancelled) setError(reason?.message || "Không thể tải trang PDF"); });
+      renderTaskRef.current.promise.catch((reason) => { if (reason?.name !== "RenderingCancelledException") setError(PDF_ERRORS.draw); });
+    }).catch(() => { if (!cancelled) setError(PDF_ERRORS.draw); });
     return () => { cancelled = true; renderTaskRef.current?.cancel(); };
   }, [pdf, page, scale, rotation]);
 
@@ -448,7 +466,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
       onPointerCancel={() => { dragRef.current = null; }}
       onWheel={(event) => { if (!event.ctrlKey) return; event.preventDefault(); zoomBy(event.deltaY < 0 ? .1 : -.1); }}>
       {loading && <div className="reader-loading" role="status">Đang mở tài liệu…</div>}
-      {error && <div className="reader-error" role="alert">Không thể render PDF: {error}</div>}
+      {error && <div className="reader-error" role="alert">{error}</div>}
       <div className="canvas-mat"><canvas key={document.id} ref={canvasRef} />{textLayer}</div>
     </div>
   </section>;
