@@ -16,7 +16,6 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import NamedTuple
 
 from report_qa.api.ai_provider import MAX_ANSWER_CHARS, ProviderError, _json_from_content
-from report_qa.api.number_input import LOCALES
 from report_qa.application.numeric_extraction import decimal_text, quantities
 from report_qa.application.python_calculator import run_calculation
 from report_qa.application.text_evidence import match_quote, suggest_quote
@@ -143,16 +142,16 @@ _SCALE = {"nghìn": Decimal(10**3), "ngàn": Decimal(10**3), "triệu": Decimal(
 _UNIT = {"VND": Decimal(1), "VND_THOUSAND": Decimal(10**3), "VND_MILLION": Decimal(10**6),
          "VND_BILLION": Decimal(10**9), "PERCENT": "%"}
 _PAGE_WORD = re.compile(r"(?:\btrang|\bpage)\s+$", re.IGNORECASE)
-# A direction word right before a number gives it a sign: "giảm 5%" is -5%.
-_DIRECTION = re.compile(r"\b(tăng|giảm)\s+$", re.IGNORECASE)
+# A direction word before a number, at most one word apart, gives it a sign: "giảm 5%", "tăng trưởng 3,2%".
+_DIRECTION = re.compile(r"\b(tăng|giảm)(?:\s+\w+)?\s+$", re.IGNORECASE)
 
 
 def _reading(numeral, number_format: str) -> tuple[Decimal, Decimal] | None:
     """(value, precision written) of a numeral in one number format, or None if that format cannot read it.
 
     The precision is the last decimal written ("17,05" -> 0.01); a whole
-    number with three or more significant digits before trailing zeros is
-    rounded at its last significant digit ("3.460" -> 10, so 3456,78 traces).
+    number of four or more digits is rounded at its last nonzero digit
+    ("3.460" -> 10, so 3456,78 traces; "2.000" -> 1000), a smaller one is exact.
     """
     try:
         text = decimal_text(str(numeral), number_format)
@@ -160,7 +159,7 @@ def _reading(numeral, number_format: str) -> tuple[Decimal, Decimal] | None:
         return None
     whole, _, fraction = text.lstrip("-").partition(".")
     zeros = len(whole) - len(whole.rstrip("0"))
-    if fraction or len(whole) - zeros < 3:
+    if fraction or len(whole) < 4 or zeros == len(whole):
         zeros = 0
     return Decimal(text), Decimal(1).scaleb(zeros - len(fraction))
 
@@ -190,53 +189,57 @@ def _written_numbers(text, cited_pages=frozenset()):
         yield token + (word.group() if word else ""), numeral, unit, sign
 
 
-def row_formats(row: dict, locale: str | None) -> frozenset[str]:
-    """Number formats a Data row is printed in: the document's when known.
-
-    Otherwise the formats that read the row's printed PDF text as its value
-    ("18.240" -> 18240 is vi); a chart read (DePlot text, not PDF print) or a
-    row whose text does not read as its value can be either format.
-    """
-    if locale:
-        return frozenset({locale})
-    value, raw = row.get("numeric_value"), row.get("raw_text")
-    if row.get("source_type") != "chart" and value is not None and raw:
-        found = frozenset(f for f in LOCALES if (r := _reading(raw, f)) and r[0] == Decimal(str(value)))
-        if found:
-            return found
-    return frozenset(LOCALES)
+def _read(numeral, locale: str | None) -> tuple[Decimal, Decimal] | None:
+    """One reading of a numeral: in locale when given, else as a Vietnamese reader
+    reads it (vi separators, en only when vi cannot read it: "17.1%")."""
+    for number_format in (locale,) if locale else ("vi", "en"):
+        reading = _reading(numeral, number_format)
+        if reading:
+            return reading
+    return None
 
 
 class _Source(NamedTuple):
     value: Decimal
-    formats: frozenset  # number formats the answer is read in for this source
     sign: int | None  # None: the source states a magnitude only
-    unit: Decimal | str | None  # magnitude factor, "%" or unknown
+    unit: Decimal | str | None  # magnitude factor, "%" or none stated
+    computed: bool  # a python result
 
 
-def _targets(value: Decimal, written_unit, source_unit) -> list[Decimal]:
-    """What a written number must equal for a source value, given both units.
+def _targets(source: _Source, written_unit) -> list[Decimal]:
+    """What a written number must equal to state this source, given the written unit.
 
-    A number with no scale word is compared as printed. A written scale word
-    or "%" must agree with the source's unit when the source has one ("1.250,5
-    triệu" is not a value in tỷ); a source of unknown unit (a python result)
-    may already be in that unit or be the base amount (a ratio for "%").
+    A number with no number word is compared as printed. A number word
+    (nghìn, triệu, tỷ) multiplies the number, so the amount must equal the
+    source's amount: its value in its stated unit, or as printed when it
+    states none ("1.250,5 triệu" is neither 1.250,5 tỷ nor 1.250,5; "2 nghìn"
+    is about 2.010,75). "%" needs a percent source or a python result (a
+    ratio 0.1705 or a percent 17.05).
     """
+    value, unit = source.value, source.unit
     if written_unit is None:
         return [value]
     if written_unit == "%":
-        return [value] if source_unit == "%" else [value, value * 100] if source_unit is None else []
-    if source_unit == "%":
-        return []
-    return [value * source_unit / written_unit] if source_unit is not None else [value, value / written_unit]
+        return [value, value * 100] if source.computed else [value] if unit == "%" else []
+    return [] if unit == "%" else [value * (unit or 1) / written_unit]
 
 
-def _corrected(row: dict) -> bool:
+def _cited_values(source: _Source) -> set[Decimal]:
+    """Every number a script may type in from this source: as printed, as a fraction of a percent, in base units."""
+    value = abs(source.value)
+    return {value, value / 100} if source.unit == "%" else {value, value * source.unit} if source.unit else {value}
+
+
+def _row_unit(row: dict):
+    return _UNIT.get((row.get("semantic") or {}).get("unit"))
+
+
+def _corrected(row: dict, locale: str | None) -> bool:
     """A row whose current value is not what its printed PDF text says (a user correction)."""
     value, raw = row.get("numeric_value"), row.get("raw_text")
     if value is None or not raw:
         return False
-    printed = {r[0] for _, numeral, _, _ in _written_numbers(raw) for f in LOCALES if (r := _reading(numeral, f))}
+    printed = {r[0] for _, numeral, _, _ in _written_numbers(raw) if (r := _read(numeral, locale))}
     return bool(printed) and Decimal(str(value)) not in printed
 
 
@@ -246,76 +249,65 @@ def untraced_numbers(answer: str, *, evidences: list[dict], quotes: list[dict], 
 
     Trusted sources are the cited Data rows, the accepted quotes ({page,
     quote}) and the numbers of succeeded python results ({value, typed,
-    keys}) that derive from Data rows; a result number is a source only when
-    every number typed into its script ("typed", formula constants aside) is
-    itself in a cited row or quote, so value('a') - value('a') + 987654
-    traces nothing. The question is not a source: "có đạt 500 tỷ không?" must not
+    keys}). The question is not a source: "có đạt 500 tỷ không?" must not
     make "đạt 500 tỷ" true. A row's source is its current value; its printed
     PDF text counts only while the row has no value. A printed number the
-    user corrected is no source anywhere on its page: a quote of that page
-    does not make the old number true again. Only quantities are checked, in the
-    answer and in every source: periods, dates, durations, digits inside a
-    label token ("Q4/2024") and references to a cited page are not
-    quantities.
+    user corrected is no source anywhere on its page. A result number is a
+    source only when every number typed into its script ("typed", formula
+    constants aside) is in a cited row or quote, so value('a') - value('a') +
+    987654 traces nothing.
 
-    A written number is read in the number format of the source it is
-    compared with: the document's format (locale) when it is known;
-    otherwise the source's own format (row_formats; a quote is read in the
-    same format as the answer; a python result in its input rows' formats).
-    When a source allows both formats and they read the written number
-    differently ("1.250"), it does not trace to that source. It is traced
-    when that value equals a trusted value rounded to the precision written (_reading),
-    with its scale word or "%" matching the source's unit (_targets):
-    "17,05%" traces to a result 17.0547 or 0.170547; "21,35 tỷ" to 21.350 in
-    triệu đồng. Magnitudes are compared; a signed
-    source (a python result, or a negative Data value) must also agree with
-    the written sign or direction word: "tăng 5%" never traces to -0.05.
+    Only quantities are checked (_written_numbers): periods, dates,
+    durations, digits inside a label token ("Q4/2024") and references to a
+    cited page are not quantities. The answer is read the way its Vietnamese
+    reader reads it (_read); quotes and printed row text are read in the
+    document's number format (locale) when it is known. A written number is
+    traced when a source value, in the unit the answer writes (_targets),
+    rounds to it at the precision written (_reading). Magnitudes are
+    compared; a signed source (a python result, or a negative Data value)
+    must also agree with the written sign or direction word: "tăng 5%" never
+    traces to -0.05.
     """
-    every = frozenset({locale}) if locale else frozenset(LOCALES)
     by_key = {row["evidence_key"]: row for row in rows}
     trusted: list[_Source] = []
-    corrected = {(row.get("page_number"), numeral) for row in rows if _corrected(row)
+    corrected = {(row.get("page_number"), numeral) for row in rows if _corrected(row, locale)
                  for _, numeral, _, _ in _written_numbers(row["raw_text"])}
 
-    def add_text(text, page=None, text_formats=every, answer_formats=None):
-        """Numbers of a text, each in the unit its own scale word gives; the answer is
-        read in the format the text is read in, unless answer_formats is given."""
+    def add_text(text, page=None, text_locale=locale, row_unit=None):
+        """Numbers of a text, each in the unit its own scale word or "%" gives (else its row's unit)."""
         for _, numeral, unit, _ in _written_numbers(text):
-            if (page, numeral) in corrected:
-                continue
-            for number_format in text_formats:
-                reading = _reading(numeral, number_format)
-                if reading:
-                    trusted.append(_Source(reading[0], answer_formats or frozenset({number_format}), None, unit))
+            reading = None if (page, numeral) in corrected else _read(numeral, text_locale)
+            if reading:
+                trusted.append(_Source(reading[0], None, unit or row_unit, False))
 
     for evidence in evidences:
         if evidence.get("numeric_value") is not None:
             value = Decimal(str(evidence["numeric_value"]))
-            unit = _UNIT.get((evidence.get("semantic") or {}).get("unit"))
-            trusted.append(_Source(value, row_formats(evidence, locale), -1 if value < 0 else None, unit))
+            trusted.append(_Source(value, -1 if value < 0 else None, _row_unit(evidence), False))
         elif evidence.get("source_type") == "chart":  # DePlot's text, not the document's print
-            add_text(evidence.get("raw_text"), text_formats=frozenset(LOCALES), answer_formats=every)
+            add_text(evidence.get("raw_text"), text_locale=None, row_unit=_row_unit(evidence))
         else:
-            add_text(evidence.get("raw_text"))
+            add_text(evidence.get("raw_text"), row_unit=_row_unit(evidence))
     for quote in quotes:
         add_text(quote["quote"], quote["page"])
-    cited_values = {abs(t) for source in trusted for t in _targets(source.value, None, source.unit)}
+    cited = set().union(*map(_cited_values, trusted))
     for result in results:
-        if any(abs(Decimal(typed)) not in cited_values for typed in result["typed"]):
+        if any(abs(Decimal(typed)) not in cited for typed in result["typed"]):
             continue
-        formats = frozenset(every).intersection(*(row_formats(by_key[k], locale) for k in result["keys"] if k in by_key))
+        # Sums and differences of rows in one unit stay in that unit.
+        units = {_row_unit(by_key[k]) if k in by_key else None for k in result["keys"]}
         value = Decimal(result["value"])
-        trusted.append(_Source(value, formats or every, 1 if value >= 0 else -1, None))
+        trusted.append(_Source(value, 1 if value >= 0 else -1, units.pop() if len(units) == 1 else None, True))
 
     def traced(numeral, unit, written_sign):
+        reading = _read(numeral, None)
+        if reading is None:
+            return False
+        written, step = reading
         for source in trusted:
             if not source.value.is_finite() or (source.value and source.sign and written_sign and source.sign != written_sign):
                 continue
-            readings = {r for f in source.formats if (r := _reading(numeral, f))}
-            if len({number for number, _ in readings}) != 1:
-                continue
-            (written, step), = readings
-            for target in _targets(source.value, unit, source.unit):
+            for target in _targets(source, unit):
                 try:
                     if abs(target).quantize(step, rounding=ROUND_HALF_UP) == written:
                         return True
