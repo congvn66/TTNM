@@ -287,13 +287,19 @@ function ChatMessage({ message, busy, evidenceByKey, onCitation, onStop, onRetry
   </article>;
 }
 
+const clampScale = (value) => Math.max(.35, Math.min(2.5, value));
+
 function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceBbox, onReextract, reextractDisabled }) {
   const viewportRef = useRef(null);
   const canvasRef = useRef(null);
   const renderTaskRef = useRef(null);
   const [pdf, setPdf] = useState(null);
   const [page, setPage] = useState(1);
-  const [scale, setScale] = useState(1.05);
+  // "fit" follows the pane width; a number is a zoom the user chose.
+  const [zoom, setZoom] = useState("fit");
+  const [fitScale, setFitScale] = useState(1);
+  const scale = zoom === "fit" ? fitScale : zoom;
+  const zoomBy = (step) => setZoom((current) => clampScale((current === "fit" ? fitScale : current) + step));
   const [rotation, setRotation] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -307,7 +313,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
 
   useEffect(() => {
     let disposed = false;
-    setPdf(null); setPage(1); setError(""); setTextItems([]); setTextViewport(null); setCitationQuote(""); setCitationBbox(null);
+    setPdf(null); setPage(1); setZoom("fit"); setError(""); setTextItems([]); setTextViewport(null); setCitationQuote(""); setCitationBbox(null);
     if (!document) { setLoading(false); return undefined; }
     const relativeFileUrl = document.file_url || `/api/v1/sessions/${sessionId}/documents/${document.id}/file`;
     let fileUrl;
@@ -356,6 +362,24 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
     return () => { cancelled = true; renderTaskRef.current?.cancel(); };
   }, [pdf, page, scale, rotation]);
 
+  // The page fills the pane width, and keeps filling it when the pane resizes.
+  useEffect(() => {
+    const node = viewportRef.current;
+    if (!pdf || !node) return undefined;
+    let pageWidth = 0;
+    let cancelled = false;
+    const measure = () => {
+      const mat = node.querySelector(".canvas-mat");
+      const style = mat ? getComputedStyle(mat) : null;
+      const padding = style ? parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) : 0;
+      if (pageWidth && node.clientWidth) setFitScale(clampScale((node.clientWidth - padding) / pageWidth));
+    };
+    pdf.getPage(page).then((pdfPage) => { if (!cancelled) { pageWidth = pdfPage.getViewport({ scale: 1, rotation }).width; measure(); } }).catch(() => {});
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    observer?.observe(node);
+    return () => { cancelled = true; observer?.disconnect(); };
+  }, [pdf, page, rotation]);
+
   useEffect(() => {
     if (!citationPage || !pdf) return;
     setCitationQuote(evidenceQuote || "");
@@ -377,20 +401,20 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
     centerHighlightRef.current = false;
     const boxRect = box.getBoundingClientRect();
     const viewRect = viewport.getBoundingClientRect();
+    // Centre the box vertically. Sideways, move only as far as needed to show
+    // it, so the row labels to its left stay in view whenever they fit.
+    const margin = 24;
+    const boxLeft = viewport.scrollLeft + boxRect.left - viewRect.left;
+    let left = viewport.scrollLeft;
+    if (boxLeft + boxRect.width > left + viewport.clientWidth - margin) left = boxLeft + boxRect.width - viewport.clientWidth + margin;
+    if (boxLeft < left + margin) left = boxLeft - margin;
     viewport.scrollTo({
       top: viewport.scrollTop + boxRect.top - viewRect.top - (viewport.clientHeight - boxRect.height) / 2,
-      left: viewport.scrollLeft + boxRect.left - viewRect.left - (viewport.clientWidth - boxRect.width) / 2,
+      left: Math.max(0, left),
       behavior: "smooth",
     });
   }, [highlightKey, page, textViewport]);
   const textLayer = textViewport && <div className="pdf-text-layer" aria-hidden="true" style={{ width: textViewport.width, height: textViewport.height, left: "50%", top: 30, transform: "translateX(-50%)" }}><div className="evidence-box-layer">{evidenceBoxes.map((box, index) => <span className="evidence-box" key={`${box.join("-")}-${index}`} style={{ left: `${box[0] * 100}%`, top: `${box[1] * 100}%`, width: `${(box[2] - box[0]) * 100}%`, height: `${(box[3] - box[1]) * 100}%` }} />)}</div></div>;
-
-  const fitWidth = useCallback(async () => {
-    if (!pdf || !viewportRef.current) return;
-    const pdfPage = await pdf.getPage(page);
-    const base = pdfPage.getViewport({ scale: 1, rotation });
-    setScale(Math.max(.35, Math.min(2.5, (viewportRef.current.clientWidth - 56) / base.width)));
-  }, [pdf, page, rotation]);
 
   if (!document) return <div className="empty-reader"><div className="empty-icon">PDF</div><h2>Chọn hoặc thêm tài liệu</h2><p>Tài liệu được lưu theo phiên làm việc và mở trực tiếp trong trình đọc PDF.</p></div>;
 
@@ -401,14 +425,14 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
         ? <span className="reextract-status" role="status"><span className="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>{processingLabel(document.extraction_status)}…</span>
         : onReextract && <button className="reextract-button" type="button" title="Đọc lại tài liệu và lập lại bảng số liệu" disabled={reextractDisabled} onClick={() => onReextract(document)}><Icon name="refresh" size={13} /> Trích xuất lại</button>}
       <div className="page-control"><button aria-label="Trang trước" title="Trang trước" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}><Icon name="arrowLeft" /></button><span>{page} / {pdf?.numPages ?? document.page_count ?? "—"}</span><button aria-label="Trang sau" title="Trang sau" disabled={!pdf || page >= pdf.numPages} onClick={() => setPage((value) => value + 1)}><Icon name="arrowRight" /></button></div>
-      <div className="zoom-control"><button aria-label="Thu nhỏ" title="Thu nhỏ" onClick={() => setScale((value) => Math.max(.35, value - .15))}><Icon name="minus" /></button><span>{Math.round(scale * 100)}%</span><button aria-label="Phóng to" title="Phóng to" onClick={() => setScale((value) => Math.min(2.5, value + .15))}><Icon name="plus" /></button><button aria-label="Vừa chiều rộng" title="Vừa chiều rộng" onClick={fitWidth}><Icon name="fit" /></button><button aria-label="Xoay tài liệu" title="Xoay tài liệu" onClick={() => setRotation((value) => (value + 90) % 360)}><Icon name="rotate" /></button></div>
+      <div className="zoom-control"><button aria-label="Thu nhỏ" title="Thu nhỏ" onClick={() => zoomBy(-.15)}><Icon name="minus" /></button><span>{Math.round(scale * 100)}%</span><button aria-label="Phóng to" title="Phóng to" onClick={() => zoomBy(.15)}><Icon name="plus" /></button><button aria-label="Vừa chiều rộng" title="Vừa chiều rộng" aria-pressed={zoom === "fit"} onClick={() => setZoom("fit")}><Icon name="fit" /></button><button aria-label="Xoay tài liệu" title="Xoay tài liệu" onClick={() => setRotation((value) => (value + 90) % 360)}><Icon name="rotate" /></button></div>
     </header>
     <div className={`pdf-viewport ${dragRef.current ? "dragging" : ""}`} ref={viewportRef}
       onPointerDown={(event) => { const node = viewportRef.current; dragRef.current = { x: event.clientX, y: event.clientY, left: node.scrollLeft, top: node.scrollTop }; node.setPointerCapture(event.pointerId); }}
       onPointerMove={(event) => { if (!dragRef.current) return; const node = viewportRef.current; node.scrollLeft = dragRef.current.left - (event.clientX - dragRef.current.x); node.scrollTop = dragRef.current.top - (event.clientY - dragRef.current.y); }}
       onPointerUp={() => { dragRef.current = null; }}
       onPointerCancel={() => { dragRef.current = null; }}
-      onWheel={(event) => { if (!event.ctrlKey) return; event.preventDefault(); setScale((value) => Math.max(.35, Math.min(2.5, value + (event.deltaY < 0 ? .1 : -.1)))); }}>
+      onWheel={(event) => { if (!event.ctrlKey) return; event.preventDefault(); zoomBy(event.deltaY < 0 ? .1 : -.1); }}>
       {loading && <div className="reader-loading" role="status">Đang mở tài liệu…</div>}
       {error && <div className="reader-error" role="alert">Không thể render PDF: {error}</div>}
       <div className="canvas-mat"><canvas key={document.id} ref={canvasRef} />{textLayer}</div>
