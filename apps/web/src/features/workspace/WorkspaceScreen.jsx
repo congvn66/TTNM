@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { API, request } from "../../shared/api/client.js";
+import { API, CLIENT_ERRORS, request } from "../../shared/api/client.js";
 import { useTheme } from "../theme/ThemeProvider.jsx";
 import { EvidenceList, ScriptCard } from "./ToolAnswer.jsx";
 import { Icon } from "./Icon.jsx";
@@ -102,41 +102,11 @@ function processingLabel(status) {
   }[status] ?? "Đang kiểm tra");
 }
 
-const ERROR_COPY = {
-  AUTH_REQUIRED: "Phiên đăng nhập đã hết. Vui lòng đăng nhập lại.",
-  SESSION_TITLE_REQUIRED: "Hãy nhập tên cho phiên làm việc.",
-  SESSION_NOT_FOUND: "Không tìm thấy phiên làm việc này. Hãy tải lại danh sách.",
-  DOCUMENT_NOT_FOUND: "Không tìm thấy tài liệu này. Hãy tải lại danh sách.",
-  DATABASE_UNAVAILABLE: "Dịch vụ dữ liệu tạm thời không sẵn sàng. Hãy thử lại sau.",
-  INVALID_PDF: "Tệp không phải PDF hợp lệ hoặc không thể đọc được.",
-  PDF_ENCRYPTED: "PDF này được đặt mật khẩu nên không đọc được. Hãy gỡ mật khẩu rồi tải lên lại.",
-  PDF_TOO_LARGE: "Tệp PDF vượt quá giới hạn 100 MiB.",
-  PDF_TOO_MANY_PAGES: "Tài liệu vượt quá số trang cho phép.",
-  EXTRACTION_NOT_READY: "Tài liệu đang được chuẩn bị. Bạn có thể đặt câu hỏi khi tài liệu sẵn sàng.",
-  AI_PROVIDER_TIMEOUT: "AI phản hồi quá lâu. Bạn có thể thử gửi lại câu hỏi.",
-  AI_PROVIDER_UNAVAILABLE: "Dịch vụ AI đang bận hoặc tạm thời không phản hồi. Hãy thử lại sau ít phút.",
-  AI_MODEL_UNAVAILABLE: "Mô hình AI hiện không khả dụng. Kiểm tra lại cấu hình model.",
-  AI_PROVIDER_HTTP_ERROR: "Dịch vụ AI từ chối yêu cầu. Kiểm tra API key và giới hạn sử dụng.",
-  AI_NOT_CONFIGURED: "Chưa cấu hình nhà cung cấp AI cho môi trường này.",
-  AI_INVALID_OUTPUT: "AI trả về dữ liệu không đúng định dạng. Hãy thử lại câu hỏi.",
-  AI_UNGROUNDED_CITATION: "AI trả về trích dẫn không nằm trong tài liệu. Hãy thử lại câu hỏi.",
-  AI_UNSUPPORTED_EVIDENCE: "AI chưa xác minh được evidence trong tài liệu. Hãy thử lại câu hỏi.",
-  DOCUMENT_CONTEXT_TOO_LARGE: "Tài liệu quá dài để trợ lý đọc hết trong một lần hỏi.",
-  ASSISTANT_INCOMPLETE: "Trợ lý chưa hoàn tất câu trả lời trong số bước cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",
-  QUEUE_UNAVAILABLE: "Hàng đợi xử lý chưa sẵn sàng. Hãy khởi động worker hoặc thử lại sau.",
-  REEXTRACTION_NOT_SUPPORTED: "Máy chủ này chưa hỗ trợ đọc lại tài liệu. Hãy tải PDF lên lại để đọc từ đầu.",
-  EXTRACTION_IN_PROGRESS: "Tài liệu đang được đọc. Hãy chờ xong rồi thử lại.",
-};
-
+// Errors from request() already carry the text to show: the server's
+// detail.message, or the client's own text for network problems.
 function userFacingError(value) {
-  if (ERROR_COPY[value?.code]) return ERROR_COPY[value.code];
-  const raw = typeof value === "string" ? value : value?.message;
-  if (!raw) return "Không thể hoàn tất thao tác. Hãy thử lại.";
-  const code = Object.keys(ERROR_COPY).find((key) => raw.includes(key));
-  if (code) return ERROR_COPY[code];
-  if (raw.includes("Không kết nối được tới backend")) return "Không thể kết nối tới máy chủ. Hãy thử lại sau ít phút.";
-  if (raw.includes("Yêu cầu quá thời gian chờ")) return "Máy chủ phản hồi quá lâu. Hãy thử lại sau ít phút.";
-  return raw.replace(/^\w+_[A-Z_]+:\s*/, "").trim();
+  const text = typeof value === "string" ? value : value?.message;
+  return text?.trim() || CLIENT_ERRORS.unknown;
 }
 
 function normalizedBbox(value) {
@@ -193,7 +163,7 @@ function JobCenterDrawer({ jobs, busy, onClose, onAction }) {
   return <section className="job-center-drawer" role="dialog" aria-modal="true" aria-labelledby="job-center-title">
     <header className="job-center-header"><div><span className="audit-kicker">TRUNG TÂM TÁC VỤ</span><h3 id="job-center-title">Tác vụ đang chạy</h3><small>Theo dõi việc chuẩn bị tài liệu và câu trả lời</small></div><button type="button" aria-label="Đóng trung tâm tác vụ" onClick={onClose}><Icon name="close" size={15} /></button></header>
     <div className="job-center-summary"><span><i></i>{active.length} đang xử lý</span><small>Trạng thái được lưu bền theo tài khoản</small></div>
-    <div className="job-center-list">{jobs.length ? jobs.map((job) => <article className="job-center-row" key={job.id}><div className={`job-center-status ${job.status}`}><span></span></div><div className="job-center-main"><strong>{["document_extraction", "extract_document"].includes(job.kind) ? "Chuẩn bị tài liệu" : ["answer_generation", "generate_answer"].includes(job.kind) ? "Tạo câu trả lời" : "Tác vụ đang chạy"}</strong><small>{job.status === "queued" ? "Đang chờ xử lý" : job.status === "running" ? "Đang xử lý" : job.status === "failed" ? "Cần thử lại" : "Đã hoàn tất"}{ERROR_COPY[job.error_code] ? ` · ${ERROR_COPY[job.error_code]}` : ""}</small></div><div className="job-center-actions">{["queued", "running"].includes(job.status) && <button type="button" onClick={() => onAction(job, "cancel")} disabled={busy}>Huỷ</button>}{job.status === "failed" && <button type="button" onClick={() => onAction(job, "retry")} disabled={busy}>Thử lại</button>}</div></article>) : <div className="job-center-empty"><span>✓</span><p>Không có tác vụ gần đây.</p><small>Khi tải PDF hoặc hỏi AI, trạng thái sẽ xuất hiện ở đây.</small></div>}</div>
+    <div className="job-center-list">{jobs.length ? jobs.map((job) => <article className="job-center-row" key={job.id}><div className={`job-center-status ${job.status}`}><span></span></div><div className="job-center-main"><strong>{["document_extraction", "extract_document"].includes(job.kind) ? "Chuẩn bị tài liệu" : ["answer_generation", "generate_answer"].includes(job.kind) ? "Tạo câu trả lời" : "Tác vụ đang chạy"}</strong><small>{job.status === "queued" ? "Đang chờ xử lý" : job.status === "running" ? "Đang xử lý" : job.status === "failed" ? "Cần thử lại" : "Đã hoàn tất"}</small></div><div className="job-center-actions">{["queued", "running"].includes(job.status) && <button type="button" onClick={() => onAction(job, "cancel")} disabled={busy}>Huỷ</button>}{job.status === "failed" && <button type="button" onClick={() => onAction(job, "retry")} disabled={busy}>Thử lại</button>}</div></article>) : <div className="job-center-empty"><span>✓</span><p>Không có tác vụ gần đây.</p><small>Khi tải PDF hoặc hỏi AI, trạng thái sẽ xuất hiện ở đây.</small></div>}</div>
   </section>;
 }
 
@@ -1020,7 +990,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     if (!id || !reextractingRef.current.has(id) || !["ready", "failed"].includes(status)) return;
     reextractingRef.current.delete(id);
     if (status === "ready") showNotice(`Đã đọc lại ${activeDocument.file_name}: ${activeDocument.numeric_evidence_count ?? 0} số liệu.${carriedEditsSummary(activeDocument.extraction_history?.at(-1))}`);
-    else showNotice(`Chưa đọc lại được ${activeDocument.file_name}. ${ERROR_COPY[activeDocument.extraction_error] ?? "Hãy thử lại sau."}`, "error");
+    else showNotice(`Chưa đọc lại được ${activeDocument.file_name}. Hãy thử lại sau.`, "error");
   }, [activeDocument?.id, activeDocument?.extraction_status, activeDocument?.file_name, activeDocument?.numeric_evidence_count, activeDocument?.extraction_error, showNotice]);
 
   const nextTheme = preference === "light" ? "dark" : preference === "dark" ? "system" : "light";

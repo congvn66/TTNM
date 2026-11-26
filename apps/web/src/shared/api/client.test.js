@@ -1,19 +1,33 @@
 /** @vitest-environment jsdom */
 import { afterEach, expect, it, vi } from "vitest";
-import { request } from "./client.js";
+import { CLIENT_ERRORS, request } from "./client.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
+function respond(status, body) {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status, headers: new Headers(), json: async () => body }));
+}
+
 it.each([
-  ["PDF_ENCRYPTED", 422, "PDF này được đặt mật khẩu nên không đọc được. Hãy gỡ mật khẩu rồi tải lên lại."],
-  ["DOCUMENT_CONTEXT_TOO_LARGE", 502, "Tài liệu quá dài để trợ lý đọc hết trong một lần hỏi."],
-  ["ASSISTANT_INCOMPLETE", 502, "Trợ lý chưa hoàn tất câu trả lời trong số bước cho phép. Hãy thử lại hoặc hỏi cụ thể hơn."],
-])("shows the Vietnamese message for %s", async (code, status, message) => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok: false,
-    status,
-    headers: new Headers(),
-    json: async () => ({ detail: { code, message: "internal English text" } }),
-  }));
-  await expect(request("/x")).rejects.toMatchObject({ code, message });
+  ["AI_ANSWER_TIMEOUT", 504],
+  ["NUMBER_FORMAT_AMBIGUOUS", 422],
+  ["SOME_CODE_THE_WEB_NEVER_SAW", 500],
+])("shows the server's own message for %s", async (code, status) => {
+  respond(status, { detail: { code, message: "Thông báo do máy chủ viết.", readings: ["1250"] } });
+  await expect(request("/x")).rejects.toMatchObject({ code, status, message: "Thông báo do máy chủ viết.", detail: { readings: ["1250"] } });
+});
+
+it.each([
+  ["no message", { detail: { code: "X" } }],
+  ["a plain string detail", { detail: "Not Found" }],
+  ["a request-shape list", { detail: [{ loc: ["body"], msg: "field required" }] }],
+  ["no body", {}],
+])("uses the client's own text when the server sends %s", async (_, body) => {
+  respond(422, body);
+  await expect(request("/x")).rejects.toMatchObject({ status: 422, message: CLIENT_ERRORS.unknown });
+});
+
+it("uses the client's own text when the network fails", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+  await expect(request("/x")).rejects.toMatchObject({ message: CLIENT_ERRORS.network });
 });

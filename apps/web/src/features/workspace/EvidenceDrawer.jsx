@@ -5,12 +5,10 @@ import { dataStatusLabel, evidenceLabel, formatDateTime, formatNumber, numbersDi
 
 const EDIT_ERROR_FALLBACK = "Không đọc được số này. Hãy nhập lại, ví dụ 21.500 hoặc 21500.";
 
-// The API sends a Vietnamese message with every error code; an error without
-// a code (e.g. a request-shape 422) gets a plain hint instead of "HTTP 422".
+// A 422 without a code is the server rejecting the shape of the typed text;
+// every other error already carries its own message.
 function editError(error) {
-  if (error?.code && error.message) return error.message;
-  if (!error?.message || /^HTTP \d+$/.test(error.message)) return EDIT_ERROR_FALLBACK;
-  return error.message;
+  return error?.status === 422 && !error.code ? EDIT_ERROR_FALLBACK : error?.message || EDIT_ERROR_FALLBACK;
 }
 
 function isEdited(evidence) {

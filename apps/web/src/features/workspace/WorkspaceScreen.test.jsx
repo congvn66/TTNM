@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 const { requestMock } = vi.hoisted(() => ({ requestMock: vi.fn() }));
-vi.mock("../../shared/api/client.js", () => ({ API: "http://localhost:8000", request: requestMock }));
+vi.mock("../../shared/api/client.js", async (importActual) => ({ ...await importActual(), API: "http://localhost:8000", request: requestMock }));
 vi.mock("pdfjs-dist", () => ({ GlobalWorkerOptions: {}, getDocument: () => ({ promise: Promise.reject(new Error("preview unavailable in test")), destroy: vi.fn() }) }));
 import WorkspaceScreen from "./WorkspaceScreen.jsx";
 import { ThemeProvider } from "../theme/ThemeProvider.jsx";
@@ -185,7 +185,7 @@ it("asks before re-reading a document and shows why the server refused", async (
   const dialog = await screen.findByRole("dialog", { name: "Đọc lại tài liệu này?" });
   expect(dialog.textContent).toContain("chỉ được giữ khi số đó vẫn ở cùng vị trí");
   fireEvent.click(screen.getByRole("button", { name: "Đọc lại tài liệu" }));
-  const alert = await screen.findByText("Máy chủ này chưa hỗ trợ đọc lại tài liệu. Hãy tải PDF lên lại để đọc từ đầu.");
+  const alert = await screen.findByText("Chưa hỗ trợ trích xuất lại khi lưu bằng PostgreSQL; hãy tải lại PDF.");
   expect(alert.getAttribute("role")).toBe("alert");
   expect(screen.getByRole("dialog", { name: "Đọc lại tài liệu này?" })).toBeTruthy();
   fireEvent.keyDown(document, { key: "Escape" });
