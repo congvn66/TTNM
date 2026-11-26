@@ -39,7 +39,7 @@
 .claim-card { margin: 7px 0; border: 1px solid var(--border); border-left: 3px solid var(--gold); border-radius: 9px; padding: 9px 10px; background: var(--surface-soft); }
 .claim-card p { margin: 0 0 6px; }
 .evidence-quote { width: 100%; display: flex; flex-direction: column; gap: 5px; margin: 7px 0; border: 1px solid #ddd3bb; border-radius: 8px; padding: 8px 9px; background: var(--gold-soft); color: #55451f; font-size: var(--text-sm); line-height: 1.5; text-align: left; }
-.evidence-quote:hover { border-color: #b99850; background: #f9efd7; }
+.evidence-quote:hover { border-color: var(--gold); background: var(--gold-soft); }
 .evidence-quote-label { display: inline-flex; align-items: center; gap: 4px; color: var(--gold-dark); font-size: var(--text-xs); font-weight: 850; letter-spacing: .09em; text-transform: uppercase; }
 .evidence-pages { display: flex; flex-wrap: wrap; gap: 8px; }
 .formula-card { display: grid; gap: 5px; margin: 7px 0; border-left: 3px solid var(--green); border-radius: 8px; padding: 9px 10px; background: var(--green-soft); font-size: var(--text-sm); }
@@ -55,10 +55,12 @@
 .answer-table th:last-child, .answer-table td:last-child { border-right: 0; }
 .answer-table tr:last-child td { border-bottom: 0; }
 .answer-table th { background: var(--surface-muted); color: var(--ink); font-weight: 750; }
-.answer-warnings { margin-top: 10px; border: 1px solid #ead8a9; border-radius: 8px; padding: 9px; background: #fff9e9; color: #725513; font-size: var(--text-xs); }
+/* Theme colours, so the note stays readable in dark mode. */
+.answer-warnings { margin-top: 10px; border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent); border-radius: 8px; padding: 9px; background: var(--gold-soft); color: var(--gold-dark); font-size: var(--text-xs); }
+.answer-warnings strong { color: inherit; }
 .answer-status-note { display: flex; align-items: flex-start; gap: 6px; margin-top: 9px; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 .answer-status-note svg { flex: 0 0 auto; margin-top: 1px; }
-.stale-answer { border: 1px solid #ead8a9; border-radius: 7px; padding: 7px; background: #fff9e9; color: #725513; }
+.stale-answer { border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent); border-radius: 7px; padding: 7px; background: var(--gold-soft); color: var(--gold-dark); }
 
 .retrieval-excerpt-card { margin: 11px 0 8px; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
 .retrieval-excerpt-meta { display: flex; align-items: center; gap: 6px; padding: 9px 10px 7px; color: var(--gold-dark); font-size: var(--text-xs); font-weight: 850; letter-spacing: .1em; }
