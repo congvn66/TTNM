@@ -497,14 +497,18 @@ class _Turn:
 
     @staticmethod
     def wrong_period_rows(question, rows):
-        """Cited rows whose own period lies outside every period the question names (none named: no check)."""
+        """Cited rows whose own period lies outside every period the question names, when no cited row is for one.
+
+        No period named: no check. A row of a period asked may come with rows
+        of other periods: a comparison ("so với quý trước", "% kế hoạch năm")
+        names one period and cites another.
+        """
         asked = asked_periods(question)
-        wrong = []
-        for row in rows:
-            span = period_span((row.get("semantic") or {}).get("period"))
-            if asked and span and not any(a <= span[0] and span[1] <= b for a, b in asked):
-                wrong.append({"key": row["evidence_key"], "label": evidence_label(row)})
-        return wrong
+        spans = [(row, period_span((row.get("semantic") or {}).get("period"))) for row in rows]
+        inside = [any(a <= span[0] and span[1] <= b for a, b in asked) for _, span in spans if span]
+        if not asked or any(inside):
+            return []
+        return [{"key": row["evidence_key"], "label": evidence_label(row)} for row, span in spans if span]
 
     def checked_sources(self, action):
         """(verbatim sources, rejected sources) or None if sources is malformed."""

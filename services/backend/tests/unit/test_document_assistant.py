@@ -889,6 +889,10 @@ def test_an_answer_citing_another_period_than_the_question_is_sent_back():
     ("Doanh thu quý II/2026?", ["q2-26"], []),
     ("Doanh thu quý 2?", ["q2-25"], []),  # no year: no period is explicit
     ("Doanh thu quý 2/2026?", ["f26"], ["f26"]),  # a year row is not the quarter asked
+    # A comparison names one period and cites another: it was sent back at every step until the step limit.
+    ("Doanh thu quý 2/2026 tăng bao nhiêu so với quý trước?", ["q1-26", "q2-26"], []),
+    ("Doanh thu quý 2/2026 đạt bao nhiêu % kế hoạch?", ["q2-26", "f26"], []),
+    ("Doanh thu quý 2/2026 tăng bao nhiêu so với quý trước?", ["q1-26", "q2-25"], ["q1-26", "q2-25"]),
 ])
 def test_cited_rows_must_lie_inside_a_period_the_question_names(question, keys, wrong):
     from report_qa.application.document_assistant import _Turn
