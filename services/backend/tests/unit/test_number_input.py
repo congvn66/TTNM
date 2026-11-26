@@ -27,6 +27,19 @@ def test_a_document_has_the_format_its_page_text_proves_as_its_extraction_uses(m
     assert document_number_locale(extraction) == "en"
 
 
+def test_a_documents_format_is_read_from_its_page_text_once(monkeypatch):
+    from uuid import uuid4
+
+    from report_qa.api import number_input
+
+    monkeypatch.delenv("PDF_NUMBER_LOCALE", raising=False)
+    calls = []
+    monkeypatch.setattr(number_input, "detected_locale", lambda texts: calls.append(1) or "vi")
+    extraction = {"pages": [{"page": 1, "text": f"Chi phi 6,5% {uuid4()}"}]}
+    assert [document_number_locale(extraction) for _ in range(3)] == ["vi"] * 3
+    assert len(calls) == 1
+
+
 def test_typed_number_uses_the_format_and_reports_ambiguity():
     assert read_typed_number("21.500", "vi") == "21500"
     assert read_typed_number("21.500", "en") == "21.500"

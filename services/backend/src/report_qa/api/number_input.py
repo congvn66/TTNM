@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import re
+from functools import lru_cache
 from typing import Any
 
 from report_qa.application.numeric_extraction import GRAMMAR, SEPARATORS, detected_locale
@@ -49,7 +50,14 @@ def document_number_locale(extraction: dict[str, Any]) -> str | None:
     configured = os.getenv("PDF_NUMBER_LOCALE") or None
     if configured is not None:
         return configured
-    return detected_locale(page.get("text") for page in extraction.get("pages", []))
+    return _page_text_locale(tuple(page.get("text") or "" for page in extraction.get("pages", [])))
+
+
+# Page text never changes within a reading, and detecting the format of a
+# large document takes about 0.1 s, so the result is kept per page text.
+@lru_cache(maxsize=16)
+def _page_text_locale(page_texts: tuple[str, ...]) -> str | None:
+    return detected_locale(page_texts)
 
 
 def decimal_separator(locale: str | None) -> str | None:
