@@ -1475,6 +1475,10 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
         )
     )
     if question_plan["status"] == "unsupported":
+        if planning.fallback_code == "AI_PROVIDER_UNAVAILABLE":
+            # The rules alone call many answerable questions out of scope;
+            # saying so would hide that the AI planner could not be reached.
+            raise ai_failure(planning.fallback_code, "planner unavailable; rules fallback found the question unsupported", trace_id)
         return finish(_persist_unsupported(session, session_id, document, payload.question, question_plan, trace, trace_id))
     if question_plan["status"] == "needs_clarification":
         clarification = question_plan["clarification"]

@@ -729,6 +729,17 @@ def test_planner_provider_failure_falls_back_to_rules(monkeypatch):
         cleanup_session(created["id"])
 
 
+def test_unreachable_planner_is_reported_instead_of_calling_the_question_out_of_scope(monkeypatch):
+    unavailable = ProviderError("AI_PROVIDER_UNAVAILABLE", "fake planner is unreachable")
+    created, _, response = _ask_with_planner(monkeypatch, unavailable, "Tổng doanh thu Q1 và Q2?")
+    try:
+        assert response.status_code == 502
+        assert response.json()["detail"]["code"] == "AI_PROVIDER_UNAVAILABLE"
+        assert client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["messages"] == []
+    finally:
+        cleanup_session(created["id"])
+
+
 def _upload(session_id: str, text: str, name: str = "doc.pdf") -> str:
     uploaded = client.post(
         f"/api/v1/sessions/{session_id}/documents",
