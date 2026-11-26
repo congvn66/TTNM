@@ -20,8 +20,12 @@ from report_qa.application.numeric_extraction import (
     decimal_text,
     is_value_text,
     period_near,
+    quantities,
     single_year,
 )
+
+# Headings and running text around the page are not values: "1. Phạm vi", "BÁO CÁO 6 THÁNG".
+_NOT_VALUE_TEXT = {"page_header", "page_footer", "caption", "section_header", "title"}
 
 
 @lru_cache(maxsize=1)
@@ -338,8 +342,11 @@ def extract_docling_artifact(
         # Exact native word boxes avoid guessed character widths. Docling
         # decides the text regions; native words supply glyph geometry.
         for ti, text in enumerate(data.get("texts", [])):
-            if text.get("label") in {"page_header", "page_footer", "caption"}:
+            if text.get("label") in _NOT_VALUE_TEXT:
                 continue
+            item_text = text.get("text", "")
+            # Only quantities are values: not "quý 2", "tháng 6/2026", "6 tháng", "31/12/2023".
+            values = [m.span() for m in quantities(item_text)]
             for pi, prov in enumerate(text.get("prov", [])):
                 number, text_box = region(prov)
                 if any(
@@ -354,13 +361,19 @@ def extract_docling_artifact(
                     text_box[2] * page.rect.width,
                     text_box[3] * page.rect.height,
                 )
+                cursor = 0
                 for wi, word in enumerate(
                     page.get_text("words", clip=rect + (-1, -1, 1, 1))
                 ):
                     token = word[4]
+                    at = item_text.find(token, cursor)
+                    cursor = at + len(token) if at >= 0 else cursor
                     for mi, match in enumerate(NUMBER.finditer(token)):
                         raw = match.group()
                         if re.fullmatch(r"(?:19|20)\d{2}", raw.rstrip(".,")):
+                            continue
+                        position = at + match.start() if at >= 0 else None
+                        if position is not None and not any(a <= position < b for a, b in values):
                             continue
                         box = [
                             word[0] / page.rect.width,

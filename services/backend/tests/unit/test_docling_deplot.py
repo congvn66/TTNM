@@ -323,6 +323,35 @@ def test_text_numbers_have_native_word_boxes_and_missing_metadata_stays_null(tmp
     validate_extraction_batch(batch)
 
 
+def _text_artifact(tmp_path, items):
+    import pymupdf
+
+    path = tmp_path / "prose.pdf"
+    with pymupdf.open() as pdf:
+        page = pdf.new_page(width=600, height=400)
+        for i, (_, line) in enumerate(items):
+            page.insert_text((20, 40 + 30 * i), line, fontname="helv", fontsize=9)
+        pdf.save(path)
+    data = {"tables": [], "pictures": [], "texts": [
+        {"label": label, "text": line,
+         "prov": [{"page_no": 1, "bbox": {"l": 15, "t": 28 + 30 * i, "r": 590, "b": 45 + 30 * i, "coord_origin": "TOPLEFT"}}]}
+        for i, (label, line) in enumerate(items)
+    ]}
+    converter = Mock()
+    converter.convert.return_value = SimpleNamespace(status="ConversionStatus.SUCCESS",
+                                                     document=SimpleNamespace(export_to_dict=lambda: data))
+    return extract_docling_artifact(path, "version", locale="vi", converter=converter)["evidence_batch"]["evidences"]
+
+
+def test_headings_and_period_numbers_are_not_published_as_values(tmp_path):
+    # "1.", "2." headings came out as Data rows marked "Cần kiểm tra"; "quý 2", "tháng 6" came out as values 2 and 6.
+    evidences = _text_artifact(tmp_path, [
+        ("section_header", "1. Pham vi"),
+        ("text", "Doanh thu tháng 6 cao trong quý 2 nam 2026, sau 6 tháng; muc tieu 220 VND."),
+    ])
+    assert [e["raw_text"] for e in evidences] == ["220"]
+
+
 def test_native_chart_label_has_source_word_bbox(tmp_path):
     import pymupdf
 
