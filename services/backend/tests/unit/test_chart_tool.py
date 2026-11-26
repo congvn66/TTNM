@@ -175,3 +175,14 @@ def test_checker_rows_with_wrong_types_are_cleaned():
     row = _checked_row({"category": "A", "series": 3, "unit": {"x": 1}, "axis_label": ["y"], "value": 5, "confidence": 0.9})
     assert row["category"] == "A" and row["series"] is None and row["unit"] is None and row["axis_label"] is None
     assert row["value"] == 5 and row["confidence"] == 0.9
+
+
+def test_repeated_deplot_category_gets_distinct_keys():
+    raw = "TITLE | Doanh thu\nNăm | Doanh thu\n2023 | 10\n2023 | 12\n2024 | 15"
+    read = lambda: read_chart_region(
+        PDF, REGION, "v", "q", complete=lambda *args: json.dumps({"rows": []}), predictor=lambda image: raw
+    )
+    first, second = read(), read()
+    keys = [e["evidence_key"] for e in first["evidence_batch"]["evidences"]]
+    assert len(keys) == 3 and len(set(keys)) == 3
+    assert keys == [e["evidence_key"] for e in second["evidence_batch"]["evidences"]]

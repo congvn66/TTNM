@@ -147,10 +147,14 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
                     "evidence_key": None,
                 }
             )
+        seen: dict[tuple, int] = {}
         for category, series, token, value in predictions:
-            digest = hashlib.sha256(
-                f"{version}:{key}:{category}:{series}".encode()
-            ).hexdigest()[:20]
+            # DePlot can repeat a category; the repeat count keeps keys unique
+            # while a first occurrence keeps the key it always had.
+            repeat = seen.get((category, series), 0)
+            seen[(category, series)] = repeat + 1
+            identity = f"{version}:{key}:{category}:{series}" + (f":{repeat}" if repeat else "")
+            digest = hashlib.sha256(identity.encode()).hexdigest()[:20]
             # Not "chart-": the planner flow reads the same chart under that
             # prefix, and one key must never name two stored values.
             eid = "chart-tools-" + digest
