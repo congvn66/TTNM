@@ -55,7 +55,7 @@ it("checks the typed number first, asks to confirm it, then saves the same text"
   fireEvent.change(within(drawer).getByLabelText("Giá trị mới"), { target: { value: "21.500" } });
   fireEvent.change(within(drawer).getByLabelText("Lý do sửa"), { target: { value: "Đối chiếu PDF" } });
   fireEvent.click(within(drawer).getByRole("button", { name: "Kiểm tra số" }));
-  await within(drawer).findByText("21.500", { selector: ".evidence-edit-preview b" });
+  await within(drawer).findByText("21.500 (= 21500)", { selector: ".evidence-edit-preview b" });
   expect(posts).toHaveLength(1);
   fireEvent.click(within(drawer).getByRole("button", { name: "Xác nhận lưu" }));
   await screen.findByText("Đã lưu 21.350 → 21.500.");
@@ -135,7 +135,7 @@ it("offers the readings of an ambiguous number and sends the chosen one as numer
   fireEvent.click(within(drawer).getByRole("button", { name: "Kiểm tra số" }));
   const choices = await within(drawer).findByRole("group", { name: "Chọn số bạn muốn lưu" });
   fireEvent.click(within(choices).getByRole("button", { name: "1.250" }));
-  await within(drawer).findByText("1.250", { selector: ".evidence-edit-preview b" });
+  await within(drawer).findByText("1.250 (= 1250)", { selector: ".evidence-edit-preview b" });
   expect(bodies[1]).toEqual({ numeric_value: "1250", reason: "Đối chiếu PDF", expected_revision_id: "k1-r1" });
   expect(bodies[0].input_text).toBe("1.250");
 });
@@ -176,4 +176,19 @@ it("shows the plain number beside the Vietnamese one before saving", async () =>
   fireEvent.change(within(drawer).getByLabelText("Lý do sửa"), { target: { value: "Đối chiếu PDF" } });
   fireEvent.click(within(drawer).getByRole("button", { name: "Kiểm tra số" }));
   expect(await within(drawer).findByText("1.250 (= 1250)")).toBeTruthy();
+  expect(within(drawer).queryByText(/dấu thập phân/)).toBeNull();
+});
+
+it("writes the preview in the app's style and names the document's decimal mark when it is not a comma", async () => {
+  mockApi([
+    [`${base}/evidences/k1/revisions`, async () => ({ parsed_value: "21500.5", plain_value: "21500.5", decimal_separator: ".", display: "21,500.5", locale: "en" })],
+    [`${base}/evidences`, async () => ({ evidences: [row("k1")] })],
+  ]);
+  const { drawer } = await openDrawer();
+  fireEvent.click(within(drawer).getByRole("button", { name: /^Sửa số/ }));
+  fireEvent.change(within(drawer).getByLabelText("Giá trị mới"), { target: { value: "21,500.5" } });
+  fireEvent.change(within(drawer).getByLabelText("Lý do sửa"), { target: { value: "Đối chiếu PDF" } });
+  fireEvent.click(within(drawer).getByRole("button", { name: "Kiểm tra số" }));
+  expect(await within(drawer).findByText("21.500,5 (= 21500,5)")).toBeTruthy();
+  expect(within(drawer).getByText("Tài liệu này dùng dấu “.” làm dấu thập phân.")).toBeTruthy();
 });

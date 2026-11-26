@@ -12,12 +12,21 @@ function editError(error) {
   return error?.status === 422 && !error.code ? EDIT_ERROR_FALLBACK : error?.message || EDIT_ERROR_FALLBACK;
 }
 
-// "21.500 (= 21500)": the plain number beside the Vietnamese one, so 1.250
-// (one thousand two hundred fifty) cannot be read as 1,25.
+// "21.500 (= 21500)": the number in the app's Vietnamese style, as the panel
+// will show it, and beside it the same number without thousands marks, so
+// 1.250 (one thousand two hundred fifty) cannot be read as 1,25.
 function previewText(preview) {
-  const shown = preview.display ?? formatNumber(preview.parsed_value);
-  const plain = preview.plain_value == null ? "" : String(preview.plain_value);
+  const value = String(preview.plain_value ?? preview.parsed_value ?? "");
+  const shown = formatNumber(value);
+  const plain = value.replace(".", ",");
   return plain && plain !== shown ? `${shown} (= ${plain})` : shown;
+}
+
+// The server reads typed numbers in the document's own format. Say so when
+// its decimal mark is not the Vietnamese ",".
+function separatorNote(preview) {
+  const mark = preview.decimal_separator;
+  return mark && mark !== "," ? `Tài liệu này dùng dấu “${mark}” làm dấu thập phân.` : "";
 }
 
 function isEdited(evidence) {
@@ -108,7 +117,7 @@ function EditForm({ evidence, basePath, onCancel, onSaved, onConflict }) {
     {missing.reason && <p className="evidence-field-error" id={`${ids}-reason-missing`}>{missing.reason}</p>}
     {error && <p className="evidence-edit-error" id={`${ids}-error`} role="alert">{error}</p>}
     {readings.length > 0 && <div className="evidence-edit-readings" role="group" aria-label="Chọn số bạn muốn lưu"><span>Ý bạn là:</span>{readings.map((reading) => <button type="button" key={reading} disabled={working} onClick={() => requestPreview(reading)}>{formatNumber(reading)}</button>)}</div>}
-    {preview && <p className="evidence-edit-preview" role="status">Sẽ lưu: <b>{previewText(preview)}</b></p>}
+    {preview && <p className="evidence-edit-preview" role="status">Sẽ lưu: <b>{previewText(preview)}</b>{separatorNote(preview) && <small>{separatorNote(preview)}</small>}</p>}
     <div>
       <button type="button" onClick={onCancel} disabled={working}>Hủy</button>
       {preview
