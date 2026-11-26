@@ -920,7 +920,8 @@ def test_reextracting_a_ready_document_archives_the_old_result_and_keeps_edits()
         ).json()["assistant_message"]
         base = f"/api/v1/sessions/{created['id']}/documents/{document_id}"
         item = next(row for row in client.get(f"{base}/evidences").json()["evidences"] if row["current_numeric_value"] == "100")
-        client.post(f"{base}/evidences/{item['evidence_key']}/revisions", json={"numeric_value": "110", "reason": "Đối chiếu PDF", "expected_revision_id": item["current_revision_id"]})
+        edited = client.post(f"{base}/evidences/{item['evidence_key']}/revisions", json={"numeric_value": "110", "reason": "Đối chiếu PDF", "expected_revision_id": item["current_revision_id"]})
+        assert answer["id"] in edited.json()["affected_message_ids"]
         stored = api_main.catalog["sessions"][created["id"]]["documents"][0]
         old_run_id = json.loads(api_main.extraction_path(stored["extraction_name"]).read_text(encoding="utf-8"))["evidence_batch"]["extraction_run_id"]
 
@@ -932,7 +933,9 @@ def test_reextracting_a_ready_document_archives_the_old_result_and_keeps_edits()
         assert api_main.extraction_path(previous["artifact"]).exists()  # archived, not overwritten
         assert rerun.json()["affected_message_ids"] == []  # judged when the new reading is ready
         history = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"]
-        assert answer["id"] in history[-1]["affected_message_ids"]  # it used 100; the carried-over edit says 110
+        # It used 100 and the carried-over edit says 110: still waiting for an update, but the edit already reported it.
+        assert history[-1]["affected_message_ids"] == []
+        assert next(m for m in api_main.catalog["sessions"][created["id"]]["messages"] if m["id"] == answer["id"])["needs_update"]
         after = next(row for row in client.get(f"{base}/evidences").json()["evidences"] if row["evidence_key"] == item["evidence_key"])
         assert (after["original_numeric_value"], after["current_numeric_value"]) == ("100", "110")
     finally:
@@ -1297,6 +1300,12 @@ def test_reextraction_flags_only_answers_whose_values_changed(monkeypatch) -> No
         entry = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"][-1]
         assert sorted(entry["affected_message_ids"]) == ["uses-b", "uses-c"]
         assert [name for name, message in answers.items() if message.get("needs_update")] == ["uses-b", "uses-c"]
+
+        # The next reading lists only answers it newly flags: the web told the user again about the same answers.
+        monkeypatch.setattr(api_main, "extract_pdf_artifact", _reading(("a", "150", "150", 1), ("b", "250", "250", 1)))
+        client.post(f"{base}/extraction")
+        entry = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"][0]["extraction_history"][-1]
+        assert entry["affected_message_ids"] == ["uses-a"]
     finally:
         cleanup_session(created["id"])
 

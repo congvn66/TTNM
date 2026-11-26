@@ -1074,11 +1074,14 @@ def _same_number(left: str | None, right: str | None) -> bool:
 
 
 def _flag_answers_whose_inputs_changed(session: dict[str, Any], document: dict[str, Any]) -> list[str]:
-    """Mark the document's answers that used a value the current reading changed or no longer has. Call under catalog_lock."""
+    """Mark the document's answers that used a value the current reading changed or no longer has. Call under catalog_lock.
+
+    Returns the answers this reading newly marks: one already waiting for an update was reported before.
+    """
     items = document["evidence_state"]["items"]
     affected = []
     for message in session.get("messages", []):
-        if message.get("role") != "assistant" or message.get("document_id") != document["id"]:
+        if message.get("role") != "assistant" or message.get("document_id") != document["id"] or message.get("needs_update"):
             continue
         changed = any(
             item.get("evidence_key") not in items or not _same_number(item.get("value"), items[item["evidence_key"]]["revisions"][-1]["numeric_value"])
@@ -1109,7 +1112,7 @@ def _append_edit(document: dict[str, Any], evidence_key: str, revision: dict[str
         "so lieu duoc dung lai tu lan doc moi. So da sua chi duoc giu khi lan doc moi co cung key, cung vi tri va cung "
         "chu in; ket qua nam o extraction_history[-1].edits_carried_over / edits_not_carried_over. Khi lan doc moi san sang, "
         "chi cau tra loi dung mot so da doi (hoac khong con) moi duoc danh dau needs_update; danh sach nam o "
-        "extraction_history[-1].affected_message_ids. Tra 409 neu tai lieu dang duoc trich xuat."
+        "extraction_history[-1].affected_message_ids (chi cac cau moi bi danh dau o lan doc nay). Tra 409 neu tai lieu dang duoc trich xuat."
     ),
     responses=OPENAPI_COMMON_ERRORS,
 )
