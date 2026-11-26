@@ -36,14 +36,13 @@ from report_qa.application.text_safety import storable
 from report_qa.api.document_assistant_flow import answer_document, extraction_marker, flag_if_inputs_changed, with_chart_batches
 from report_qa.application.document_assistant import AssistantError
 from report_qa.domain.contracts import validate_calculation_result_v1, validate_question_plan_v2
-from report_qa.domain.types import validate_decimal_text
 from .ai_provider import ProviderError, _load_local_env, assistant_mode, live_provider, planner_client, provider_mode
 from .jobs import router as jobs_router
 from .library import router as library_router
 from .auth import DEMO_OWNER_ID, owner_id_for_request, router as auth_router, settings_router as auth_settings_router
 from .devices import router as auth_sessions_router
 from .extraction_slots import ExtractionSlots
-from .number_input import AmbiguousNumberError, display_number, document_number_locale, read_typed_number
+from .number_input import AmbiguousNumberError, TypedNumberError, decimal_separator, display_number, document_number_locale, exact_number, read_typed_number
 from report_qa.config import settings
 from report_qa.infrastructure.postgres import postgres_health
 from report_qa.infrastructure.integrations import readiness as integration_readiness
@@ -1186,12 +1185,14 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
         current = item["revisions"][-1]
         if current["id"] != payload.expected_revision_id:
             raise HTTPException(status_code=409, detail={"code": "EVIDENCE_REVISION_CONFLICT", "message": "Số liệu đã được sửa bởi thao tác khác; hãy tải lại lịch sử trước khi sửa tiếp."})
-        numeric_value = _requested_value(payload, locale)
+        evidence = next((item for item in extraction["evidence_batch"]["evidences"] if item["evidence_key"] == evidence_key), None)
+        numeric_value = _requested_value(payload, locale, evidence)
         # Compare numbers, not spellings: "1300" -> "1300.0" is not a change.
         if current["numeric_value"] is not None and Decimal(numeric_value) == Decimal(current["numeric_value"]):
             raise HTTPException(status_code=422, detail={"code": "VALUE_UNCHANGED", "message": "Giá trị mới trùng giá trị hiện tại; không tạo lịch sử rỗng."})
         if dry_run:
-            return {"parsed_value": numeric_value, "display": display_number(numeric_value, locale), "locale": locale}
+            return {"parsed_value": numeric_value, "plain_value": numeric_value, "display": display_number(numeric_value, locale),
+                    "decimal_separator": decimal_separator(locale), "locale": locale}
         revision = {
             "id": str(uuid4()), "revision_no": len(item["revisions"]) + 1, "action": "edit", "created_at": utc_now(),
             "numeric_value": numeric_value, "old_numeric_value": current["numeric_value"], "previous_revision_id": current["id"],
@@ -1224,23 +1225,21 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
     return {"document_id": document_id, "evidence_key": evidence_key, "data_revision": state["data_revision"], "revision": revision, "display": display_number(numeric_value, locale), "affected_message_ids": affected, "recalculation_required": bool(affected), "trace_id": trace_id}
 
 
-def _requested_value(payload: EvidenceRevisionCreateRequest, locale: str | None) -> str:
-    """The exact decimal string the request asks for; a 422 when it is not one number."""
-    if payload.numeric_value is not None:
-        try:
-            return validate_decimal_text(payload.numeric_value)
-        except Exception as exc:
-            raise HTTPException(status_code=422, detail={"code": "INVALID_DECIMAL", "message": "Giá trị phải là chuỗi thập phân chính xác, ví dụ 58 hoặc 58.25."}) from exc
+def _requested_value(payload: EvidenceRevisionCreateRequest, locale: str | None, evidence: dict[str, Any] | None) -> str:
+    """The exact decimal string the request asks for; a 422 when it is not one well-formed number."""
     try:
-        return read_typed_number(payload.input_text, locale)
+        if payload.numeric_value is not None:
+            return exact_number(payload.numeric_value)
+        percent = ((evidence or {}).get("semantic") or {}).get("unit") == "PERCENT"
+        return read_typed_number(payload.input_text, locale, percent=percent)
     except AmbiguousNumberError as exc:
         raise HTTPException(status_code=422, detail={
             "code": "NUMBER_FORMAT_AMBIGUOUS",
             "message": f"Không rõ dấu phân cách trong \"{payload.input_text}\" là hàng nghìn hay thập phân. Hãy nhập số không có dấu phân cách hàng nghìn, ví dụ 21500 hoặc 21,5.",
             "readings": exc.readings,
         }) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail={"code": "INVALID_DECIMAL", "message": "Không đọc được số từ giá trị đã nhập, ví dụ hợp lệ: 21500 hoặc 21,5."}) from exc
+    except TypedNumberError as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_DECIMAL", "message": exc.message}) from exc
 
 
 def normalize_search_text(value: str) -> str:

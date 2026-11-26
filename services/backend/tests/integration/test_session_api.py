@@ -1165,7 +1165,7 @@ def test_typed_number_is_read_in_the_documents_number_format(monkeypatch) -> Non
         body = {"input_text": "21.500", "reason": "Đối chiếu PDF", "expected_revision_id": rows["target"]["current_revision_id"]}
         preview = client.post(f"{base}/evidences/target/revisions?dry_run=true", json=body)
         assert preview.status_code == 200, preview.text
-        assert preview.json() == {"parsed_value": "21500", "display": "21.500", "locale": "vi"}
+        assert preview.json() == {"parsed_value": "21500", "plain_value": "21500", "display": "21.500", "decimal_separator": ",", "locale": "vi"}
         assert client.get(f"{base}/evidences/target/revisions").json()["revisions"][-1]["action"] == "initialize"
         stale = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "expected_revision_id": "stale"})
         assert stale.status_code == 409
@@ -1188,11 +1188,45 @@ def test_typed_number_that_the_unknown_format_cannot_decide_is_refused(monkeypat
         assert refused.json()["detail"]["code"] == "NUMBER_FORMAT_AMBIGUOUS"
         assert refused.json()["detail"]["readings"] == ["1250", "1.250"]
         decided = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": "21,5"})
-        assert decided.json() == {"parsed_value": "21.5", "display": "21.5", "locale": None}
+        assert decided.json() == {"parsed_value": "21.5", "plain_value": "21.5", "display": "21.5", "decimal_separator": None, "locale": None}
         both = client.post(f"{base}/evidences/target/revisions", json={**body, "numeric_value": "1250"})
         assert both.status_code == 422
     finally:
         cleanup_session(session_id)
+
+
+def test_typed_number_must_be_well_formed_in_the_documents_format(monkeypatch) -> None:
+    session_id, base, rows = _document_with_numbers(monkeypatch, ("total", "1,234,567", "1234567", 1), ("target", "21.5", "21.5", 1))
+    try:
+        body = {"reason": "Đối chiếu PDF", "expected_revision_id": rows["target"]["current_revision_id"]}
+        for typed in ("1.234.567,89", "18,2.40", "21,500,", "1e5", "5%", "1" * 19, "１２", "1,23"):
+            refused = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": typed})
+            assert refused.status_code == 422, typed
+            assert refused.json()["detail"]["code"] == "INVALID_DECIMAL"
+        too_long = client.post(f"{base}/evidences/target/revisions", json={**body, "numeric_value": "1" * 80})
+        assert (too_long.status_code, too_long.json()["detail"]["code"]) == (422, "INVALID_DECIMAL")
+        preview = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": "1,234,567.89"})
+        assert preview.json() == {"parsed_value": "1234567.89", "plain_value": "1234567.89", "display": "1,234,567.89", "decimal_separator": ".", "locale": "en"}
+    finally:
+        cleanup_session(session_id)
+
+
+def test_a_percent_sign_is_accepted_only_for_a_percentage(monkeypatch) -> None:
+    def reading(path, version):
+        artifact = _reading(("share", "12,5%", "12.5", 1), ("count", "1.234.567", "1234567", 1))(path, version)
+        artifact["evidence_batch"]["evidences"][0]["semantic"] = {"unit": "PERCENT"}
+        return artifact
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", reading)
+    created = client.post("/api/v1/sessions", json={"title": "Percent"}).json()["session"]
+    try:
+        base = f"/api/v1/sessions/{created['id']}/documents/{_upload(created['id'], 'Doanh thu.')}"
+        rows = {row["evidence_key"]: row for row in client.get(f"{base}/evidences").json()["evidences"]}
+        share = client.post(f"{base}/evidences/share/revisions?dry_run=true", json={"input_text": "13,5%", "reason": "Đối chiếu", "expected_revision_id": rows["share"]["current_revision_id"]})
+        assert share.json()["parsed_value"] == "13.5"
+        count = client.post(f"{base}/evidences/count/revisions?dry_run=true", json={"input_text": "5%", "reason": "Đối chiếu", "expected_revision_id": rows["count"]["current_revision_id"]})
+        assert count.status_code == 422 and "phần trăm" in count.json()["detail"]["message"]
+    finally:
+        cleanup_session(created["id"])
 
 
 def test_upload_body_the_multipart_parser_refuses_gets_the_upload_error_shape() -> None:
