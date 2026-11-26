@@ -1,11 +1,13 @@
 from io import BytesIO
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from report_qa.api import main as api_main
+from report_qa.api.ai_provider import ProviderError
 from report_qa.api.main import app
 
 
@@ -893,3 +895,50 @@ def test_subject_only_lookup_without_matching_evidence_keeps_the_text_answer() -
         assert answer.json()["assistant_message"]["mode"] == "deterministic_text_retrieval"
     finally:
         cleanup_session(created["id"])
+
+
+@pytest.mark.parametrize(
+    ("reply", "code", "provider_status"),
+    [
+        (ProviderError("AI_PROVIDER_HTTP_ERROR", "gemini planner request failed (HTTP 400)", 400), "AI_PROVIDER_HTTP_ERROR", 400),
+        ({"action": "unknown"}, "ASSISTANT_INCOMPLETE", None),
+    ],
+)
+def test_tools_mode_ai_failure_shows_a_vietnamese_message_and_keeps_the_code(monkeypatch, reply, code, provider_status):
+    from report_qa.api import document_assistant_flow
+
+    monkeypatch.setenv("REPORT_QA_ASSISTANT_MODE", "tools")
+    monkeypatch.setattr(document_assistant_flow, "planner_client", lambda: _FakePlanner(reply))
+    created = client.post("/api/v1/sessions", json={"title": "AI failure"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        response = client.post(f"/api/v1/sessions/{created['id']}/messages", json={"document_id": document_id, "question": "Revenue?"})
+        assert response.status_code == 502
+        detail = response.json()["detail"]
+        assert detail["code"] == code
+        assert detail["message"] == api_main.AI_ERROR_MESSAGES[code]
+        assert detail.get("provider_http_status") == provider_status
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_extraction_failure_logs_the_traceback_and_stores_a_stable_code(monkeypatch, caplog):
+    import logging
+
+    def broken(path, version):
+        raise KeyError("prov")
+
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", broken)
+    flow_logger = logging.getLogger("report_qa.flow")
+    flow_logger.addHandler(caplog.handler)
+    try:
+        result = api_main.extract_pdf_pages(api_main.document_path("missing.pdf"), "missing.json", "v")
+    finally:
+        flow_logger.removeHandler(caplog.handler)
+    assert result["status"] == "failed" and result["error"] == "KeyError"
+    assert any(record.exc_info and record.exc_info[0] is KeyError for record in caplog.records)
+
+
+def test_object_storage_errors_are_readable_vietnamese() -> None:
+    response = api_main.object_storage_error_handler(None, api_main.ObjectStorageError("down"))
+    assert json.loads(response.body)["detail"]["message"] == "Cloudflare R2 tạm thời không sẵn sàng; hãy thử lại sau."

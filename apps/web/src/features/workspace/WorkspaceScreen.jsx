@@ -102,6 +102,8 @@ const ERROR_COPY = {
   AI_INVALID_OUTPUT: "AI trả về dữ liệu không đúng định dạng. Hãy thử lại câu hỏi.",
   AI_UNGROUNDED_CITATION: "AI trả về trích dẫn không nằm trong tài liệu. Hãy thử lại câu hỏi.",
   AI_UNSUPPORTED_EVIDENCE: "AI chưa xác minh được evidence trong tài liệu. Hãy thử lại câu hỏi.",
+  DOCUMENT_CONTEXT_TOO_LARGE: "Tài liệu quá dài để trợ lý đọc hết trong một lần hỏi.",
+  ASSISTANT_INCOMPLETE: "Trợ lý chưa hoàn tất câu trả lời trong số bước cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",
   QUEUE_UNAVAILABLE: "Hàng đợi xử lý chưa sẵn sàng. Hãy khởi động worker hoặc thử lại sau.",
 };
 

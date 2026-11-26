@@ -72,6 +72,30 @@ def flow_log(event: str, **fields: Any) -> None:
     logger.info("FLOW %s %s", event, payload)
 
 
+# The web client shows the same text for these codes (apps/web/src/shared/api/client.js).
+AI_ERROR_MESSAGES = {
+    "AI_PROVIDER_UNAVAILABLE": "Không kết nối được tới dịch vụ AI. Kiểm tra mạng hoặc thử lại sau.",
+    "AI_PROVIDER_TIMEOUT": "Dịch vụ AI phản hồi quá lâu. Bạn có thể thử lại câu hỏi.",
+    "AI_MODEL_UNAVAILABLE": "Mô hình AI hiện không khả dụng. Kiểm tra lại cấu hình model.",
+    "AI_PROVIDER_HTTP_ERROR": "Dịch vụ AI từ chối yêu cầu. Kiểm tra API key và giới hạn sử dụng.",
+    "AI_NOT_CONFIGURED": "Chưa cấu hình nhà cung cấp AI cho môi trường này.",
+    "AI_INVALID_OUTPUT": "AI trả về dữ liệu không đúng định dạng. Hãy thử lại câu hỏi.",
+    "AI_UNGROUNDED_CITATION": "AI trả về trích dẫn không nằm trong tài liệu. Hãy thử lại câu hỏi.",
+    "AI_UNSUPPORTED_EVIDENCE": "AI chưa xác minh được evidence trong tài liệu. Hãy thử lại câu hỏi.",
+    "DOCUMENT_CONTEXT_TOO_LARGE": "Tài liệu quá dài để trợ lý đọc hết trong một lần hỏi.",
+    "ASSISTANT_INCOMPLETE": "Trợ lý chưa hoàn tất câu trả lời trong số bước cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",
+}
+
+
+def ai_failure(code: str, internal: str, trace_id: str, http_status: int | None = None) -> HTTPException:
+    """A 502 with a user message; the internal reason goes only to the server log."""
+    flow_log("AI_FAILURE", trace_id=trace_id, code=code, http_status=http_status, reason=internal)
+    detail: dict[str, Any] = {"code": code, "message": AI_ERROR_MESSAGES.get(code, "Không thể tạo câu trả lời. Hãy thử lại."), "trace_id": trace_id}
+    if http_status is not None:
+        detail["provider_http_status"] = http_status
+    return HTTPException(status_code=502, detail=detail)
+
+
 def trace_event(stage: str, status: str, **fields: Any) -> dict[str, Any]:
     return {"stage": stage, "status": status, "at": utc_now(), **fields}
 
@@ -177,7 +201,7 @@ app.add_middleware(
 
 @app.exception_handler(ObjectStorageError)
 def object_storage_error_handler(_: Request, __: ObjectStorageError) -> JSONResponse:
-    return JSONResponse(status_code=503, content={"detail": {"code": "OBJECT_STORAGE_UNAVAILABLE", "message": "Cloudflare R2 t?m th?i kh?ng s?n s?ng; h?y th? l?i sau."}})
+    return JSONResponse(status_code=503, content={"detail": {"code": "OBJECT_STORAGE_UNAVAILABLE", "message": "Cloudflare R2 tạm thời không sẵn sàng; hãy thử lại sau."}})
 
 
 @app.get(
@@ -488,6 +512,7 @@ def extract_pdf_pages(path: Any, extraction_name: str, document_version_id: str)
         # package instead of a bare "ModuleNotFoundError".
         return {"status": "failed", "page_count": None, "numeric_evidence_count": 0, "error": f"MISSING_DEPENDENCY:{exc.name}"}
     except Exception as exc:
+        logger.exception("PDF extraction failed for %s", extraction_name)
         return {"status": "failed", "page_count": None, "numeric_evidence_count": 0, "error": type(exc).__name__}
 
 
@@ -538,7 +563,7 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
         persist_pdf_cache(storage_name, final_path)
     except ObjectStorageError as exc:
         final_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=503, detail={"code": "OBJECT_STORAGE_UNAVAILABLE", "message": "Kh?ng th? l?u PDF v?o Cloudflare R2; h?y th? l?i sau."}) from exc
+        raise HTTPException(status_code=503, detail={"code": "OBJECT_STORAGE_UNAVAILABLE", "message": "Không thể lưu PDF vào Cloudflare R2; hãy thử lại sau."}) from exc
 
     record = {
         "id": document_id,
@@ -1376,11 +1401,11 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
                 persist_chart=(lambda result, region_key: _persist_chart_read(session, document, result, region_key)) if postgres_runtime else None,
             ))
         except ProviderError as exc:
-            raise HTTPException(status_code=502, detail={"code": exc.code, "message": str(exc)}) from exc
+            raise ai_failure(exc.code, str(exc), trace_id, exc.http_status) from exc
         except AssistantError as exc:
             flow_log("ASSISTANT_INCOMPLETE", trace_id=trace_id, session_id=session_id, document_id=document["id"],
                      tool_errors=[item.get("error") for item in getattr(exc, "tool_results", []) if item.get("error")])
-            raise HTTPException(status_code=502, detail={"code": "ASSISTANT_INCOMPLETE", "message": str(exc)}) from exc
+            raise ai_failure("ASSISTANT_INCOMPLETE", str(exc), trace_id) from exc
     # Only a clarification asked about *this* document can be answered here;
     # a pending clarification on another PDF in the session must not be
     # merged into this question.
@@ -1668,9 +1693,9 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
         except ProviderError as exc:
             trace.append(trace_event("ai_provider", "failed", code=exc.code))
             flow_log("AI_PROVIDER_FAILED", trace_id=trace_id, code=exc.code)
-            raise HTTPException(status_code=502, detail={"code": exc.code, "message": str(exc), "trace_id": trace_id}) from exc
+            raise ai_failure(exc.code, str(exc), trace_id, exc.http_status) from exc
         if provider_answer is None:
-            raise HTTPException(status_code=502, detail={"code": "AI_NOT_CONFIGURED", "message": "AI provider is not configured", "trace_id": trace_id})
+            raise ai_failure("AI_NOT_CONFIGURED", "AI provider is not configured", trace_id)
         trace.append(trace_event("ai_provider", "validated", provider=provider_answer.provider, model=provider_answer.model, response_sha256=provider_answer.response_sha256, cited_pages=provider_answer.cited_pages))
         flow_log("AI_PROVIDER_ACCEPTED", trace_id=trace_id, provider=provider_answer.provider, model=provider_answer.model, response_sha256=provider_answer.response_sha256, cited_pages=provider_answer.cited_pages)
         answer = provider_answer.answer_text
