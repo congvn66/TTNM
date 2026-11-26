@@ -924,6 +924,20 @@ def test_not_found_is_sent_back_while_a_chart_on_a_relevant_page_is_unread():
     assert result["not_found"] is True  # a tried read (even a failed one) lets not_found through
 
 
+def test_not_found_is_sent_back_once_however_many_charts_are_unread():
+    # R1 has 16 picture regions: a true "not found" had to read every one, one per step, and hit the step limit.
+    context = _chart_context()
+    context["chart_regions"] = [{"chart_region_key": f"chart-{n}", "page_number": 2, "read": False} for n in range(8)]
+    read_chart = Mock(return_value={"status": "completed", "evidences": [], "warnings": []})
+    complete = sequence(
+        {"action": "answer", "answer": "Báo cáo không có số đơn hàng năm 2030.", "not_found": True},
+        {"action": "read_chart", "chart_region_key": "chart-0"},
+        {"action": "answer", "answer": "Báo cáo không có số đơn hàng năm 2030.", "not_found": True},
+    )
+    result = run_assistant("Số đơn hàng năm 2030 là bao nhiêu?", context, complete=complete, read_chart=read_chart)
+    assert result["not_found"] is True
+
+
 def test_relevant_pages_use_the_page_ranking_of_fit_context():
     from report_qa.application.document_assistant import relevant_pages
 

@@ -489,7 +489,14 @@ class _Turn:
         ]
 
     def unread_relevant_charts(self, question):
-        """Chart regions on the pages relevant to the question that are unread and not tried in this turn."""
+        """Chart regions on the pages relevant to the question that are unread and not tried in this turn.
+
+        None once this turn has sent an answer back for them: the model then
+        reads the ones it judges relevant (one per step), so a true "not
+        found" on a page full of pictures still ends within the step limit.
+        """
+        if any(t.get("tool") == "validation" and "chart_region_keys" in t for t in self.tools):
+            return []
         tried = {t.get("chart_region_key") for t in self.tools if t.get("tool") == "read_chart"}
         pages = relevant_pages(self.context, question)
         return [r["chart_region_key"] for r in self.context.get("chart_regions", [])
