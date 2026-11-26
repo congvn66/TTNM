@@ -402,3 +402,19 @@ def test_axis_metadata_without_confirmation_of_absent_labels_is_not_enough():
     }
     result = DeplotChartReader(lambda image: RAW).read(request(chart_regions=(region,)))
     assert result["evidence_batch"]["evidences"][0]["numeric_value"] is None
+
+
+def test_docling_cell_semantics_come_from_its_own_header_path():
+    data = json.loads((FIXTURES / "docling-recorded.json").read_text())
+    cells = data["tables"][0]["data"]["table_cells"]
+    by_text = {c["text"]: c for c in cells}
+    by_text["Q1"]["text"] = "Q1/25"
+    by_text["1,120.00"]["text"] = "-"
+    numbers = {(e["table_locator"]["row_index"], e["table_locator"]["column_index"]): e
+               for e in artifact(data)["evidence_batch"]["evidences"] if e["source_type"] == "table"}
+    q1_cost = numbers[(1, 2)]
+    assert q1_cost["semantic"]["period"]["label"] == "Q1/2025"  # not the page's 2024
+    assert q1_cost["semantic"]["measure"] == "unknown"  # "Chi phí", not the page's "doanh thu"
+    assert numbers[(1, 1)]["semantic"]["measure"] == "doanh_thu"
+    assert numbers[(2, 3)]["table_locator"]["row_header"] == "Q2"  # the "-" cell left of it is a value
+    assert numbers[(2, 3)]["semantic"]["subject"] == "Q2"

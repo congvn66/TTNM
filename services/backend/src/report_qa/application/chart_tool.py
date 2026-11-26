@@ -70,9 +70,9 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
 
     from report_qa.application.evidence_extraction import (
         _measure,
-        _period_near,
         _unit_near,
     )
+    from report_qa.application.numeric_extraction import period_near
 
     key = region["chart_region_key"]
     number = region["page_number"]
@@ -262,7 +262,7 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
                     "semantic": {
                         "measure": str(r.get("measure") or _measure(series)),
                         "subject": category,
-                        "period": _period_near(str(r.get("period") or ""), 0),
+                        "period": period_near(str(r.get("period") or ""), 0),
                         "unit": r.get("unit") or _unit_near(series, token),
                         "dimensions": {"category": category, "series": series},
                     },

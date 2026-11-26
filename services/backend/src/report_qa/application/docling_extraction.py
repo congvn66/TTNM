@@ -14,7 +14,14 @@ from typing import Any
 from uuid import uuid4
 
 from report_qa.application.extraction_contract import validate_extraction_batch
-from report_qa.application.numeric_extraction import NUMBER, decimal_text
+from report_qa.application.numeric_extraction import (
+    HEADER_JOIN,
+    NUMBER,
+    decimal_text,
+    is_value_text,
+    period_near,
+    single_year,
+)
 
 
 @lru_cache(maxsize=1)
@@ -65,8 +72,8 @@ def extract_docling_artifact(
     # Reuse semantic helpers, without invoking the legacy extractor.
     from report_qa.application.evidence_extraction import (
         _measure,
-        _period_near,
         _unit_near,
+        cell_semantics,
     )
     from report_qa.application.ocr_extraction import TesseractPdfOcr
 
@@ -75,7 +82,7 @@ def extract_docling_artifact(
     if status != "success":
         raise RuntimeError(f"Docling conversion failed: {result.status}")
     data = result.document.export_to_dict()
-    evidence, warnings, contexts, charts, pages = [], [], {}, [], []
+    evidence, warnings, contexts, charts, pages, page_years = [], [], {}, [], [], {}
     ocr_pages = {}
     with pymupdf.open(path) as pdf:
 
@@ -137,6 +144,7 @@ def extract_docling_artifact(
                         f"Trang {number} khÃ´ng cÃ³ lá»›p chá»¯; chÆ°a trÃ­ch xuáº¥t sá»‘ tá»« trang nÃ y.",
                     )
             pages.append({"page": number, "text": page_text})
+            page_years[number] = single_year(page_text)
             if not page_text.strip():
                 warn(
                     "OCR_REQUIRED",
@@ -154,6 +162,7 @@ def extract_docling_artifact(
             original=None,
             extraction_method=None,
             confidence=0.85,
+            headers=(),
         ):
             try:
                 value = decimal_text(raw, locale)
@@ -165,6 +174,7 @@ def extract_docling_artifact(
                     "Cần xác nhận quy ước dấu phân cách số.",
                     key,
                 )
+            measure, period = cell_semantics(list(headers), context, raw, page_years.get(number))
             method = extraction_method or ("table_cell" if source == "table" else "text")
             method_labels = {
                 "table_cell": "\u0111\u1ecdc t\u1eeb \u00f4 b\u1ea3ng",
@@ -186,9 +196,9 @@ def extract_docling_artifact(
                 if source == "table"
                 else "đọc từ văn bản",
                 "semantic": {
-                    "measure": _measure(context),
+                    "measure": measure,
                     "subject": locator.get("row_header") if locator else None,
-                    "period": _period_near(context, max(0, context.rfind(raw))),
+                    "period": period,
                     "unit": _unit_near(context, raw),
                     "dimensions": {},
                 },
@@ -212,6 +222,8 @@ def extract_docling_artifact(
                 ):
                     continue
                 text = cell.get("text", "").strip()
+                if not is_value_text(text):  # a label such as "Giá mục tiêu 2026:"
+                    continue
                 # One value per physical cell. Footnotes/dates/text containing
                 # multiple numbers cannot silently become a numeric operand.
                 matches = list(NUMBER.finditer(text))
@@ -235,9 +247,12 @@ def extract_docling_artifact(
                 if not _inside(box, table_box):
                     warn("CELL_OUTSIDE_TABLE", "Vị trí ô nằm ngoài vùng bảng.")
                     continue
+                # The cell's own header path: column header levels outer to
+                # inner, and the labels left of it in its row (never a value
+                # or a "-" placeholder of a neighbouring cell).
                 headers = [
                     c["text"]
-                    for c in cells
+                    for c in sorted(cells, key=lambda c: c["start_row_offset_idx"])
                     if c.get("column_header")
                     and c["start_col_offset_idx"] <= col < c["end_col_offset_idx"]
                 ]
@@ -246,14 +261,15 @@ def extract_docling_artifact(
                     for c in cells
                     if c["start_row_offset_idx"] <= row < c["end_row_offset_idx"]
                     and c["end_col_offset_idx"] <= col
-                    and not NUMBER.search(c["text"])
+                    and not c.get("column_header")
+                    and not is_value_text(c["text"])
                 ]
                 locator = {
                     "table_region_key": f"page-{number}-table-{ti}",
                     "row_index": row,
                     "column_index": col,
-                    "row_header": " / ".join(row_headers) or None,
-                    "column_header": " / ".join(headers) or None,
+                    "row_header": HEADER_JOIN.join(row_headers) or None,
+                    "column_header": HEADER_JOIN.join(headers) or None,
                 }
                 # Only nearby caption/unit notes, never arbitrary page prose.
                 nearby = " ".join(
@@ -276,7 +292,7 @@ def extract_docling_artifact(
                     raw = text
                 else:
                     raw = matches[0].group()
-                emit(raw, context, number, box, key, "table", locator, original=text)
+                emit(raw, context, number, box, key, "table", locator, original=text, headers=row_headers + headers)
                 if matches[0] is None:
                     evidence[-1].update(numeric_value=None, data_status="missing")
                 elif len(matches) > 1:

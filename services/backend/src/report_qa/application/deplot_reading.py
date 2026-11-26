@@ -189,9 +189,9 @@ class DeplotChartReader:
 
         from report_qa.application.evidence_extraction import (
             _measure,
-            _period_near,
             _unit_near,
         )
+        from report_qa.application.numeric_extraction import period_near
 
         evidence, warnings, outputs = [], [], []
         provider_failure = False
@@ -387,7 +387,7 @@ class DeplotChartReader:
                             "semantic": {
                                 "measure": _measure(context),
                                 "subject": category,
-                                "period": _period_near(context, 0),
+                                "period": period_near(context, 0),
                                 "unit": axis.get("unit")
                                 or _unit_near(series, raw_value),
                                 "dimensions": {"category": category, "series": series},

@@ -14,16 +14,12 @@ from typing import Any
 from uuid import uuid4
 
 from report_qa.domain.contracts import validate_document_evidence_v2
-from report_qa.application.numeric_extraction import canonical_decimal
+from report_qa.application.numeric_extraction import HEADER_JOIN, canonical_decimal, header_period, period_near, single_year
 from report_qa.application.ocr_extraction import TesseractPdfOcr
 from report_qa.application.table_extraction import PdfPlumberTableExtractor
 
 
 NUMBER_RE = re.compile(r"(?<![\w/])[-+]?(?:\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,]\d+)?%?")
-QUARTER_RE = re.compile(r"(?i)\b(?:q|quý\s*)([1-4])\s*[/\-\s]\s*((?:19|20)\d{2})\b")
-YEAR_RE = re.compile(r"(?<![/\d])((?:19|20)\d{2})(?!\d)")
-# "Q1" in a table header with no year next to it.
-BARE_QUARTER_RE = re.compile(r"(?i)\b(?:q|quý\s*)([1-4])\b(?!\s*[/\-]\s*(?:19|20)\d{2})")
 
 
 def _matrix_product(m: Any, n: Any) -> list[float]:
@@ -33,27 +29,6 @@ def _matrix_product(m: Any, n: Any) -> list[float]:
         m[2] * n[0] + m[3] * n[2], m[2] * n[1] + m[3] * n[3],
         m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5],
     ]
-
-
-def _single_year(text: str) -> str | None:
-    years = set(YEAR_RE.findall(text))
-    return years.pop() if len(years) == 1 else None
-
-
-def _period_for(context: str, raw: str, page_year: str | None) -> dict[str, Any] | None:
-    """Period next to the number; a bare "Q1" header takes the page's only year."""
-    period = _period_near(context, context.rfind(raw))
-    if period is None and page_year:
-        match = BARE_QUARTER_RE.search(context)
-        if match:
-            quarter = int(match.group(1))
-            period = {
-                "label": f"Q{quarter}/{page_year}",
-                "start": f"{page_year}-{(quarter - 1) * 3 + 1:02d}-01",
-                "end": None,
-                "granularity": "quarter",
-            }
-    return period
 
 
 def _keyword_text(text: str) -> str:
@@ -117,31 +92,16 @@ def _decimal_text(raw: str) -> str:
     return canonical_decimal(f"{sign}{value}")
 
 
-def _period_near(text: str, number_start: int) -> dict[str, Any] | None:
-    candidates: list[tuple[int, dict[str, Any]]] = []
-    for match in QUARTER_RE.finditer(text):
-        quarter, year = int(match.group(1)), int(match.group(2))
-        candidates.append(
-            (
-                abs(match.start() - number_start),
-                {
-                    "label": f"Q{quarter}/{year}",
-                    "start": f"{year}-{(quarter - 1) * 3 + 1:02d}-01",
-                    "end": None,
-                    "granularity": "quarter",
-                },
-            )
-        )
-    if not candidates:
-        for match in YEAR_RE.finditer(text):
-            year = match.group(1)
-            candidates.append(
-                (
-                    abs(match.start() - number_start),
-                    {"label": year, "start": f"{year}-01-01", "end": f"{year}-12-31", "granularity": "year"},
-                )
-            )
-    return min(candidates, key=lambda item: item[0])[1] if candidates else None
+def cell_semantics(headers: list[str | None], context: str, raw: str, page_year: str | None) -> tuple[str, dict[str, Any] | None]:
+    """(measure, period) of a number from its own table header path.
+
+    headers is the path outer to inner: row header, then each column header
+    level. Only a number with no header at all takes them from nearby text.
+    """
+    named = [header for header in headers if header]
+    if named:
+        return _measure(" ".join(named)), header_period(named, page_year)
+    return _measure(context), period_near(context, max(0, context.rfind(raw)))
 
 
 def _unit_near(text: str, raw: str) -> str | None:
@@ -168,8 +128,8 @@ def _unit_near(text: str, raw: str) -> str | None:
 def _measure(text: str) -> str:
     lowered = _keyword_text(text)
     aliases = (
-        (("doanh thu", "revenue"), "doanh_thu"),
-        (("lợi nhuận", "profit"), "loi_nhuan"),
+        (("doanh thu", "revenue", "dtt"), "doanh_thu"),
+        (("lợi nhuận", "profit", "lnst"), "loi_nhuan"),
         (("bookings",), "bookings"),
         (("wer",), "wer"),
         (("cer",), "cer"),
@@ -296,7 +256,7 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
             if readable is not None:
                 page_text, spans, width, height = readable
         pages.append({"page": page_number, "text": page_text})
-        page_year = _single_year(page_text)
+        page_year = single_year(page_text)
 
         # OCR is intentionally page-scoped and only used when the PDF has no
         # usable text layer.  A missing engine becomes an explicit warning;
@@ -322,7 +282,7 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
                                 "evidence_key": evidence_key, "source_region_key": f"page-{page_number}-ocr-token-{token_index}", "source_type": "text",
                                 "page_number": page_number, "bbox": token["bbox"], "raw_text": raw, "numeric_value": _decimal_text(raw), "value_kind": "number",
                                 "data_status": "valid", "extraction_method": "ocr", "method_label": "đọc bằng OCR",
-                                "semantic": {"measure": _measure(str(token["text"])), "subject": None, "period": _period_near(str(token["text"]), match.start()), "unit": _unit_near(str(token["text"]), raw), "dimensions": {}},
+                                "semantic": {"measure": _measure(str(token["text"])), "subject": None, "period": period_near(str(token["text"]), match.start()), "unit": _unit_near(str(token["text"]), raw), "dimensions": {}},
                                 "table_locator": None, "chart_read": None, "confidence": float(token["confidence"]),
                             })
                             contexts[evidence_key] = str(token["text"])
@@ -394,6 +354,8 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
                     for item in (row_header, column_header, text)
                     if item
                 ) if is_table_cell else text
+                headers = [row_header, column_header] if is_table_cell else []
+                measure, period = cell_semantics(headers, text, raw, page_year)
                 evidences.append(
                     {
                         "evidence_key": evidence_key,
@@ -408,9 +370,9 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
                         "extraction_method": "table_cell" if is_table_cell else "text",
                         "method_label": "đọc từ ô bảng" if is_table_cell else "đọc từ văn bản",
                         "semantic": {
-                            "measure": _measure(semantic_context),
-                            "subject": None,
-                            "period": _period_for(semantic_context, raw, page_year),
+                            "measure": measure,
+                            "subject": row_header if is_table_cell else None,
+                            "period": period,
                             "unit": _unit_near(semantic_context, raw),
                             "dimensions": {},
                         },
@@ -446,15 +408,19 @@ def extract_legacy_pdf_artifact(path: Path, document_version_id: str) -> dict[st
         evidences = [item for item in evidences if not inside_complex_region(item)]
         # pdfplumber cells arrive untagged (measure "unknown", no period);
         # tag them from their row/column headers like every other number.
-        page_years = {page["page"]: _single_year(page["text"]) for page in pages}
+        page_years = {page["page"]: single_year(page["text"]) for page in pages}
         for item in complex_tables.evidences:
             context = complex_tables.contexts.get(item["evidence_key"], item["raw_text"])
+            locator = item["table_locator"]
+            headers = [locator["row_header"], *(locator["column_header"] or "").split(HEADER_JOIN)]
+            measure, period = cell_semantics(headers, context, item["raw_text"], page_years.get(item["page_number"]))
             evidences.append({
                 **item,
                 "semantic": {
                     **item["semantic"],
-                    "measure": _measure(context),
-                    "period": _period_for(context, item["raw_text"], page_years.get(item["page_number"])),
+                    "measure": measure,
+                    "subject": locator["row_header"],
+                    "period": period,
                     "unit": _unit_near(context, item["raw_text"]),
                 },
             })
