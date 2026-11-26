@@ -120,8 +120,10 @@
 .audit-context { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: baseline; gap: 7px; border-radius: 6px; padding: 6px; background: var(--surface-muted); color: var(--ink-soft); font-size: 7px; }
 .audit-context code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.evidence-drawer-body { display: grid; align-content: start; gap: 8px; overflow: auto; padding: 12px; }
-.evidence-record { overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
+/* A flex column, not a grid: grid rows sized against a shrunk container
+   squash items whose overflow is hidden down to their borders. */
+.evidence-drawer-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; overflow: auto; padding: 12px; }
+.evidence-record { flex: 0 0 auto; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
 .evidence-record-main { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; border: 0; padding: 10px; background: transparent; color: var(--ink-soft); text-align: left; }
 .evidence-record-main:hover { background: var(--gold-soft); }
 .evidence-record-main span { color: var(--muted); font-size: 7px; font-weight: 800; text-transform: uppercase; }
