@@ -101,7 +101,7 @@ def test_numbers_traced_to_results_rows_quotes_and_question_are_accepted(answer)
     row = {"evidence_key": "k", "numeric_value": "1250500", "raw_text": "1.250.500",
            "table_locator": {"row_header": "Miền Bắc", "column_header": "Q2/2026"}}
     assert untraced_numbers(answer, question="So với 2025 thì sao?", evidences=[row],
-                            quotes=["Miền Nam chiếm 30% doanh thu."], results=[{"value": "0.170547", "keys": []}]) == []
+                            quotes=[{"page": 1, "quote": "Miền Nam chiếm 30% doanh thu."}], results=[{"value": "0.170547", "keys": []}]) == []
 
 
 @pytest.mark.parametrize("answer", [
@@ -141,7 +141,8 @@ def test_answer_numbers_are_read_in_the_number_format_of_their_source(locale):
     large = {"evidence_key": "l", "numeric_value": "1250", "raw_text": "1.250"}
 
     def check(answer, row, quotes=()):
-        return untraced_numbers(answer, question="?", evidences=[row] if row else [], quotes=list(quotes), results=[],
+        return untraced_numbers(answer, question="?", evidences=[row] if row else [], results=[],
+                                quotes=[{"page": 1, "quote": quote} for quote in quotes],
                                 locale=locale)
 
     assert check("Doanh thu là 1.250 tỷ đồng.", small) == ["1.250 tỷ"]
@@ -160,6 +161,24 @@ def test_a_number_read_two_ways_traces_only_when_the_source_fixes_the_format():
     printed = [{"evidence_key": "k", "numeric_value": "1000", "raw_text": "1.000"}]
     assert untraced_numbers("Tổng là 1.250.", question="?", evidences=[], quotes=[], rows=printed,
                             results=[{"value": "1250", "keys": ["k"]}]) == []
+
+
+def test_a_corrected_number_does_not_trace_through_its_printed_text_or_a_quote_of_its_page():
+    # The row was corrected 1250 -> 1350; the old PDF number used to trace through raw_text and quotes.
+    from report_qa.application.document_assistant import untraced_numbers
+
+    row = {"evidence_key": "k", "page_number": 1, "numeric_value": "1350", "raw_text": "1.250"}
+    quote = [{"page": 1, "quote": "Doanh thu năm 2023 đạt 1.250 tỷ đồng."}]
+    other_page = [{"page": 2, "quote": "Chi phí năm 2023 là 1.250 tỷ đồng."}]
+    check = lambda answer, quotes: untraced_numbers(answer, question="?", evidences=[row], quotes=quotes, results=[],
+                                                    rows=[row], locale="vi")
+    assert check("Doanh thu 2023 là 1.250 tỷ đồng.", []) == ["1.250 tỷ"]
+    assert check("Doanh thu 2023 là 1.250 tỷ đồng.", quote) == ["1.250 tỷ"]
+    assert check("Doanh thu 2023 là 1.350 tỷ đồng.", quote) == []
+    assert check("Chi phí 2023 là 1.250 tỷ đồng.", other_page) == []
+    unread = {"evidence_key": "u", "page_number": 1, "numeric_value": None, "raw_text": "42.03", "data_status": "ambiguous",
+              "source_type": "chart"}
+    assert untraced_numbers("Khoảng 42,03%.", question="?", evidences=[unread], quotes=[], results=[], locale="vi") == []
 
 
 def test_a_number_from_an_uncited_row_is_not_traced():
@@ -587,8 +606,9 @@ def test_rows_stated_by_an_accepted_quote_become_answer_inputs_so_an_edit_flags_
     from report_qa.api.main import extraction_with_evidence_revisions, mark_answers_needing_update, snapshot_answer_revision
 
     page = "Doanh thu quý 2 đạt 130 tỷ đồng. Chi phí là 1.130 tỷ đồng."
-    rows = [{**_row("rev", "valid", "table"), "raw_text": "130"}, {**_row("cost", "valid", "table"), "raw_text": "1.130"},
-            {**_row("other", "valid", "table"), "raw_text": "130", "page_number": 2}]
+    rows = [{**_row("rev", "valid", "table"), "raw_text": "130", "numeric_value": "130"},
+            {**_row("cost", "valid", "table"), "raw_text": "1.130", "numeric_value": "1130"},
+            {**_row("other", "valid", "table"), "raw_text": "130", "numeric_value": "130", "page_number": 2}]
     extraction = {"pages": [{"page": 1, "text": page}, {"page": 2, "text": "x"}], "evidence_batch": {"evidences": rows}, "chart_regions": []}
     document = {"id": "doc", "extraction_name": "x", "storage_name": "x"}
     session = {"messages": []}

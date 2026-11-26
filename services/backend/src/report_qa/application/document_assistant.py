@@ -185,13 +185,25 @@ def row_formats(row: dict, locale: str | None) -> frozenset[str]:
     return frozenset(LOCALES)
 
 
-def untraced_numbers(answer: str, *, question: str, evidences: list[dict], quotes: list[str], results: list[dict],
+def _corrected(row: dict) -> bool:
+    """A row whose current value is not what its printed PDF text says (a user correction)."""
+    value, raw = row.get("numeric_value"), row.get("raw_text")
+    if value is None or not raw:
+        return False
+    printed = {r[0] for _, numeral, _ in _written_numbers(raw) for f in LOCALES if (r := _reading(numeral, f))}
+    return bool(printed) and Decimal(str(value)) not in printed
+
+
+def untraced_numbers(answer: str, *, question: str, evidences: list[dict], quotes: list[dict], results: list[dict],
                      rows: list[dict] = (), locale: str | None = None, cited_pages=frozenset()) -> list[str]:
     """Quantities written in the answer that no trusted source contains, in answer order.
 
-    Trusted sources are the question, the cited Data rows (current value and
-    raw PDF text), the accepted quotes and the numbers of succeeded python
-    results that derive from Data rows. Only quantities are checked, in the
+    Trusted sources are the question, the cited Data rows, the accepted
+    quotes ({page, quote}) and the numbers of succeeded python results that
+    derive from Data rows. A row's source is its current value; its printed
+    PDF text counts only while the row has no value. A printed number the
+    user corrected is no source anywhere on its page: a quote of that page
+    does not make the old number true again. Only quantities are checked, in the
     answer and in every source: periods, dates, durations, digits inside a
     label token ("Q4/2024") and references to a cited page are not
     quantities.
@@ -211,12 +223,19 @@ def untraced_numbers(answer: str, *, question: str, evidences: list[dict], quote
     by_key = {row["evidence_key"]: row for row in rows}
     trusted: list[tuple[Decimal, frozenset]] = []
 
-    def add_text(text):
+    corrected = {(row.get("page_number"), numeral) for row in rows if _corrected(row)
+                 for _, numeral, _ in _written_numbers(row["raw_text"])}
+
+    def add_text(text, page=None, text_formats=every, answer_formats=None):
+        """Numbers of a text; the answer is read in the format the text is read in, unless answer_formats is given."""
         for _, numeral, scale in _written_numbers(text):
-            for number_format in every:
+            if (page, numeral) in corrected:
+                continue
+            for number_format in text_formats:
                 reading = _reading(numeral, number_format)
                 if reading:
-                    trusted.extend((value, frozenset({number_format})) for value in {reading[0], reading[0] * (scale or 1)})
+                    formats = answer_formats or frozenset({number_format})
+                    trusted.extend((value, formats) for value in {reading[0], reading[0] * (scale or 1)})
 
     for result in results:
         formats = frozenset(every).intersection(*(row_formats(by_key[k], locale) for k in result["keys"] if k in by_key))
@@ -225,9 +244,12 @@ def untraced_numbers(answer: str, *, question: str, evidences: list[dict], quote
     for evidence in evidences:
         if evidence.get("numeric_value") is not None:
             trusted.append((Decimal(str(evidence["numeric_value"])), row_formats(evidence, locale)))
-        add_text(evidence.get("raw_text"))
+        elif evidence.get("source_type") == "chart":  # DePlot's text, not the document's print
+            add_text(evidence.get("raw_text"), text_formats=frozenset(LOCALES), answer_formats=every)
+        else:
+            add_text(evidence.get("raw_text"))
     for quote in quotes:
-        add_text(quote)
+        add_text(quote["quote"], quote["page"])
     trusted = [(abs(value), formats) for value, formats in trusted if value.is_finite()]
 
     def traced(numeral, scale):
@@ -419,7 +441,7 @@ class _Turn:
         cited = [by_key[k] for k in keys]
         untraced = untraced_numbers(
             answer, question=question, evidences=cited,
-            quotes=[s["quote"] for s in sources],
+            quotes=sources,
             results=[{"value": n, "keys": c["result"]["used_evidence_keys"]} for c in succeeded for n in c["result"]["traced_numbers"]],
             rows=self.context["evidences"], locale=self.context.get("number_locale"),
             cited_pages={e["page_number"] for e in cited} | {s["page"] for s in sources} | set(pages),
