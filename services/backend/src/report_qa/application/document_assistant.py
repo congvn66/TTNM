@@ -312,8 +312,9 @@ def untraced_numbers(answer: str, *, evidences: list[dict], quotes: list[dict], 
     for result in results:
         if any(abs(Decimal(typed)) not in cited for typed in result["typed"]):
             continue
-        # Sums and differences of rows in one unit stay in that unit.
-        units = {_row_unit(by_key[k]) if k in by_key else None for k in result["keys"]}
+        # A result is in the one magnitude unit of its rows (a percent rate does not change it:
+        # triệu đồng x 6,5% is triệu đồng); rows in several magnitudes leave it without a unit.
+        units = {u for k in result["keys"] if k in by_key and isinstance(u := _row_unit(by_key[k]), Decimal)}
         value = Decimal(result["value"])
         trusted.append(_Source(value, 1 if value >= 0 else -1, units.pop() if len(units) == 1 else None, True))
 
@@ -576,7 +577,7 @@ class _Turn:
         untraced = untraced_numbers(
             answer, evidences=cited,
             quotes=sources,
-            results=[{**n, "keys": c["result"]["used_evidence_keys"]} for c in succeeded for n in c["result"]["traced_numbers"]],
+            results=[n for c in succeeded for n in c["result"]["traced_numbers"]],
             rows=self.context["evidences"], locale=self.context.get("number_locale"),
             cited_pages={e["page_number"] for e in cited} | {s["page"] for s in sources} | set(pages),
         ) if kind == "answer" else []

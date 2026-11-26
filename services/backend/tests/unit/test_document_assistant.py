@@ -963,3 +963,19 @@ def test_a_chart_read_is_not_started_after_the_budget_is_spent_and_its_time_coun
     assert error.value.code == "AI_ANSWER_TIMEOUT"
     assert timeouts == [60, 5]  # the second model call got what the first DePlot read left
     assert started == [105]  # the second read was never started: 60 s were spent
+
+
+@pytest.mark.parametrize(("code", "answer"), [
+    # QA2 S1: total revenue (triệu đồng) x the 6,5% shipping rate was rejected as "3.242,20 triệu".
+    ("result = round(value('rev') * value('rate') / 100, 2)", "Chi phí vận chuyển là 3.242,20 triệu đồng."),
+    # QA2 S1: the 6-month total was rejected because the same script also read the target in tỷ đồng.
+    ("total = value('rev') + value('rev')\ntarget = value('goal') * 1000\nresult = {'total': total, 'pct': round(total / target * 100, 2)}",
+     "Tổng 99.760 triệu đồng, đạt 45,35% mục tiêu."),
+])
+def test_a_result_keeps_the_magnitude_unit_of_its_own_rows(code, answer):
+    rows = [{**_row("rev", "valid", "table"), "numeric_value": "49880", "raw_text": "49.880", "semantic": {"unit": "VND_MILLION"}},
+            {**_row("rate", "valid", "text"), "numeric_value": "6.5", "raw_text": "6,5%", "semantic": {"unit": "PERCENT"}},
+            {**_row("goal", "valid", "text"), "numeric_value": "220", "raw_text": "220", "semantic": {"unit": "VND_BILLION"}}]
+    result = _tools_answer(rows, {"action": "python", "code": code},
+                           {"action": "answer", "answer": answer, "evidence_keys": ["rev"]})
+    assert result["answer"] == answer

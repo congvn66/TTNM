@@ -306,7 +306,7 @@ try:
     if not sources: raise ValueError('result must contain numbers computed from value(evidence_key), not copied constants or text')
     manual=unique(t for n in numbers for t in (n.typed if isinstance(n,Traced) else typed_of(n)))
     output=json.dumps({'status':'succeeded','result':result,'result_rows':result_rows(result),'used_evidence_keys':[k for k in used if k in sources],
-                       'manual_numbers':list(manual),'traced_numbers':[{'value':str(n),'typed':list(n.typed)} for n in numbers if isinstance(n,Traced) and n.sources],
+                       'manual_numbers':list(manual),'traced_numbers':[{'value':str(n),'typed':list(n.typed),'keys':sorted(n.sources)} for n in numbers if isinstance(n,Traced) and n.sources],
                        'stdout':''.join(printed)},default=str,allow_nan=False)
     if len(output)>30000: raise ValueError('Calculation result too large')
     print(output)

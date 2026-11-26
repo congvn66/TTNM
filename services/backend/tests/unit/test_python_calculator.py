@@ -108,7 +108,7 @@ result = {'sum': sum(rows), 'mean': round(statistics.mean(rows), 2), 'root': mat
     assert result["status"] == "succeeded", result
     assert result["used_evidence_keys"] == ["a", "b"]
     assert result["manual_numbers"] == []  # len(rows) counts Data values, it is not typed
-    assert {"value": "2230.50", "typed": []} in result["traced_numbers"]
+    assert {"value": "2230.50", "typed": [], "keys": ["a", "b"]} in result["traced_numbers"]
 
 
 @pytest.mark.parametrize("code", [
