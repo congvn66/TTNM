@@ -413,6 +413,10 @@ def _named_subject(question: str) -> str | None:
     if not match:
         return None
     first, *rest = match.group(1).split()
+    # A name is capitalised ("Bắc", "Hà Nội", "A") or a code with a digit
+    # ("1", "b2"); a lowercase word is the rest of the question ("nào", "là").
+    if not (first[0].isupper() or any(char.isdigit() for char in first)):
+        return None
     # Keep a multi-word proper name ("Hà Nội"), not the following verb ("là").
     for word in rest:
         if not word[0].isupper():

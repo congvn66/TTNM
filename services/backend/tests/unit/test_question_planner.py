@@ -285,3 +285,12 @@ def test_subject_named_in_the_question_is_kept_instead_of_asking():
         assert plan["status"] == "ready", question
         assert plan["facts"][0]["subject"] == subject
     assert plan_question("Doanh thu là bao nhiêu?", "doc", catalog=catalog).plan["status"] == "needs_clarification"
+
+
+def test_question_words_after_a_subject_word_are_not_taken_as_a_name():
+    catalog = [CatalogEntry("doanh_thu", f"Q{n}", None, None, f"Doanh thu / Q{n}", "table") for n in range(1, 5)]
+    for question in ["Doanh thu khu vực nào cao nhất?", "Doanh thu vùng nào lớn nhất?",
+                     "Doanh thu chi nhánh của công ty là bao nhiêu?", "Doanh thu miền là bao nhiêu?"]:
+        assert plan_question(question, "doc", catalog=catalog).plan["status"] == "needs_clarification", question
+    plan = plan_question("Doanh thu khu vực 2 là bao nhiêu?", "doc", catalog=catalog).plan
+    assert plan["status"] == "ready" and plan["facts"][0]["subject"] == "2"
