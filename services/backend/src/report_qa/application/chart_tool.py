@@ -32,8 +32,9 @@ hai tick lower_tick/upper_tick và đơn vị; label_bbox=null.
 Nếu DePlot mâu thuẫn với ảnh, không phân biệt được dãy số, biểu đồ ngoài phạm vi
 hoặc không đủ căn cứ: method="ambiguous", label_bbox=null. Không đoán.
 measure dùng doanh_thu cho Revenue/doanh thu, loi_nhuan cho profit/lợi nhuận,
-unknown nếu không rõ. unit VND_MILLION nếu million VND/triệu đồng, PERCENT cho %,
-null nếu ảnh không ghi. period=null nếu không có. Giữ nhãn category/series đúng
+unknown nếu không rõ. unit theo đơn vị ảnh ghi: VND, VND_THOUSAND, VND_MILLION, VND_BILLION
+cho đồng/nghìn/triệu/tỷ đồng; THOUSAND, MILLION, BILLION cho nghìn/triệu/tỷ của thứ khác
+(nghìn đơn, triệu tấn); PERCENT cho %; null nếu ảnh không ghi. period=null nếu không có. Giữ nhãn category/series đúng
 như DePlot. confidence 0..1 là đánh giá của mô hình, không phải xác nhận con người.
 """
 
@@ -71,6 +72,7 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
     from report_qa.application.evidence_extraction import (
         _measure,
         _unit_near,
+        unit_note,
     )
     from report_qa.application.numeric_extraction import period_near
 
@@ -117,7 +119,7 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
                         ensure_ascii=False,
                     )
                 )
-        _title, predictions = parse_table(raw)
+        title, predictions = parse_table(raw)
         image = "data:image/png;base64," + base64.b64encode(png).decode()
         verification_raw = ""
         verification_error = None
@@ -263,7 +265,8 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
                         "measure": str(r.get("measure") or _measure(series)),
                         "subject": category,
                         "period": period_near(str(r.get("period") or ""), 0),
-                        "unit": r.get("unit") or _unit_near(series, token),
+                        # The checker's reading of the unit, else the chart's own unit note, else the series name.
+                        "unit": r.get("unit") or unit_note(title or "") or _unit_near(series, token),
                         "dimensions": {"category": category, "series": series},
                     },
                     "table_locator": None,

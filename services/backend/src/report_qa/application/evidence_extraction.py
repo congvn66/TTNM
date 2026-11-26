@@ -119,7 +119,13 @@ _CLAUSE_END = re.compile(r"[,:;–—()]")
 _UNIT_AFTER = re.compile(r"\s*(?:(?P<scale>nghìn|ngàn|triệu|tỷ|tỉ|thousand|million|billion)\b\s*(?P<money>đồng|vnd)?|(?P<plain>đồng|vnd|usd)\b)", re.IGNORECASE)
 _SCALE_UNITS = {"nghìn": "THOUSAND", "ngàn": "THOUSAND", "triệu": "MILLION", "tỷ": "BILLION", "tỉ": "BILLION",
                 "thousand": "THOUSAND", "million": "MILLION", "billion": "BILLION"}
-_UNIT_NOTE = re.compile(r"đơn vị\s*:?\s*([^)\n;]+)", re.IGNORECASE)
+# A unit note, read without diacritics because chart titles come from DePlot's OCR ("Don vì: nghin đồn").
+_UNIT_NOTE = re.compile(
+    r"don vi(?: tinh)?\s*:?\s*(?:(?P<percent>%|phan tram)|(?P<scale>nghin|ngan|trieu|ty|ti|thousand|million|billion)\b"
+    r"\s*(?P<money>dong|vnd)?|(?P<plain>dong|vnd|usd)\b)"
+)
+_FOLDED_SCALES = {"nghin": "THOUSAND", "ngan": "THOUSAND", "trieu": "MILLION", "ty": "BILLION", "ti": "BILLION",
+                  "thousand": "THOUSAND", "million": "MILLION", "billion": "BILLION"}
 SUBJECT_WORDS = 12  # a label, not the sentence
 
 
@@ -136,10 +142,22 @@ def unit_after(text: str, end: int, raw: str) -> str | None:
     return f"VND_{scale}" if match["money"] else scale
 
 
+def _folded(text: str) -> str:
+    plain = "".join(c for c in unicodedata.normalize("NFD", _keyword_text(text)) if not unicodedata.combining(c))
+    return plain.replace("đ", "d")
+
+
 def unit_note(text: str) -> str | None:
-    """Unit an explicit note states: "(đơn vị: triệu đồng)"."""
-    match = _UNIT_NOTE.search(_keyword_text(text))
-    return _unit_near(match.group(1), "") if match else None
+    """Unit an explicit note states: "(đơn vị: triệu đồng)", "Đơn vị: nghìn đơn", "Đơn vị: %"."""
+    match = _UNIT_NOTE.search(_folded(text))
+    if not match:
+        return None
+    if match["percent"]:
+        return "PERCENT"
+    if match["plain"]:
+        return "USD" if match["plain"] == "usd" else "VND"
+    scale = _FOLDED_SCALES[match["scale"]]
+    return f"VND_{scale}" if match["money"] else scale
 
 
 def sentence_semantics(text: str, position: int, raw: str, page_year: str | None) -> dict[str, Any]:

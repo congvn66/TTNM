@@ -224,3 +224,21 @@ def test_grouped_bar_chart_values_get_category_and_series_labels():
     labels = {(e["chart_read"]["category_label"], e["chart_read"]["series_label"]): e["raw_text"]
               for e in result["evidence_batch"]["evidences"]}
     assert labels[("T4", "Miền Nam")] == "35" and labels[("T5", "Miên Bắc")] == "49"
+
+
+def test_a_chart_value_takes_the_unit_its_chart_states():
+    # The S1 orders chart says "Đơn vị: nghìn đơn" (OCR'd as "Don vì: nghin đồn"); its rows had no unit,
+    # so "35 nghìn đơn" could not be traced to the 35 read from it.
+    result = read_chart_region(
+        PDF, REGION, "v", "q", complete=lambda *args: json.dumps({"rows": []}), predictor=lambda image: S1_ORDERS_RAW
+    )
+    assert {e["semantic"]["unit"] for e in result["evidence_batch"]["evidences"]} == {"THOUSAND"}
+
+
+def test_unit_notes_are_read_without_diacritics():
+    from report_qa.application.evidence_extraction import unit_note
+
+    assert unit_note("Biểu đồ 2. Tỷ lệ khách hàng quay lại. Đơn vị: %") == "PERCENT"
+    assert unit_note("Bảng 1 (đơn vị: triệu đồng)") == "VND_MILLION"
+    assert unit_note("Don vì: nghin đồn") == "THOUSAND"
+    assert unit_note("Doanh thu theo tháng") is None
