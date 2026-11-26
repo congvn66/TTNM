@@ -322,6 +322,21 @@ def test_message_idempotency_replays_without_duplicate_answer() -> None:
     finally:
         cleanup_session(created["id"])
 
+def test_client_worker_header_does_not_skip_storing_the_answer() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Worker header"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        asked = client.post(
+            f"/api/v1/sessions/{created['id']}/messages",
+            json={"document_id": document_id, "question": "What was revenue in Q1/2026?"},
+            headers={"X-Worker-Job": "1"},
+        )
+        assert asked.status_code == 200, asked.text
+        assert len(client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["messages"]) == 2
+    finally:
+        cleanup_session(created["id"])
+
+
 def test_unmatched_question_is_rejected_instead_of_sent_to_ai() -> None:
     created = client.post("/api/v1/sessions", json={"title": "Retrieval guard"}).json()["session"]
     try:

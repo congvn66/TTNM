@@ -74,3 +74,22 @@ def test_publish_error_leaves_visible_failed_state(monkeypatch):
         main.complete_document_extraction(sid, did, owner_id=owner)
     assert writes == ["processing", "ready", "failed"]
 
+
+
+def test_answer_job_marks_its_request_as_the_worker(monkeypatch):
+    from report_qa.worker import runner
+
+    session = {"messages": [{"id": "placeholder", "status": "processing"}]}
+    seen = []
+
+    def ask(session_id, payload, request, response):
+        seen.append(getattr(request.state, "worker_job", False))
+        return {"user_message": {"id": "u"}, "assistant_message": {"id": "a", "body": "ok"}}
+
+    monkeypatch.setattr(runner, "get_session", lambda *args: session)
+    monkeypatch.setattr(runner, "ask_session_document", ask)
+    monkeypatch.setattr(runner, "save_catalog", lambda *args: None)
+
+    runner.complete_answer_job({"session_id": "s", "assistant_message_id": "placeholder", "owner_id": "o", "document_id": "d", "question": "q"})
+
+    assert seen == [True]

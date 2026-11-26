@@ -1277,7 +1277,9 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     # working snapshot so temporary messages and intermediate saves cannot
     # become a second persisted conversation before the worker publishes the
     # result into the existing placeholder.
-    worker_mode = request.headers.get("X-Worker-Job") == "1"
+    # Only the in-process worker adapter sets this request-state marker; a
+    # network client can send the X-Worker-Job header but cannot set state.
+    worker_mode = getattr(request.state, "worker_job", False) is True
     if worker_mode:
         session = deepcopy(session)
     trace_id = trace_id_for(request)
@@ -1306,7 +1308,7 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
     # PostgreSQL mode can move the expensive answer path out of the request.
     # The default stays synchronous for the offline compatibility tests; the
     # flag is explicit so operators cannot accidentally run a worker-less UI.
-    if durable_job_queue and settings.async_answer_jobs and request.headers.get("X-Worker-Job") != "1":
+    if durable_job_queue and settings.async_answer_jobs and not worker_mode:
         now = utc_now()
         user_message = {"id": str(uuid4()), "role": "user", "body": payload.question, "document_id": document["id"], "created_at": now, "status": "accepted"}
         assistant_message = {
