@@ -1088,3 +1088,43 @@ def test_a_failed_reextraction_reports_every_edit_as_not_carried_over(monkeypatc
         assert entry["edits_not_carried_over"] == [{"evidence_key": "kept", "numeric_value": "110", "code": "NEW_READING_FAILED"}]
     finally:
         cleanup_session(created["id"])
+
+
+def test_at_most_the_configured_number_of_extractions_run_at_once(monkeypatch) -> None:
+    import asyncio
+    import threading
+    import time
+
+    import httpx
+    from report_qa.application.evidence_extraction import extract_legacy_pdf_artifact
+
+    created = client.post("/api/v1/sessions", json={"title": "Extraction slots"}).json()["session"]
+    lock, running, peak, processing_peak = threading.Lock(), [0], [0], [0]
+
+    def slow_extractor(path, version):
+        with lock:
+            running[0] += 1
+            peak[0] = max(peak[0], running[0])
+            documents = api_main.catalog["sessions"][created["id"]]["documents"]
+            processing_peak[0] = max(processing_peak[0], sum(item["extraction_status"] == "processing" for item in documents))
+        time.sleep(0.2)
+        with lock:
+            running[0] -= 1
+        return extract_legacy_pdf_artifact(path, version)
+
+    monkeypatch.setattr(api_main, "extract_pdf_artifact", slow_extractor)
+
+    async def upload_six():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as async_client:
+            return await asyncio.gather(*[
+                async_client.post(f"/api/v1/sessions/{created['id']}/documents", files={"file": (f"doc{index}.pdf", pdf_with_text("Revenue Q1/2026 was 120."), "application/pdf")})
+                for index in range(6)
+            ])
+
+    try:
+        responses = asyncio.run(upload_six())
+        assert [response.status_code for response in responses] == [200] * 6
+        assert (peak[0], processing_peak[0]) == (2, 2)  # the default REPORT_QA_MAX_PARALLEL_EXTRACTIONS
+        assert {item["extraction_status"] for item in api_main.catalog["sessions"][created["id"]]["documents"]} == {"ready"}
+    finally:
+        cleanup_session(created["id"])

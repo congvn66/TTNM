@@ -26,6 +26,7 @@ class Settings:
     auth_cookie_secure: bool
     auth_session_days: int
     async_answer_jobs: bool
+    max_parallel_extractions: int
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -35,6 +36,9 @@ class Settings:
         storage_backend = os.getenv("STORAGE_BACKEND", "local").strip().lower()
         if storage_backend not in {"local", "r2"}:
             raise RuntimeError("STORAGE_BACKEND must be 'local' or 'r2'")
+        max_parallel_extractions = os.getenv("REPORT_QA_MAX_PARALLEL_EXTRACTIONS", "2").strip()
+        if not max_parallel_extractions.isdigit() or int(max_parallel_extractions) < 1:
+            raise RuntimeError("REPORT_QA_MAX_PARALLEL_EXTRACTIONS must be a whole number of at least 1")
         return cls(
             persistence_backend=backend,
             database_url=os.getenv("DATABASE_URL", "postgresql+psycopg://sourcelens:sourcelens-dev-only@127.0.0.1:5432/sourcelens"),
@@ -48,6 +52,7 @@ class Settings:
             auth_cookie_secure=os.getenv("AUTH_COOKIE_SECURE", "false").strip().lower() in {"1", "true", "yes", "on"},
             auth_session_days=max(1, min(90, int(os.getenv("AUTH_SESSION_DAYS", "30")))),
             async_answer_jobs=os.getenv("ASYNC_ANSWER_JOBS", "false").strip().lower() in {"1", "true", "yes", "on"},
+            max_parallel_extractions=int(max_parallel_extractions),
         )
 
 

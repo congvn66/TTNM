@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -38,6 +39,7 @@ from .jobs import router as jobs_router
 from .library import router as library_router
 from .auth import DEMO_OWNER_ID, owner_id_for_request, router as auth_router, settings_router as auth_settings_router
 from .devices import router as auth_sessions_router
+from .extraction_slots import ExtractionSlots
 from report_qa.config import settings
 from report_qa.infrastructure.postgres import postgres_health
 from report_qa.infrastructure.integrations import readiness as integration_readiness
@@ -670,7 +672,7 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
         raise RuntimeError(f"EXTRACTION_FAILED:{extraction['error']}")
 
 
-def _extract_in_background(session_id: str, document_id: str, trace_id: str | None = None, owner_id: str | UUID | None = None) -> None:
+def _extract_now(session_id: str, document_id: str, trace_id: str | None = None, owner_id: str | UUID | None = None) -> None:
     """Run extraction without the durable queue.
 
     The failure is already stored on the document for the UI; only the worker
@@ -682,8 +684,19 @@ def _extract_in_background(session_id: str, document_id: str, trace_id: str | No
         flow_log("EXTRACTION_BACKGROUND_FAILED", trace_id=trace_id, session_id=session_id, document_id=document_id, error=str(exc))
 
 
+# Every in-process extraction (upload, re-extraction, restart recovery) goes
+# through these slots, so at most REPORT_QA_MAX_PARALLEL_EXTRACTIONS run at once.
+extraction_slots = ExtractionSlots(settings.max_parallel_extractions)
+
+
+async def _extract_in_background(session_id: str, document_id: str, trace_id: str | None = None, owner_id: str | UUID | None = None) -> None:
+    # Waiting on the future holds no thread: a long queue cannot starve the
+    # thread pool that serves the sync endpoints.
+    await asyncio.wrap_future(extraction_slots.submit(_extract_now, session_id, document_id, trace_id, owner_id))
+
+
 def resume_interrupted_extractions(*, background: bool = True) -> list[str]:
-    """Re-run extraction for documents a previous process left "queued"."""
+    """Re-run extraction for documents a previous process left "queued" or "processing"."""
     with catalog_lock:
         pending = [
             (session_id, document["id"])
@@ -694,15 +707,10 @@ def resume_interrupted_extractions(*, background: bool = True) -> list[str]:
     if not pending:
         return []
     flow_log("EXTRACTION_RESUMED", document_count=len(pending))
-
-    def run() -> None:
-        for session_id, document_id in pending:
-            _extract_in_background(session_id, document_id)
-
-    if background:
-        threading.Thread(target=run, name="resume-extractions", daemon=True).start()
-    else:
-        run()
+    futures = [extraction_slots.submit(_extract_now, session_id, document_id) for session_id, document_id in pending]
+    if not background:
+        for future in futures:
+            future.result()
     return [document_id for _, document_id in pending]
 
 
