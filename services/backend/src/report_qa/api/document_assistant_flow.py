@@ -43,11 +43,11 @@ def _model_view(context) -> dict:
 def fit_context(context: dict, question: str, budget: int = MAX_CONTEXT_CHARS) -> dict:
     """The whole document when it fits the budget; otherwise as much of it as fits.
 
-    First the oldest history turns are dropped. If the document alone is still
-    too large, the most relevant pages are sent whole, each with its Data rows
-    and chart regions: pages the question names first, then the others by
-    word overlap with the question and the last exchange (each shared word
-    weighted by how few pages contain it, ties in page order), each page
+    First the oldest history turns are dropped. If the document is still too
+    large, the last exchange (two turns) is kept, so a follow-up keeps its
+    context, and the most relevant pages are sent whole in the room left,
+    each with its Data rows and chart regions: pages the question names
+    first, then the others by page_relevance (ties in page order), each page
     taken while it fits. The model is told which pages were left out.
     """
     history = list(context["history"])
@@ -57,7 +57,8 @@ def fit_context(context: dict, question: str, budget: int = MAX_CONTEXT_CHARS) -
         return context if len(history) == len(context["history"]) else {**context, "history": history}
     scores = page_relevance(context["pages"], question, context["history"])
     named = named_pages(question)
-    room = budget - _size({"pages": [], "data": [], "chart_regions": [], "history": [],
+    recent = context["history"][-2:]
+    room = budget - _size({"pages": [], "data": [], "chart_regions": [], "history": recent,
                            "omitted_pages": [p["page"] for p in context["pages"]]})
     kept = set()
     for page in sorted(context["pages"], key=lambda p: (p["page"] not in named, -scores[p["page"]], p["page"])):
@@ -72,7 +73,7 @@ def fit_context(context: dict, question: str, budget: int = MAX_CONTEXT_CHARS) -
         "pages": [p for p in context["pages"] if p["page"] in kept],
         "evidences": [e for e in context["evidences"] if e["page_number"] in kept],
         "chart_regions": [r for r in context["chart_regions"] if r.get("page_number") in kept],
-        "history": [],
+        "history": recent,
         "omitted_pages": [p["page"] for p in context["pages"] if p["page"] not in kept],
     }
 

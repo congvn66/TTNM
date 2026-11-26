@@ -912,3 +912,18 @@ def test_relevant_pages_use_the_page_ranking_of_fit_context():
 
     assert relevant_pages(_chart_context(), "Số đơn hàng tháng 4?") == {2}
     assert relevant_pages(_chart_context(), "Trang 3 nói gì về số đơn hàng?") == {2, 3}
+
+
+def test_a_trimmed_long_document_keeps_the_last_exchange_for_a_follow_up():
+    # fit_context dropped all history when it trimmed pages, so "Còn năm trước thì sao?" lost its subject.
+    from report_qa.api.document_assistant_flow import _model_view, _size, fit_context
+
+    pages = [{"page": i, "text": ("lợi nhuận gộp " if i == 7 else "nội dung khác ") * 2000} for i in range(1, 21)]
+    history = [{"role": "user", "text": "Câu hỏi cũ " * 50}, {"role": "assistant", "text": "Trả lời cũ " * 50},
+               {"role": "user", "text": "Lợi nhuận gộp năm 2023 là bao nhiêu?"},
+               {"role": "assistant", "text": "Lợi nhuận gộp 2023 là 500 tỷ (trang 7)."}]
+    context = {"pages": pages, "evidences": [], "chart_regions": [], "history": history}
+    fitted = fit_context(context, "Còn năm trước thì sao?", budget=100_000)
+    assert fitted["history"] == history[-2:]
+    assert 7 in [p["page"] for p in fitted["pages"]] and fitted["omitted_pages"]
+    assert _size({**_model_view(fitted), "omitted_pages": fitted["omitted_pages"]}) <= 100_000
