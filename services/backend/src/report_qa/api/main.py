@@ -209,6 +209,10 @@ def favicon() -> Response:
 _load_local_env()
 MAX_PDF_BYTES = 100 * 1024 * 1024
 MAX_PDF_PAGES = 500
+MAX_FILE_NAME_CHARS = 255
+# Control and text-direction characters: U+202E alone can show "fdp.exe" as
+# "exe.pdf" in the document list.
+_HIDDEN_NAME_CHARACTERS = re.compile("[\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 # A stable owner keeps the current single-user demo compatible with the
 # normalized users/chats foreign keys until auth is enabled.
 LOCAL_OWNER_ID = str(DEMO_OWNER_ID)
@@ -451,6 +455,17 @@ def get_session(session_id: str, owner_id: str | UUID | None = None) -> dict[str
     return session
 
 
+def clean_file_name(name: str) -> str:
+    """A display name without hidden characters, capped while keeping its extension."""
+    name = _HIDDEN_NAME_CHARACTERS.sub("", storable(name)).strip()
+    if len(name) <= MAX_FILE_NAME_CHARS:
+        return name
+    stem, dot, extension = name.rpartition(".")
+    if not dot or len(extension) > 10:
+        return name[:MAX_FILE_NAME_CHARS].rstrip()
+    return stem[: MAX_FILE_NAME_CHARS - len(extension) - 1].rstrip() + "." + extension
+
+
 def extract_pdf_pages(path: Any, extraction_name: str, document_version_id: str) -> dict[str, Any]:
     try:
         artifact = storable(extract_pdf_artifact(path, document_version_id))
@@ -475,7 +490,8 @@ def extract_pdf_pages(path: Any, extraction_name: str, document_version_id: str)
 
 
 async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str | None = None) -> dict[str, Any]:
-    name = storable(file.filename or "unnamed.pdf")
+    # Browsers may send a client path; only its last part is the name.
+    name = clean_file_name(re.split(r"[\\/]", file.filename or "unnamed.pdf")[-1])
     if not name.lower().endswith(".pdf"):
         raise HTTPException(status_code=422, detail={"code": "PDF_REQUIRED", "message": "chỉ chấp nhận tệp .pdf"})
     document_id = str(uuid4())
@@ -791,11 +807,11 @@ def update_session_document(session_id: str, document_id: str, payload: Document
     document = next((item for item in session["documents"] if item["id"] == document_id), None)
     if document is None:
         raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})
-    file_name = payload.file_name.strip()
+    file_name = clean_file_name(payload.file_name)
     if not file_name or any(part in file_name for part in ("/", "\\")):
         raise HTTPException(status_code=422, detail={"code": "DOCUMENT_NAME_INVALID", "message": "document name is invalid"})
     if not file_name.lower().endswith(".pdf"):
-        file_name = f"{file_name}.pdf"
+        file_name = clean_file_name(f"{file_name}.pdf")
     if postgres_runtime:
         if not _runtime_for_owner(owner_id).rename_document(session_id, document_id, file_name):
             raise HTTPException(status_code=404, detail={"code": "DOCUMENT_NOT_FOUND", "message": "document not found"})

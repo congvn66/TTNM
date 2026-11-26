@@ -663,6 +663,23 @@ def _upload(session_id: str, text: str, name: str = "doc.pdf") -> str:
     return uploaded.json()["document"]["id"]
 
 
+def test_upload_and_rename_names_keep_the_base_name_without_hidden_characters() -> None:
+    created = client.post("/api/v1/sessions", json={"title": "Names"}).json()["session"]
+    try:
+        names = {}
+        for sent in ("../../../../etc/passwd.pdf", "..\\..\\evil.pdf", "a" * 400 + ".pdf", "Báo cáo \u202e fdp.exe.pdf"):
+            document_id = _upload(created["id"], "Revenue Q1/2026 was 120.", sent)
+            names[sent] = next(item["file_name"] for item in client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["documents"] if item["id"] == document_id)
+        assert names["../../../../etc/passwd.pdf"] == "passwd.pdf"
+        assert names["..\\..\\evil.pdf"] == "evil.pdf"
+        assert len(names["a" * 400 + ".pdf"]) == 255 and names["a" * 400 + ".pdf"].endswith(".pdf")
+        assert names["Báo cáo \u202e fdp.exe.pdf"] == "Báo cáo  fdp.exe.pdf"
+        renamed = client.patch(f"/api/v1/sessions/{created['id']}/documents/{document_id}", json={"file_name": "\u202eBáo cáo"})
+        assert renamed.status_code == 200 and renamed.json()["document"]["file_name"] == "Báo cáo.pdf"
+    finally:
+        cleanup_session(created["id"])
+
+
 def test_clarification_on_one_document_is_not_applied_to_another() -> None:
     created = client.post("/api/v1/sessions", json={"title": "Two documents"}).json()["session"]
     try:
