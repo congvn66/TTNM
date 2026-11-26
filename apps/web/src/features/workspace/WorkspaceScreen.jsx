@@ -817,6 +817,10 @@ function App({ user = null, onSignOut = null, onNavigate }) {
 
   // A conversation opens at its newest turn; a new question scrolls to the
   // bottom; a finished answer scrolls to its own first line.
+  // Opening pins the view to the bottom while the turns finish laying out
+  // (fonts, evidence rows, narrow screens wrapping later), until the user
+  // scrolls or another rule moves the view.
+  const pinnedRef = useRef(false);
   useLayoutEffect(() => {
     const node = chatBodyRef.current;
     const view = chatViewRef.current;
@@ -824,6 +828,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     const opened = view.scope !== chatScope || (view.count === 0 && messages.length > 0);
     const previousAnswer = view.answer;
     Object.assign(view, { scope: chatScope, count: messages.length, answer: lastAnswerState });
+    pinnedRef.current = opened;
     if (opened) { node.scrollTo({ top: node.scrollHeight, behavior: "instant" }); return; }
     if (lastAnswerState && lastAnswerState !== previousAnswer) {
       const article = node.querySelector(`[data-message-id="${CSS.escape(lastAnswer.id)}"]`);
@@ -833,6 +838,18 @@ function App({ user = null, onSignOut = null, onNavigate }) {
       node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
     }
   }, [chatScope, messages.length, lastMessage?.id, lastAnswerState]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const node = chatBodyRef.current;
+    if (!node || typeof ResizeObserver !== "function") return undefined;
+    const keepPinned = () => { if (pinnedRef.current) node.scrollTo({ top: node.scrollHeight, behavior: "instant" }); };
+    const unpin = () => { pinnedRef.current = false; };
+    const observer = new ResizeObserver(keepPinned);
+    observer.observe(node);
+    for (const child of node.children) observer.observe(child);
+    const intents = ["wheel", "touchstart", "keydown", "pointerdown"];
+    intents.forEach((name) => node.addEventListener(name, unpin, { passive: true }));
+    return () => { observer.disconnect(); intents.forEach((name) => node.removeEventListener(name, unpin)); };
+  }, [chatScope, messages.length]);
 
   async function createSession() {
     if (busy) return;
