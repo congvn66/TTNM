@@ -287,6 +287,12 @@ function ChatMessage({ message, busy, evidenceByKey, onCitation, onStop, onRetry
   </article>;
 }
 
+/** Scrolls a page area into view when part of it is off screen (stacked layout on narrow screens). */
+function bringIntoView(node) {
+  const rect = node?.getBoundingClientRect();
+  if (rect && (rect.top < 0 || rect.bottom > window.innerHeight)) node.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
 const clampScale = (value) => Math.max(.35, Math.min(2.5, value));
 
 function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceBbox, onReextract, reextractDisabled }) {
@@ -1060,13 +1066,16 @@ function App({ user = null, onSignOut = null, onNavigate }) {
   const readerRef = useRef(null);
   function openCitation(page, quote = "", bbox = null) {
     setCitationPage(page); setCitationQuote(quote ?? ""); setCitationBbox(normalizedBbox(bbox));
-    const rect = readerRef.current?.getBoundingClientRect();
-    if (rect && (rect.top < 0 || rect.bottom > window.innerHeight)) readerRef.current.scrollIntoView({ block: "start", behavior: "smooth" });
+    bringIntoView(readerRef.current);
   }
 
+  // The number panel opens over the chat, which sits below the reader on
+  // narrow screens.
+  const chatColumnRef = useRef(null);
   async function openEvidence() {
     if (!documentReady) return;
     setEvidenceOpen(true);
+    bringIntoView(chatColumnRef.current);
     try { await loadEvidence(); }
     catch (error) { setEvidenceOpen(false); showNotice(error.message, "error"); }
   }
@@ -1148,7 +1157,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
         <span className={`connection-pill ${readinessState === "ready" ? "online" : readinessState === "offline" ? "offline" : "checking"}`} title={readinessBlockers || readinessLabel}><i></i>{readinessLabel}</span>
         {activeJobs.length > 0 && <button className="job-pill" type="button" aria-label={`Mở trung tâm tác vụ, ${activeJobs.length} tác vụ`} onClick={() => setJobsOpen(true)}><i></i>{activeJobCount > 0 ? `${activeJobCount} đang xử lý` : "Trung tâm tác vụ"}</button>}
         <button className="icon-button" type="button" title={`Chuyển sang ${nextThemeLabel}`} aria-label={`Chuyển sang ${nextThemeLabel}`} onClick={() => setPreference(nextTheme)}><Icon name={resolvedTheme === "dark" ? "moon" : "sun"} size={15} /></button>
-        <button className="audit-button" disabled={!documentReady} onClick={openEvidence}><Icon name="link" size={14} /> Bằng chứng</button>
+        <button className="audit-button" title="Mở bảng số liệu của tài liệu" disabled={!documentReady} onClick={openEvidence}><Icon name="link" size={14} /><span className="audit-button-label">Bằng chứng</span></button>
         <ProfileMenu user={user} onSignOut={onSignOut} onNavigate={onNavigate} />
         <input ref={uploadRef} type="file" accept="application/pdf,.pdf" hidden onChange={(event) => upload(event.target.files?.[0])} />
       </div>
@@ -1156,7 +1165,7 @@ function App({ user = null, onSignOut = null, onNavigate }) {
     <main className="workspace" id="main-content">
       <SessionBrowser sessions={sessions} filteredSessions={filteredSessions} activeSession={activeSession} activeDocument={activeDocument} booting={booting} search={search} onSearch={setSearch} busy={busy} onSelectSession={(session) => { setActiveSessionId(session.id); setActiveDocumentId(session.documents[0]?.id ?? null); }} onSelectDocument={setActiveDocumentId} onCreate={createSession} onUpload={() => uploadRef.current?.click()} onDialog={openDialog} onNavigate={onNavigate} />
       <section className="reader-column" ref={readerRef}><PdfViewer document={activeDocument} sessionId={activeSession?.id} citationPage={citationPage} evidenceQuote={citationQuote} evidenceBbox={citationBbox} onReextract={canReextract ? reextractDocument : undefined} reextractDisabled={busy} />{notice && <div className={`toast ${noticeKind}`} role={noticeKind === "error" ? "alert" : "status"}><span>{notice}</span><button type="button" className="toast-close" aria-label="Đóng thông báo" onClick={clearNotice}><Icon name="close" size={13} /></button></div>}</section>
-      <aside className="chat-column">
+      <aside className="chat-column" ref={chatColumnRef}>
         <header className="chat-header"><div className="ai-avatar">S</div><div><h2>Trợ lý tài liệu</h2><span>{activeDocument ? activeDocument.file_name : "Chưa chọn tài liệu"}</span></div><span className="mode-badge">{modeLabel}</span></header>
         <div className="chat-body" ref={chatBodyRef}>
           <p className="visually-hidden" aria-live="polite">{chatAnnouncement}</p>

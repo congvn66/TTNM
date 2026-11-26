@@ -330,7 +330,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
   .app-shell { grid-template-rows: auto 1fr; }
   .topbar { min-height: 62px; flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
   .brand { min-width: 0; }
-  .brand small, .connection-pill, .audit-button, .storage-pill, .topbar-context, .profile-copy, .profile-chip > .ui-icon { display: none; }
+  .brand small, .connection-pill, .storage-pill, .topbar-context, .profile-copy, .profile-chip > .ui-icon { display: none; }
   .top-actions { margin-left: auto; }
   .workspace { display: block; }
   /* Stacked on a phone: the sidebar takes the height of its content, the top
@@ -601,7 +601,10 @@ body { background: var(--canvas); }
   .top-actions .connection-pill i { flex: 0 0 auto; }
   .top-actions .connection-pill { font-size: 0; }
   .top-actions .connection-pill i { margin: 0; }
-  .audit-button { display: none; }
+  /* The only way to open the number panel: keep it, as an icon with its name for screen readers. */
+  .audit-button { width: 34px; padding: 0; }
+  .audit-button .ui-icon { display: inline-block; }
+  .audit-button-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 .document-list-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; padding: 6px 4px 3px 4px; color: var(--muted); font-size: var(--text-sm); font-weight: 700; }
 .session-upload-button { flex: 0 0 auto; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: 6px; padding: 4px 6px; background: var(--gold-soft); color: var(--gold-dark); font-size: var(--text-sm); font-weight: 750; cursor: pointer; }
