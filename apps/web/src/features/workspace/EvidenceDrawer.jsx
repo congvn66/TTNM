@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { request } from "../../shared/api/client.js";
 import { Icon } from "./Icon.jsx";
-import { dataStatusLabel, evidenceLabel, formatDateTime, formatNumber, numbersDiffer } from "./format.js";
+import { dataStatusLabel, evidenceLabel, needsCheck, formatDateTime, formatNumber, numbersDiffer } from "./format.js";
 
 const REASON_MIN_LENGTH = 3;
 const EDIT_ERROR_FALLBACK = "Không đọc được số này. Hãy nhập lại, ví dụ 21.500 hoặc 21500.";
@@ -175,7 +175,7 @@ export function EvidenceDrawer({ data, basePath, onClose, onFocus, onSaved, onRe
           <small className="evidence-record-label">{label || "Số trong văn bản, chưa có nhãn"}</small>
           {edited && <small>Đã sửa · số gốc trong PDF: {formatNumber(evidence.original_numeric_value) || evidence.raw_text}</small>}
           {evidence.current_numeric_value == null && evidence.raw_text && <small>Đã đọc: “{evidence.raw_text}”</small>}
-          {status && <small className="evidence-record-status">{status}</small>}
+          {status && <small className={needsCheck(evidence.data_status) ? "evidence-record-status" : undefined}>{status}</small>}
         </button>
         {editingKey === evidence.evidence_key
           ? <EditForm evidence={evidence} basePath={basePath} onCancel={() => setEditingKey(null)} onConflict={onReload} onSaved={(item, result) => { setEditingKey(null); setOpenHistory(null); onSaved(item, result); }} />

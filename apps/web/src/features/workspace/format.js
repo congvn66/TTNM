@@ -66,15 +66,23 @@ export function evidenceLabel(evidence) {
   return parts.map((part) => readablePart(part && typeof part === "object" ? part.label : part)).filter(Boolean).join(" · ");
 }
 
+// "missing" is the report's own "no data" mark (a "—" cell): a fact read from
+// the PDF, not a number that failed to be read.
 const DATA_STATUS_LABELS = {
-  missing: "Chưa đọc được số",
+  missing: "Không có số liệu",
+  unreadable: "Chưa đọc được số",
   ambiguous: "Chưa rõ là số nào",
 };
 
-/** Why a number needs checking, or "" when it is verified. */
+/** What the status of a number says, or "" when it is a verified number. */
 export function dataStatusLabel(status) {
   if (!status || status === "valid") return "";
   return DATA_STATUS_LABELS[status] ?? "Cần kiểm tra";
+}
+
+/** True when the number was not verified and the user should check it. */
+export function needsCheck(status) {
+  return Boolean(status) && status !== "valid" && status !== "missing";
 }
 
 // Python's text for a Decimal, e.g. Decimal('3110'). People never see it.

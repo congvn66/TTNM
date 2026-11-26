@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { distinctFormulas, formatNumber, numbersDiffer, readableLabel, resultRows, scriptResultRows, withoutDecimalRepr } from "./format.js";
+import { dataStatusLabel, distinctFormulas, formatNumber, needsCheck, numbersDiffer, readableLabel, resultRows, scriptResultRows, withoutDecimalRepr } from "./format.js";
 
 it("formats canonical decimals in Vietnamese style", () => {
   expect(formatNumber("21350")).toBe("21.350");
@@ -55,4 +55,15 @@ it("labels script result rows from the API, or from the one Data row they copy",
 it("shows a calculation that was run twice once", () => {
   const run = { expression: "result = value('ev-1')", result: "21350" };
   expect(distinctFormulas([run, { ...run }, { ...run, result: "1" }])).toHaveLength(2);
+});
+
+it("says a no-data cell has no data, and asks to check only unverified numbers", () => {
+  expect(dataStatusLabel("missing")).toBe("Không có số liệu");
+  expect(dataStatusLabel("unreadable")).toBe("Chưa đọc được số");
+  expect(dataStatusLabel("ambiguous")).toBe("Chưa rõ là số nào");
+  expect(dataStatusLabel("valid")).toBe("");
+  expect(needsCheck("missing")).toBe(false);
+  expect(needsCheck("valid")).toBe(false);
+  expect(needsCheck("ambiguous")).toBe(true);
+  expect(needsCheck("error")).toBe(true);
 });

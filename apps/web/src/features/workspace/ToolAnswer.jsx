@@ -1,5 +1,5 @@
 import "./toolAnswer.css";
-import { dataStatusLabel, formatNumber, numbersDiffer, readableLabel, scriptResultRows, withoutDecimalRepr } from "./format.js";
+import { dataStatusLabel, formatNumber, needsCheck, numbersDiffer, readableLabel, scriptResultRows, withoutDecimalRepr } from "./format.js";
 
 // A number counts as edited when the value the answer used is not the value
 // first read from the PDF. Both are canonical decimals from the API; the PDF
@@ -18,16 +18,17 @@ export function EvidenceList({ items, evidenceByKey, onCitation }) {
     <h4>Bằng chứng trong PDF</h4>
     {items.map((item, index) => {
       const status = item.kind === "data" ? dataStatusLabel(item.data_status) : "";
+      const unverified = item.kind === "data" && needsCheck(item.data_status);
       const kindLabel = item.kind === "text" ? "trích nguyên văn" : item.kind === "data" ? item.method_label : "trang đã đọc";
       const edited = item.kind === "data" ? editedRow(item, evidenceByKey) : null;
-      return <button type="button" className={`evidence-item ${item.kind}${status ? " unverified" : ""}`} key={`${item.kind}-${item.evidence_key ?? item.quote ?? item.page}-${index}`} onClick={() => onCitation?.(item.page, item.quote ?? "", item.bbox)} title="Mở vị trí trong PDF">
+      return <button type="button" className={`evidence-item ${item.kind}${unverified ? " unverified" : ""}`} key={`${item.kind}-${item.evidence_key ?? item.quote ?? item.page}-${index}`} onClick={() => onCitation?.(item.page, item.quote ?? "", item.bbox)} title="Mở vị trí trong PDF">
         <span className="evidence-index">{index + 1}</span>
         <span className="evidence-body">
           <span className="evidence-meta">Trang {item.page} · {kindLabel}</span>
           {item.kind === "text" && <q>{item.quote}</q>}
           {item.kind === "data" && <span className="evidence-data"><span>{itemLabel(item)}</span><b>{formatNumber(item.value) || item.raw_text || "—"}</b></span>}
           {edited && <small>Đã sửa trong Dữ liệu · số trong PDF: “{item.raw_text ?? formatNumber(edited.original_numeric_value)}”</small>}
-          {status && <small className="evidence-warning">{status} · kiểm tra trong Dữ liệu</small>}
+          {status && (unverified ? <small className="evidence-warning">{status} · kiểm tra trong Dữ liệu</small> : <small>{status}</small>)}
         </span>
       </button>;
     })}
