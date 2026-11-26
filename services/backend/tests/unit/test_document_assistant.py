@@ -100,7 +100,7 @@ def test_numbers_traced_to_results_rows_quotes_and_question_are_accepted(answer)
 
     row = {"evidence_key": "k", "numeric_value": "1250500", "raw_text": "1.250.500",
            "table_locator": {"row_header": "Miền Bắc", "column_header": "Q2/2026"}}
-    assert untraced_numbers(answer, question="So với 2025 thì sao?", evidences=[row],
+    assert untraced_numbers(answer, evidences=[row],
                             quotes=[{"page": 1, "quote": "Miền Nam chiếm 30% doanh thu."}], results=[{"value": "0.170547", "keys": []}]) == []
 
 
@@ -118,7 +118,7 @@ def test_honest_non_quantities_are_not_checked(answer):
     from report_qa.application.document_assistant import untraced_numbers
 
     row = {"evidence_key": "k", "numeric_value": "10", "raw_text": "10", "page_number": 5}
-    assert untraced_numbers(answer, question="Doanh thu?", evidences=[row], quotes=[], results=[], cited_pages={5}) == []
+    assert untraced_numbers(answer, evidences=[row], quotes=[], results=[], cited_pages={5}) == []
 
 
 def test_digits_inside_labels_and_uncited_page_refs_are_not_sources():
@@ -126,9 +126,9 @@ def test_digits_inside_labels_and_uncited_page_refs_are_not_sources():
 
     row = {"evidence_key": "k", "numeric_value": "10", "raw_text": "10", "page_number": 5,
            "table_locator": {"row_header": "Doanh thu", "column_header": "Q4/2024"}}
-    assert untraced_numbers("Q4/2024 là 4 tỷ.", question="Q4/2024?", evidences=[row], quotes=[], results=[],
+    assert untraced_numbers("Q4/2024 là 4 tỷ.", evidences=[row], quotes=[], results=[],
                             cited_pages={5}) == ["4 tỷ"]
-    assert untraced_numbers("Doanh thu là 10 (trang 7).", question="?", evidences=[row], quotes=[], results=[],
+    assert untraced_numbers("Doanh thu là 10 (trang 7).", evidences=[row], quotes=[], results=[],
                             cited_pages={5}) == ["7"]
 
 
@@ -141,7 +141,7 @@ def test_answer_numbers_are_read_in_the_number_format_of_their_source(locale):
     large = {"evidence_key": "l", "numeric_value": "1250", "raw_text": "1.250"}
 
     def check(answer, row, quotes=()):
-        return untraced_numbers(answer, question="?", evidences=[row] if row else [], results=[],
+        return untraced_numbers(answer, evidences=[row] if row else [], results=[],
                                 quotes=[{"page": 1, "quote": quote} for quote in quotes],
                                 locale=locale)
 
@@ -156,10 +156,10 @@ def test_a_number_read_two_ways_traces_only_when_the_source_fixes_the_format():
     from report_qa.application.document_assistant import untraced_numbers
 
     result = [{"value": "1250", "keys": []}]  # a python result has no printed text of its own
-    assert untraced_numbers("Tổng là 1.250.", question="?", evidences=[], quotes=[], results=result) == ["1.250"]
-    assert untraced_numbers("Tổng là 1.250.", question="?", evidences=[], quotes=[], results=result, locale="vi") == []
+    assert untraced_numbers("Tổng là 1.250.", evidences=[], quotes=[], results=result) == ["1.250"]
+    assert untraced_numbers("Tổng là 1.250.", evidences=[], quotes=[], results=result, locale="vi") == []
     printed = [{"evidence_key": "k", "numeric_value": "1000", "raw_text": "1.000"}]
-    assert untraced_numbers("Tổng là 1.250.", question="?", evidences=[], quotes=[], rows=printed,
+    assert untraced_numbers("Tổng là 1.250.", evidences=[], quotes=[], rows=printed,
                             results=[{"value": "1250", "keys": ["k"]}]) == []
 
 
@@ -170,7 +170,7 @@ def test_a_corrected_number_does_not_trace_through_its_printed_text_or_a_quote_o
     row = {"evidence_key": "k", "page_number": 1, "numeric_value": "1350", "raw_text": "1.250"}
     quote = [{"page": 1, "quote": "Doanh thu năm 2023 đạt 1.250 tỷ đồng."}]
     other_page = [{"page": 2, "quote": "Chi phí năm 2023 là 1.250 tỷ đồng."}]
-    check = lambda answer, quotes: untraced_numbers(answer, question="?", evidences=[row], quotes=quotes, results=[],
+    check = lambda answer, quotes: untraced_numbers(answer, evidences=[row], quotes=quotes, results=[],
                                                     rows=[row], locale="vi")
     assert check("Doanh thu 2023 là 1.250 tỷ đồng.", []) == ["1.250 tỷ"]
     assert check("Doanh thu 2023 là 1.250 tỷ đồng.", quote) == ["1.250 tỷ"]
@@ -178,13 +178,46 @@ def test_a_corrected_number_does_not_trace_through_its_printed_text_or_a_quote_o
     assert check("Chi phí 2023 là 1.250 tỷ đồng.", other_page) == []
     unread = {"evidence_key": "u", "page_number": 1, "numeric_value": None, "raw_text": "42.03", "data_status": "ambiguous",
               "source_type": "chart"}
-    assert untraced_numbers("Khoảng 42,03%.", question="?", evidences=[unread], quotes=[], results=[], locale="vi") == []
+    assert untraced_numbers("Khoảng 42,03%.", evidences=[unread], quotes=[], results=[], locale="vi") == []
+
+
+def test_the_question_is_not_a_source_of_quantities():
+    # "có đạt 500 tỷ không?" let "đạt 500 tỷ" pass; a leading question let its premise through.
+    complete = sequence(
+        {"action": "answer", "answer": "Đúng, doanh thu Q1 là 5.000 tỷ.", "evidence_keys": ["a"]},
+        {"action": "answer", "answer": "Không, doanh thu Q1 là 100 tỷ.", "evidence_keys": ["a"]},
+    )
+    result = run_assistant("Có phải doanh thu Q1 là 5.000 tỷ không?", context(), complete=complete, read_chart=Mock())
+    assert result["answer"] == "Không, doanh thu Q1 là 100 tỷ."
+    assert json.loads(complete.call_args.args[1])["tool_results"][0]["untraced_numbers"] == ["5.000 tỷ"]
+
+
+@pytest.mark.parametrize(("answer", "result", "untraced"), [
+    ("Doanh thu giảm 5%.", "0.05", ["5%"]),
+    ("Doanh thu tăng 3,2%.", "-3.2", ["3,2%"]),
+    ("Doanh thu giảm 3,2%.", "-3.2", []),
+    ("Doanh thu tăng 17,05%.", "0.1705", []),
+    ("Chênh lệch là 3,2%.", "-3.2", []),  # no direction word: the magnitude is enough
+])
+def test_a_direction_word_must_agree_with_the_sign_of_a_python_result(answer, result, untraced):
+    from report_qa.application.document_assistant import untraced_numbers
+
+    assert untraced_numbers(answer, evidences=[], quotes=[], results=[{"value": result, "keys": []}], locale="vi") == untraced
+
+
+def test_a_negative_data_value_is_signed_but_a_positive_one_is_not():
+    from report_qa.application.document_assistant import untraced_numbers
+
+    falling = {"evidence_key": "f", "numeric_value": "-3.2", "raw_text": "-3,2%"}
+    rate = {"evidence_key": "r", "numeric_value": "5", "raw_text": "5%"}
+    assert untraced_numbers("Biên lợi nhuận tăng 3,2%.", evidences=[falling], quotes=[], results=[], locale="vi") == ["3,2%"]
+    assert untraced_numbers("Doanh thu giảm 5%.", evidences=[rate], quotes=[], results=[], locale="vi") == []
 
 
 def test_a_number_from_an_uncited_row_is_not_traced():
     from report_qa.application.document_assistant import untraced_numbers
 
-    assert untraced_numbers("Q2 là 130.", question="Q2?", evidences=[], quotes=[], results=[]) == ["130"]
+    assert untraced_numbers("Q2 là 130.", evidences=[], quotes=[], results=[]) == ["130"]
 
 
 def test_ungrounded_answer_is_retried_unless_not_found():
