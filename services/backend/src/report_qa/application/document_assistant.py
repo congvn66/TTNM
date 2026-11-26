@@ -139,8 +139,8 @@ def data_rows(evidences: list[dict]) -> list[dict]:
 _SCALE_WORD = re.compile(r"\s*(nghìn|ngàn|triệu|tỷ|tỉ)(?!\w)", re.IGNORECASE)
 _SCALE = {"nghìn": Decimal(10**3), "ngàn": Decimal(10**3), "triệu": Decimal(10**6), "tỷ": Decimal(10**9), "tỉ": Decimal(10**9)}
 # Magnitude of a Data row's unit; PERCENT is "%". Any other unit says nothing about magnitude.
-_UNIT = {"VND": Decimal(1), "VND_THOUSAND": Decimal(10**3), "VND_MILLION": Decimal(10**6),
-         "VND_BILLION": Decimal(10**9), "PERCENT": "%"}
+_UNIT = {"VND": Decimal(1), "VND_THOUSAND": Decimal(10**3), "VND_MILLION": Decimal(10**6), "VND_BILLION": Decimal(10**9),
+         "THOUSAND": Decimal(10**3), "MILLION": Decimal(10**6), "BILLION": Decimal(10**9), "PERCENT": "%"}
 _PAGE_WORD = re.compile(r"(?:\btrang|\bpage)\s+$", re.IGNORECASE)
 # A direction word before a number, at most one word apart, gives it a sign: "giảm 5%", "tăng trưởng 3,2%".
 _DIRECTION = re.compile(r"\b(tăng|giảm)(?:\s+\w+)?\s+$", re.IGNORECASE)

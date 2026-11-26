@@ -141,8 +141,10 @@ def header_period(headers: list[str | None], page_year: str | None = None) -> di
 
 
 def single_year(text: str) -> str | None:
-    """The page's year when exactly one year is written on it."""
-    years = {m["year"] for m in PERIOD.finditer(text) if m["year"]}
+    """The page's year when exactly one year is written on it, alone or in a period ("quý 1/2026")."""
+    years = {_full_year(year) for m in PERIOD.finditer(text)
+             for year in (m["year"], m["quarter_year"], m["quarter_yy"], m["months_year"], m["half_year"], m["month_year"])
+             if year}
     return years.pop() if len(years) == 1 else None
 
 

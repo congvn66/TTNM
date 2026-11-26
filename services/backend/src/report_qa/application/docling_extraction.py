@@ -75,9 +75,10 @@ def extract_docling_artifact(
 
     # Reuse semantic helpers, without invoking the legacy extractor.
     from report_qa.application.evidence_extraction import (
-        _measure,
         _unit_near,
         cell_semantics,
+        sentence_semantics,
+        unit_note,
     )
     from report_qa.application.ocr_extraction import TesseractPdfOcr
 
@@ -167,6 +168,7 @@ def extract_docling_artifact(
             extraction_method=None,
             confidence=0.85,
             headers=(),
+            semantic=None,
         ):
             try:
                 value = decimal_text(raw, locale)
@@ -199,7 +201,7 @@ def extract_docling_artifact(
                 "method_label": "đọc từ ô bảng"
                 if source == "table"
                 else "đọc từ văn bản",
-                "semantic": {
+                "semantic": semantic or {
                     "measure": measure,
                     "subject": locator.get("row_header") if locator else None,
                     "period": period,
@@ -297,6 +299,12 @@ def extract_docling_artifact(
                 else:
                     raw = matches[0].group()
                 emit(raw, context, number, box, key, "table", locator, original=text, headers=row_headers + headers)
+                # A cell's unit is its own "%", else what its headers state, else the table's unit note;
+                # prose near the table ("tỷ lệ phần trăm khách hàng...") is not the cell's unit.
+                evidence[-1]["semantic"]["unit"] = (
+                    "PERCENT" if text.endswith("%") else _unit_near(HEADER_JOIN.join(row_headers + headers), "")
+                    or unit_note(nearby)
+                )
                 if matches[0] is None:
                     evidence[-1].update(numeric_value=None, data_status="missing")
                 elif len(matches) > 1:
@@ -394,7 +402,13 @@ def extract_docling_artifact(
                         )
                         if any(e["evidence_key"] == key for e in evidence):
                             continue
-                        emit(raw, text.get("text", ""), number, box, key, "text")
+                        # A word the Docling text does not contain keeps its number, unlabelled.
+                        semantic = (
+                            sentence_semantics(item_text, position, raw.rstrip(".,"), page_years.get(number))
+                            if position is not None
+                            else {"measure": "unknown", "subject": None, "period": None, "unit": None, "dimensions": {}}
+                        )
+                        emit(raw, item_text, number, box, key, "text", semantic=semantic)
         batch = {
             "schema_version": 2,
             "document_version_id": document_version_id,

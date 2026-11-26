@@ -352,6 +352,21 @@ def test_headings_and_period_numbers_are_not_published_as_values(tmp_path):
     assert [e["raw_text"] for e in evidences] == ["220"]
 
 
+def test_a_text_number_is_labelled_from_its_own_sentence(tmp_path):
+    # 6,5% and the 220 target were labelled "Doanh thu · 2026" from the paragraph's first measure word.
+    evidences = _text_artifact(tmp_path, [(
+        "text",
+        "Doanh thu quý 1 nam 2026 cao. Chi phi van chuyen trong quý 2 bang 6,5% tong doanh thu. "
+        "Muc tieu doanh thu nam 2026 la 220 VND.",
+    )])
+    rate, target = evidences
+    assert rate["raw_text"] == "6,5%"
+    assert rate["semantic"]["measure"] == "unknown" and rate["semantic"]["period"]["label"] == "Q2/2026"
+    assert rate["semantic"]["subject"] == "Chi phi van chuyen trong quý 2 bang" and rate["semantic"]["unit"] == "PERCENT"
+    assert target["semantic"]["measure"] == "doanh_thu" and target["semantic"]["period"]["label"] == "2026"
+    assert target["semantic"]["unit"] == "VND"
+
+
 def test_native_chart_label_has_source_word_bbox(tmp_path):
     import pymupdf
 
@@ -447,3 +462,15 @@ def test_docling_cell_semantics_come_from_its_own_header_path():
     assert numbers[(1, 1)]["semantic"]["measure"] == "doanh_thu"
     assert numbers[(2, 3)]["table_locator"]["row_header"] == "Q2"  # the "-" cell left of it is a value
     assert numbers[(2, 3)]["semantic"]["subject"] == "Q2"
+
+
+def test_a_cell_unit_comes_from_its_headers_or_the_table_note_not_nearby_prose():
+    # S1's table in triệu đồng was tagged PERCENT from "tỷ lệ phần trăm khách hàng" in the paragraph above it.
+    from report_qa.application.evidence_extraction import unit_after, unit_note
+
+    nearby = "Tỷ lệ khách hàng quay lại là tỷ lệ phần trăm khách hàng. Bảng 1. Doanh thu (đơn vị: triệu đồng)"
+    assert unit_note(nearby) == "VND_MILLION"
+    assert unit_note("Tỷ lệ phần trăm khách hàng quay lại.") is None
+    assert unit_after("đạt 33 nghìn đơn", 6, "33") == "THOUSAND"
+    assert unit_after("là 220 tỷ đồng.", 6, "220") == "VND_BILLION"
+    assert unit_after("đạt 33 đơn", 6, "33") is None

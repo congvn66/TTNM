@@ -14,7 +14,16 @@ from typing import Any
 from uuid import uuid4
 
 from report_qa.domain.contracts import validate_document_evidence_v2
-from report_qa.application.numeric_extraction import HEADER_JOIN, canonical_decimal, header_period, period_near, single_year
+from report_qa.application.numeric_extraction import (
+    HEADER_JOIN,
+    PERIOD,
+    _period,
+    canonical_decimal,
+    header_period,
+    period_near,
+    quantities,
+    single_year,
+)
 from report_qa.application.ocr_extraction import TesseractPdfOcr
 from report_qa.application.table_extraction import PdfPlumberTableExtractor
 
@@ -104,6 +113,61 @@ def cell_semantics(headers: list[str | None], context: str, raw: str, page_year:
     return _measure(context), period_near(context, max(0, context.rfind(raw)))
 
 
+_SENTENCE_END = re.compile(r"[.!?;](?=\s)|\n")
+_CLAUSE_END = re.compile(r"[,:;–—()]")
+# What is written right after a number: "6,5%", "220 tỷ đồng", "33 nghìn đơn", "26.900 VND".
+_UNIT_AFTER = re.compile(r"\s*(?:(?P<scale>nghìn|ngàn|triệu|tỷ|tỉ|thousand|million|billion)\b\s*(?P<money>đồng|vnd)?|(?P<plain>đồng|vnd|usd)\b)", re.IGNORECASE)
+_SCALE_UNITS = {"nghìn": "THOUSAND", "ngàn": "THOUSAND", "triệu": "MILLION", "tỷ": "BILLION", "tỉ": "BILLION",
+                "thousand": "THOUSAND", "million": "MILLION", "billion": "BILLION"}
+_UNIT_NOTE = re.compile(r"đơn vị\s*:?\s*([^)\n;]+)", re.IGNORECASE)
+SUBJECT_WORDS = 12  # a label, not the sentence
+
+
+def unit_after(text: str, end: int, raw: str) -> str | None:
+    """Unit written right after a number in text; None when nothing is written."""
+    if raw.endswith("%"):
+        return "PERCENT"
+    match = _UNIT_AFTER.match(text, end)
+    if not match:
+        return None
+    if match["plain"]:
+        return "USD" if match["plain"].casefold() == "usd" else "VND"
+    scale = _SCALE_UNITS[match["scale"].casefold()]
+    return f"VND_{scale}" if match["money"] else scale
+
+
+def unit_note(text: str) -> str | None:
+    """Unit an explicit note states: "(đơn vị: triệu đồng)"."""
+    match = _UNIT_NOTE.search(_keyword_text(text))
+    return _unit_near(match.group(1), "") if match else None
+
+
+def sentence_semantics(text: str, position: int, raw: str, page_year: str | None) -> dict[str, Any]:
+    """Measure, subject, period and unit that a text number's own sentence states for it.
+
+    Only the sentence part before the number is read: its nearest measure word, its
+    nearest period (a bare quarter or month takes the page's year) and, as
+    subject, the opening words of the number's own phrase: from the clause
+    start or the previous number and its unit, whichever is later ("số đơn
+    hàng tháng 6 đạt" for 33). The unit is what is written right after the
+    number. Nothing is borrowed from other sentences of the paragraph.
+    """
+    start = max((m.end() for m in _SENTENCE_END.finditer(text, 0, position)), default=0)
+    before = text[start:position]
+    phrase_start = max((m.end() for m in _CLAUSE_END.finditer(before)), default=0)
+    for match in quantities(before):
+        phrase_start = max(phrase_start, (_UNIT_AFTER.match(before, match.end()) or match).end())
+    phrase = " ".join(before[phrase_start:].split()[:SUBJECT_WORDS])
+    periods = [period for match in PERIOD.finditer(before) if (period := _period(match, page_year))]
+    return {
+        "measure": _last_measure(before),
+        "subject": phrase if any(c.isalpha() for c in phrase) else None,
+        "period": periods[-1] if periods else None,
+        "unit": unit_after(text, position + len(raw), raw),
+        "dimensions": {},
+    }
+
+
 def _unit_near(text: str, raw: str) -> str | None:
     lowered = _keyword_text(text)
     if raw.endswith("%") or "phần trăm" in lowered or "percent" in lowered:
@@ -125,19 +189,28 @@ def _unit_near(text: str, raw: str) -> str | None:
     return None
 
 
+_MEASURE_ALIASES = (
+    (("doanh thu", "revenue", "dtt"), "doanh_thu"),
+    (("lợi nhuận", "profit", "lnst"), "loi_nhuan"),
+    (("bookings",), "bookings"),
+    (("wer",), "wer"),
+    (("cer",), "cer"),
+)
+
+
 def _measure(text: str) -> str:
     lowered = _keyword_text(text)
-    aliases = (
-        (("doanh thu", "revenue", "dtt"), "doanh_thu"),
-        (("lợi nhuận", "profit", "lnst"), "loi_nhuan"),
-        (("bookings",), "bookings"),
-        (("wer",), "wer"),
-        (("cer",), "cer"),
-    )
-    for names, key in aliases:
+    for names, key in _MEASURE_ALIASES:
         if any(name in lowered for name in names):
             return key
     return "unknown"
+
+
+def _last_measure(text: str) -> str:
+    """The measure word written last in text: the one nearest a number that follows it."""
+    lowered = _keyword_text(text)
+    found = [(lowered.rfind(name), key) for names, key in _MEASURE_ALIASES for name in names if name in lowered]
+    return max(found)[1] if found else "unknown"
 
 
 def _bbox_in_box(box: list[float], length: int, start: int, end: int, page_width: float, page_height: float) -> list[float]:
