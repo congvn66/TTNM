@@ -122,6 +122,13 @@ def test_names_the_runtime_provides_cannot_be_rebound(code):
     assert result["status"] == "failed" and "reserved name" in result["error"]
 
 
+def test_numbers_passed_as_keyword_arguments_are_reported():
+    # math.prod(..., start=12345) used to give manual [] and a "traced" 1234500.
+    result = run_calculation("result = math.prod([value('a')], start=12345)", facts())
+    assert result["status"] == "succeeded"
+    assert result["manual_numbers"] == ["12345"]
+
+
 def test_a_number_built_from_strings_is_reported_as_manual():
     # The script text has no number literal; the card used to show row a as the only input.
     disguised = run_calculation("result = value('a') * 0 + int('1' + '0' + '1' + '0')", facts())

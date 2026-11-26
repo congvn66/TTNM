@@ -217,10 +217,13 @@ for _method in ('__neg__','__pos__','__abs__','__round__','quantize','sqrt','ln'
     setattr(Traced,_method,same_provenance(_method))
 def module_function(fn):
     def call(*args, **kwargs):
-        args=[list(a) if not is_number(a) and not isinstance(a,(str,dict)) and hasattr(a,'__iter__') else a for a in args]
+        listed=lambda a: list(a) if not is_number(a) and not isinstance(a,(str,dict)) and hasattr(a,'__iter__') else a
+        args=[listed(a) for a in args]
+        kwargs={k:listed(a) for k,a in kwargs.items()}
         number=fn(*args,**kwargs)
         if not is_number(number): return number
-        sources,typed=provenance(args)
+        # Keyword arguments (math.prod(start=...)) shape the result as much as positional ones.
+        sources,typed=provenance(args+list(kwargs.values()))
         return traced(Decimal(str(number)) if isinstance(number,float) else Decimal(number),sources,typed)
     return call
 def namespace(module, names):
