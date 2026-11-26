@@ -1,6 +1,7 @@
 """Persist document-aware assistant answers using the local session runtime."""
 
 import json
+from collections import defaultdict
 from uuid import uuid4
 
 from report_qa.api.ai_provider import MAX_ANSWER_CHARS, ProviderError, planner_client
@@ -50,21 +51,27 @@ def fit_context(context: dict, question: str, budget: int = MAX_CONTEXT_CHARS) -
     first, then the others by page_relevance (ties in page order), each page
     taken while it fits. The model is told which pages were left out.
     """
+    # Each part is measured once: a 250-page document has tens of thousands of rows.
+    data = data_rows(context["evidences"])
+    document_size = _size({"pages": context["pages"], "data": data, "chart_regions": context["chart_regions"], "history": []})
     history = list(context["history"])
-    while history and _size(_model_view({**context, "history": history})) > budget:
+    while history and document_size + _size(history) > budget:
         history.pop(0)
-    if _size(_model_view({**context, "history": history})) <= budget:
+    if document_size + _size(history) <= budget:
         return context if len(history) == len(context["history"]) else {**context, "history": history}
     scores = page_relevance(context["pages"], question, context["history"])
     named = named_pages(question)
     recent = context["history"][-2:]
     room = budget - _size({"pages": [], "data": [], "chart_regions": [], "history": recent,
                            "omitted_pages": [p["page"] for p in context["pages"]]})
+    rows_by_page, charts_by_page = defaultdict(list), defaultdict(list)
+    for row in data:
+        rows_by_page[row["page"]].append(row)
+    for region in context["chart_regions"]:
+        charts_by_page[region.get("page_number")].append(region)
     kept = set()
     for page in sorted(context["pages"], key=lambda p: (p["page"] not in named, -scores[p["page"]], p["page"])):
-        rows = [e for e in context["evidences"] if e["page_number"] == page["page"]]
-        charts = [r for r in context["chart_regions"] if r.get("page_number") == page["page"]]
-        cost = _size(page) + _size(data_rows(rows)) + _size(charts) + 3  # separators between items
+        cost = _size(page) + _size(rows_by_page[page["page"]]) + _size(charts_by_page[page["page"]]) + 3  # separators between items
         if cost <= room:
             room -= cost
             kept.add(page["page"])
