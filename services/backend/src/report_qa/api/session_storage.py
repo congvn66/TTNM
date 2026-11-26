@@ -1,9 +1,11 @@
 """Disk-backed local session/document catalog for the main application flow.
 
-Two kinds of files hold the catalog:
+Three kinds of files hold the catalog:
 
-* ``sessions.json`` holds the small session, document and message metadata.
-  It is rewritten on every save.
+* ``sessions.json`` is the index: every session and its documents, without
+  their messages. It is small and rewritten on every save.
+* ``sessions/<session id>.json`` holds one session's messages and stored
+  idempotent responses. It is rewritten only when its content changed.
 * ``number-state/<document id>.<extraction run id>.jsonl`` is the append-only
   log of one reading's number events (chart reads and user edits; see
   number_state). A line is appended and synced for each event; nothing is
@@ -20,6 +22,7 @@ import json
 import logging
 import os
 import threading
+from hashlib import sha256
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -38,6 +41,8 @@ UPLOAD_ROOT = RUNTIME_ROOT / "uploads"
 EXTRACTION_ROOT = RUNTIME_ROOT / "extracted"
 # Held in memory only: the number log file is their storage.
 MEMORY_ONLY_FIELDS = ("evidence_state", "chart_extractions", "number_log")
+# Session fields kept in the session's own file, not in the index.
+SESSION_FILE_FIELDS = ("messages", "request_keys")
 
 # Sync endpoints run in a thread pool and extraction runs as a background
 # task, so the in-memory catalog is shared across threads. Hold this lock
@@ -45,6 +50,8 @@ MEMORY_ONLY_FIELDS = ("evidence_state", "chart_extractions", "number_log")
 # slow work (PDF extraction, AI/provider calls).
 catalog_lock = threading.RLock()
 logger = logging.getLogger(__name__)
+# Digest of the text each session file holds, by path: what was last read or written.
+_session_file_digests: dict[str, str] = {}
 
 
 def utc_now() -> str:
@@ -68,6 +75,14 @@ def number_log_name(document_id: str, run_id: str) -> str:
     return f"{document_id}.{run_id}.jsonl"
 
 
+def session_file_path(session_id: str) -> Path:
+    root = (RUNTIME_ROOT / "sessions").resolve()
+    path = (root / f"{session_id}.json").resolve()
+    if path.parent != root:
+        raise ValueError("invalid session id")
+    return path
+
+
 def load_catalog() -> dict[str, Any]:
     if not CATALOG_FILE.exists():
         return {"sessions": {}}
@@ -83,6 +98,11 @@ def load_catalog() -> dict[str, Any]:
         return {"sessions": {}}
     renamed_ids: dict[str, str] = {}
     migrated = False
+    for session_id, session in value["sessions"].items():
+        if any(field in session for field in SESSION_FILE_FIELDS):
+            migrated = True  # a catalog from before session files: save moves them out
+        else:
+            _load_session_file(session_id, session)
     for document in _documents(value):
         if "number_event_count" not in document:
             renamed_ids.update(_migrate_number_state(document))
@@ -128,15 +148,42 @@ def write_text_atomically(path: Path, data: str) -> None:
 
 
 def save_catalog(catalog: dict[str, Any]) -> None:
+    # Session files and number logs are written before the index: a crash in
+    # between leaves an index that names only data already on disk.
     with catalog_lock:
-        metadata = {"sessions": {}}
+        index = {"sessions": {}}
         for session_id, session in catalog.get("sessions", {}).items():
-            documents = []
-            for document in session.get("documents", []):
-                record_chart_reads(document)
-                documents.append({key: value for key, value in document.items() if key not in MEMORY_ONLY_FIELDS})
-            metadata["sessions"][session_id] = {**session, "documents": documents} if "documents" in session else session
-        write_json_atomically(CATALOG_FILE, metadata, indent=2)
+            _save_session_file(session_id, session)
+            entry = {key: value for key, value in session.items() if key not in SESSION_FILE_FIELDS}
+            if "documents" in session:
+                for document in session["documents"]:
+                    record_chart_reads(document)
+                entry["documents"] = [{key: value for key, value in document.items() if key not in MEMORY_ONLY_FIELDS} for document in session["documents"]]
+            entry["message_count"] = len(session.get("messages") or ())
+            index["sessions"][session_id] = entry
+        write_json_atomically(CATALOG_FILE, index, indent=2)
+
+
+def _save_session_file(session_id: str, session: dict[str, Any]) -> None:
+    text = json.dumps({field: session[field] for field in SESSION_FILE_FIELDS if field in session}, ensure_ascii=False, sort_keys=True)
+    path = session_file_path(session_id)
+    digest = sha256(text.encode("utf-8")).hexdigest()
+    if _session_file_digests.get(str(path)) == digest:
+        return
+    write_text_atomically(path, text)
+    _session_file_digests[str(path)] = digest
+
+
+def _load_session_file(session_id: str, session: dict[str, Any]) -> None:
+    count = session.pop("message_count", 0)
+    path = session_file_path(session_id)
+    if not path.exists():
+        if count:
+            logger.critical("Session file %s is missing; its %d messages are lost", path, count)
+        return
+    text = path.read_text(encoding="utf-8")
+    session.update(json.loads(text))
+    _session_file_digests[str(path)] = sha256(text.encode("utf-8")).hexdigest()
 
 
 def record_number_events(document: dict[str, Any], events: list[dict[str, Any]]) -> None:

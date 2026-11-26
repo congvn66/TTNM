@@ -132,3 +132,38 @@ def test_a_replaced_reading_does_not_bring_its_log_back(runtime):
     reloaded = session_storage.load_catalog()["sessions"]["s1"]["documents"][0]
     assert reloaded["number_log"] == [] and reloaded["chart_extractions"] == []
     assert (session_storage.number_state_root() / "doc-1.run-1.jsonl").exists()
+
+
+def _sessions(count):
+    return {"sessions": {f"s{index}": {"id": f"s{index}", "title": "t", "updated_at": "u", "documents": [],
+                                       "messages": [{"id": f"m{index}", "role": "assistant", "body": "x" * 500, "trace": [{"stage": "a"}]}],
+                                       "request_keys": {"k": {"response": {"body": "y" * 300}}}} for index in range(count)}}
+
+
+def test_the_index_holds_no_messages_and_only_a_changed_session_file_is_rewritten(runtime, monkeypatch):
+    catalog = _sessions(3)
+    session_storage.save_catalog(catalog)
+    index = json.loads((runtime / "sessions.json").read_text(encoding="utf-8"))
+    assert all(set(entry) == {"id", "title", "updated_at", "documents", "message_count"} for entry in index["sessions"].values())
+    assert index["sessions"]["s0"]["message_count"] == 1
+    assert json.loads((runtime / "sessions" / "s1.json").read_text(encoding="utf-8")) == {key: catalog["sessions"]["s1"][key] for key in ("messages", "request_keys")}
+
+    writes = []
+    real_write = session_storage.write_text_atomically
+    monkeypatch.setattr(session_storage, "write_text_atomically", lambda path, text: (writes.append(path.name), real_write(path, text))[1])
+    catalog["sessions"]["s2"]["messages"][0]["needs_update"] = True
+    session_storage.save_catalog(catalog)
+    assert writes == ["s2.json", "sessions.json"]
+    assert session_storage.load_catalog() == catalog
+
+
+def test_a_catalog_with_messages_inside_is_split_into_session_files_without_loss(runtime):
+    catalog = _sessions(2)
+    (runtime / "sessions.json").write_text(json.dumps(catalog), encoding="utf-8")
+
+    loaded = session_storage.load_catalog()
+
+    assert {key: {k: v for k, v in session.items()} for key, session in loaded["sessions"].items()} == catalog["sessions"]
+    index = json.loads((runtime / "sessions.json").read_text(encoding="utf-8"))
+    assert "messages" not in index["sessions"]["s0"] and "request_keys" not in index["sessions"]["s0"]
+    assert session_storage.load_catalog() == catalog
