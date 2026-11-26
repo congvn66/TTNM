@@ -329,6 +329,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
   // "fit" follows the pane width; a number is a zoom the user chose.
   const [zoom, setZoom] = useState("fit");
   const [fitScale, setFitScale] = useState(1);
+  const fitScaleRef = useRef(1);
   const scale = zoom === "fit" ? fitScale : zoom;
   const zoomBy = (step) => setZoom((current) => clampScale((current === "fit" ? fitScale : current) + step));
   const [rotation, setRotation] = useState(0);
@@ -404,7 +405,9 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
       const mat = node.querySelector(".canvas-mat");
       const style = mat ? getComputedStyle(mat) : null;
       const padding = style ? parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) : 0;
-      if (pageWidth && node.clientWidth) setFitScale(clampScale((node.clientWidth - padding) / pageWidth));
+      if (!pageWidth || !node.clientWidth) return;
+      fitScaleRef.current = clampScale((node.clientWidth - padding) / pageWidth);
+      setFitScale(fitScaleRef.current);
     };
     pdf.getPage(page).then((pdfPage) => { if (!cancelled) { pageWidth = pdfPage.getViewport({ scale: 1, rotation }).width; measure(); } }).catch(() => {});
     const observer = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
@@ -417,6 +420,9 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
     setCitationQuote(evidenceQuote || "");
     setCitationBbox(normalizedBbox(evidenceBbox));
     setPage(Math.min(Math.max(1, citationPage), pdf.numPages));
+    // A page fitted to a phone's width prints numbers a few pixels tall:
+    // show a citation at full size, centred on it, instead.
+    setZoom((current) => (current === "fit" && fitScaleRef.current < 1 ? 1 : current));
     centerHighlightRef.current = true;
   }, [citationPage, evidenceQuote, evidenceBbox, pdf]);
 
@@ -428,8 +434,8 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
   useEffect(() => {
     const viewport = viewportRef.current;
     const box = viewport?.querySelector(".evidence-box");
-    // Wait until the cited page itself is laid out.
-    if (!centerHighlightRef.current || !box || textViewport?.page !== page) return;
+    // Wait until the cited page itself is laid out at the current zoom.
+    if (!centerHighlightRef.current || !box || textViewport?.page !== page || textViewport?.scale !== scale) return;
     centerHighlightRef.current = false;
     const boxRect = box.getBoundingClientRect();
     const viewRect = viewport.getBoundingClientRect();
@@ -445,7 +451,7 @@ function PdfViewer({ document, sessionId, citationPage, evidenceQuote, evidenceB
       left: Math.max(0, left),
       behavior: "smooth",
     });
-  }, [highlightKey, page, textViewport]);
+  }, [highlightKey, page, scale, textViewport]);
   const textLayer = textViewport && <div className="pdf-text-layer" aria-hidden="true" style={{ width: textViewport.width, height: textViewport.height, left: "50%", top: 30, transform: "translateX(-50%)" }}><div className="evidence-box-layer">{evidenceBoxes.map((box, index) => <span className="evidence-box" key={`${box.join("-")}-${index}`} style={{ left: `${box[0] * 100}%`, top: `${box[1] * 100}%`, width: `${(box[2] - box[0]) * 100}%`, height: `${(box[3] - box[1]) * 100}%` }} />)}</div></div>;
 
   if (!document) return <div className="empty-reader"><div className="empty-icon">PDF</div><h2>Chọn hoặc thêm tài liệu</h2><p>Tài liệu được lưu theo phiên làm việc và mở trực tiếp trong trình đọc PDF.</p></div>;
