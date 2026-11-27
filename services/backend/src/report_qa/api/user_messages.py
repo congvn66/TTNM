@@ -60,6 +60,7 @@ MESSAGES = {
     "AI_UNGROUNDED_CITATION": "AI trả về trích dẫn không nằm trong tài liệu. Hãy thử lại câu hỏi.",
     "AI_UNSUPPORTED_EVIDENCE": "AI chưa xác minh được evidence trong tài liệu. Hãy thử lại câu hỏi.",
     "DOCUMENT_CONTEXT_TOO_LARGE": "Tài liệu quá dài để trợ lý đọc hết trong một lần hỏi.",
+    "BRIEF_UNAVAILABLE": "Tóm tắt tự động cần trợ lý AI đọc toàn văn. Bạn vẫn hỏi về báo cáo được bình thường.",
     "ASSISTANT_INCOMPLETE": "Trợ lý chưa hoàn tất câu trả lời trong số bước cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",
     "AI_PROVIDER_BAD_RESPONSE": "Dịch vụ AI trả về phản hồi không hợp lệ. Hãy thử lại sau.",
     "AI_ANSWER_TIMEOUT": "Trợ lý chưa trả lời xong trong thời gian cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",

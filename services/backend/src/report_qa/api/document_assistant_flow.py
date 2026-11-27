@@ -234,8 +234,12 @@ def _history(session, document_id):
 def answer_document(
     session, document, question, trace_id, trace, catalog, *,
     overlay, snapshot, complete=None, load_extraction=None, resolve_pdf=None, save=None, persist_chart=None,
+    record=True, max_steps=7,
 ):
     """Answer with the tools assistant and persist the exchange.
+
+    With record=False the answer is returned but not added to the chat (the
+    document overview uses this).
 
     The caller injects storage: local JSON by default, or PostgreSQL/R2 through
     load_extraction, resolve_pdf, save and persist_chart.
@@ -321,7 +325,7 @@ def answer_document(
             "all_evidences": [e for e in refreshed["evidence_batch"]["evidences"] if e["page_number"] in sent_pages],
         }
 
-    result = run_assistant(question, context, complete=complete, read_chart=chart_tool)
+    result = run_assistant(question, context, complete=complete, read_chart=chart_tool, max_steps=max_steps)
     by_key = {e["evidence_key"]: e for e in context["evidences"]}
     used = [by_key[k] for k in result["evidence_keys"]]
     pdf_path = resolve_pdf(document["storage_name"])
@@ -376,6 +380,8 @@ def answer_document(
     trace.extend({**event, "at": utc_now()} for event in result["trace"])
     trace.append({"stage": "persistence", "status": "committed", "at": utc_now(), "assistant_message_id": assistant["id"]})
     assistant["trace"] = trace
+    if not record:
+        return {"assistant_message": storable(assistant), "trace_id": trace_id}
     user = {"id": str(uuid4()), "role": "user", "body": question, "document_id": document["id"], "created_at": now}
     user, assistant = storable(user), storable(assistant)
     with catalog_lock:

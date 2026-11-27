@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-vi.mock("../features/workspace/WorkspaceScreen.jsx", () => ({ default: () => <div data-testid="workspace-scene">workspace</div> }));
+vi.mock("../features/reader/ReaderApp.jsx", () => ({ default: () => <div data-testid="workspace-scene">workspace</div> }));
 vi.mock("../features/workspace/SettingsScreen.jsx", () => ({ default: ({ section, onNavigate }) => <div data-testid="settings-scene"><span>{section}</span><button onClick={() => onNavigate("/app/workspace")}>workspace</button></div> }));
 
 import AppRouter from "./AppRouter.jsx";

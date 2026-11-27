@@ -1188,6 +1188,93 @@ def list_document_evidences(session_id: str, document_id: str, request: Request)
     return JSONResponse(records)
 
 
+# The document overview: one AI answer per reading of a document that says
+# what the report is, its key points with their numbers, and what it flags.
+# It is stored on the document, not in the chat, and made again after a re-read.
+BRIEF_QUESTION = (
+    "Tóm tắt báo cáo này cho người đọc lần đầu. Viết đúng các phần sau, bằng tiếng Việt:\n"
+    "1. Một câu: đây là báo cáo gì, của đơn vị nào, cho kỳ nào.\n"
+    "2. Từ 3 đến 5 gạch đầu dòng là các điểm nổi bật nhất. Mỗi dòng nêu một ý và con số quan trọng nhất của ý đó, "
+    "ghi đúng như trong báo cáo, kèm đơn vị.\n"
+    "3. Nếu báo cáo tự nêu rủi ro, điểm bất thường hay lưu ý, thêm một dòng bắt đầu bằng \"Cần chú ý:\". Không có thì bỏ phần này.\n"
+    "Chỉ dùng thông tin có trong báo cáo. Không suy đoán, không tự tính thêm.\n"
+    "Dẫn nguồn con số bằng evidence_keys của các dòng data. Chỉ thêm 1-2 quote thật ngắn, chép nguyên văn. "
+    "Không cần read_chart: chỉ dùng văn bản và bảng đã có."
+)
+_brief_in_flight: dict[str, threading.Event] = {}
+
+
+def _brief_response(document: dict[str, Any]) -> dict[str, Any]:
+    brief = document.get("brief")
+    if brief and brief.get("marker") == extraction_marker(document):
+        return {"status": "ready", "brief": brief}
+    return {"status": "missing"}
+
+
+@app.get(
+    "/api/v1/sessions/{session_id}/documents/{document_id}/brief",
+    tags=["sessions"], summary="Read the AI overview of a document, if made", responses=OPENAPI_COMMON_ERRORS,
+)
+def get_document_brief(session_id: str, document_id: str, request: Request) -> dict[str, Any]:
+    session = get_session(session_id, owner_id_for_request(request))
+    document, _ = _ready_document(session, document_id)
+    return _brief_response(document)
+
+
+@app.post(
+    "/api/v1/sessions/{session_id}/documents/{document_id}/brief",
+    tags=["sessions"], summary="Make the AI overview of a document (once per reading)", responses=OPENAPI_COMMON_ERRORS,
+)
+def create_document_brief(session_id: str, document_id: str, request: Request) -> dict[str, Any]:
+    session = get_session(session_id, owner_id_for_request(request))
+    document, artifact = _ready_document(session, document_id)
+    if assistant_mode() != "tools":
+        raise user_error(409, "BRIEF_UNAVAILABLE")
+    # A second request for the same document waits for the first instead of paying for another AI run.
+    while True:
+        with catalog_lock:
+            existing = _brief_response(document)
+            if existing["status"] == "ready":
+                return existing
+            running = _brief_in_flight.get(document_id)
+            if running is None:
+                _brief_in_flight[document_id] = threading.Event()
+                break
+        running.wait()
+    trace_id = trace_id_for(request)
+    trace = [trace_event("brief_requested", "ok", trace_id=trace_id)]
+    owner = session.get("owner_id", LOCAL_OWNER_ID)
+    marker = extraction_marker(document)
+    try:
+        result = answer_document(
+            session, document, BRIEF_QUESTION, trace_id, trace, catalog,
+            overlay=lambda document, extraction: extraction_with_evidence_revisions(document, extraction, artifact),
+            snapshot=lambda message: None,
+            load_extraction=lambda name: artifact,
+            resolve_pdf=cache_pdf,
+            save=lambda value: save_catalog(value, owner),
+            persist_chart=(lambda result, region_key: _persist_chart_read(session, document, result, region_key)) if postgres_runtime else None,
+            record=False,
+            # A five-point overview of a dense report needs a few more turns than one question.
+            max_steps=10,
+        )
+        message = result["assistant_message"]
+        brief = {"structured_answer": message["structured_answer"], "citations": message["citations"], "created_at": message["created_at"], "marker": marker}
+        with catalog_lock:
+            document["brief"] = brief
+        save_catalog(catalog, owner)
+        return {"status": "ready", "brief": brief}
+    except ProviderError as exc:
+        raise ai_failure(exc.code, str(exc), trace_id, exc.http_status) from exc
+    except AssistantError as exc:
+        flow_log("ASSISTANT_INCOMPLETE", trace_id=trace_id, session_id=session_id, document_id=document["id"], purpose="brief",
+                 tool_errors=[item.get("error") for item in getattr(exc, "tool_results", []) if item.get("error")])
+        raise ai_failure("ASSISTANT_INCOMPLETE", str(exc), trace_id) from exc
+    finally:
+        with catalog_lock:
+            _brief_in_flight.pop(document_id).set()
+
+
 def _evidence_records(document: dict[str, Any], document_id: str, artifact: dict[str, Any], extraction: dict[str, Any]) -> dict[str, Any]:
     """The Data rows with their current values. Call under catalog_lock.
 
