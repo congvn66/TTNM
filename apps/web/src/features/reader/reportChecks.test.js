@@ -83,3 +83,13 @@ describe("buildBriefing", () => {
     expect(buildBriefing(evidences).suggestions).toEqual([]);
   });
 });
+
+describe("splitColumn", () => {
+  it("splits on a spaced slash only before a period word", async () => {
+    const { splitColumn } = await import("./reportChecks.js");
+    expect(splitColumn("Doanh thu · Quý 1 / 2026")).toEqual({ measure: "Doanh thu", period: "Quý 1 / 2026" });
+    expect(splitColumn("Lợi nhuận gộp / Quý 1/2026")).toEqual({ measure: "Lợi nhuận gộp", period: "Quý 1/2026" });
+    expect(splitColumn("EV / EBITDA")).toEqual({ measure: "EV / EBITDA", period: "" });
+    expect(splitColumn("Chênh lệch · 2026E")).toEqual({ measure: "Chênh lệch", period: "2026E" });
+  });
+});

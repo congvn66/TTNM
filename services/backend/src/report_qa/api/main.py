@@ -35,7 +35,7 @@ from report_qa.application.deplot_reading import DeplotChartReader
 from report_qa.application.p0_pipeline import calculation_answer, execute_calculation, resolve_evidence
 from report_qa.application.question_planner import build_catalog, plan_question
 from report_qa.application.text_safety import storable
-from report_qa.api.document_assistant_flow import answer_document, extraction_marker, flag_if_inputs_changed, with_chart_batches
+from report_qa.api.document_assistant_flow import answer_document, extraction_marker, flag_if_inputs_changed, recalculate, with_chart_batches
 from report_qa.application.document_assistant import AssistantError
 from report_qa.domain.contracts import validate_calculation_result_v1, validate_question_plan_v2
 from .ai_provider import ProviderError, _load_local_env, assistant_mode, live_provider, planner_client, provider_mode
@@ -362,6 +362,14 @@ class DocumentUpdateRequest(StorableRequest):
 class SessionQuestionRequest(StorableRequest):
     document_id: str = Field(min_length=1)
     question: str = Field(min_length=1, max_length=2000)
+
+
+class FormulaRecalculateRequest(BaseModel):
+    """Run an answer's calculation again with some cells swapped: {cell it read: cell to read instead}."""
+
+    message_id: str = Field(min_length=1, max_length=80)
+    formula_index: int = Field(default=0, ge=0, le=50)
+    swap: dict[str, str] = Field(default_factory=dict, max_length=10)
 
 
 class EvidenceRevisionCreateRequest(StorableRequest):
@@ -1186,6 +1194,40 @@ def list_document_evidences(session_id: str, document_id: str, request: Request)
         records = _evidence_records(document, document_id, artifact, with_chart_batches(document, artifact))
     # The records are plain JSON (strings, numbers, lists, dicts): serialize them once, outside the lock.
     return JSONResponse(records)
+
+
+# Each run is a Python process of up to a few seconds: a reader moving over a table must not hold every worker.
+RECALCULATIONS_PER_OWNER = 2
+_recalculation_slots: dict[str, threading.BoundedSemaphore] = {}
+
+
+@app.post(
+    "/api/v1/sessions/{session_id}/documents/{document_id}/recalculate",
+    tags=["sessions"],
+    summary="Run an answer's calculation again on other cells, without saving",
+    responses=OPENAPI_COMMON_ERRORS,
+)
+def recalculate_formula(session_id: str, document_id: str, body: FormulaRecalculateRequest, request: Request) -> dict[str, Any]:
+    session = get_session(session_id, owner_id_for_request(request))
+    document, artifact = _ready_document(session, document_id)
+    with catalog_lock:
+        message = next((item for item in session["messages"] if item["id"] == body.message_id), None)
+        formulas = ((message or {}).get("structured_answer") or {}).get("formulas") or []
+        if message is None or message.get("role") != "assistant" or message.get("document_id") != document_id or body.formula_index >= len(formulas):
+            raise user_error(404, "FORMULA_NOT_FOUND")
+        # Today's numbers, as the assistant itself reads them: corrections applied, chart reads included.
+        current = extraction_with_evidence_revisions(document, with_chart_batches(document, artifact), artifact)
+        by_key = {e["evidence_key"]: e for e in current["evidence_batch"]["evidences"]}
+        slot = _recalculation_slots.setdefault(owner_id_for_request(request), threading.BoundedSemaphore(RECALCULATIONS_PER_OWNER))
+    if not slot.acquire(blocking=False):
+        raise user_error(429, "RECALCULATE_BUSY")
+    # The script runs in its own process, outside the lock.
+    try:
+        return recalculate(formulas[body.formula_index], by_key, body.swap)
+    except ValueError as exc:
+        raise user_error(409 if str(exc) == "FORMULA_NOT_RECALCULABLE" else 422, str(exc)) from exc
+    finally:
+        slot.release()
 
 
 # The document overview: one AI answer per reading of a document that says

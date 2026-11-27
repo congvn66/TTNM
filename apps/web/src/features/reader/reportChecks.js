@@ -3,8 +3,8 @@
 // the upload briefing from the extracted evidence list.
 import { evidenceLabel as readableEvidenceLabel, needsCheck } from "./format.js";
 
-const TOTAL_ROW = /^(tổng cộng|tổng|cộng|total|grand total)\b/i;
-const NOT_ADDITIVE = /%|biên|tỷ lệ|tỉ lệ|margin|ratio|bình quân|trung bình|average|giá/i;
+export const TOTAL_ROW = /^(tổng cộng|tổng|cộng|total|grand total)\b/i;
+export const NOT_ADDITIVE = /%|biên|tỷ lệ|tỉ lệ|margin|ratio|bình quân|trung bình|average|giá/i;
 
 /** Every number a written token can mean ("1,234" is 1.234 in Vietnamese and 1234 in English). */
 export function readNumberCandidates(text) {
@@ -64,13 +64,16 @@ export function chipFromFormula(formula) {
   return {
     page,
     boxes: inputs.filter((input) => input.page === page && input.bbox).map((input) => input.bbox),
-    // One part per input box, so each input gets its own colour on the page and in the bar.
-    parts: inputs.filter((input) => input.page === page && input.bbox).map((input) => ({ value: formatNumber(Number(input.value)), label: input.label || "" })),
+    // One part per input box, so each input gets its own colour and number on the page and in the bar.
+    // index is the input's place in the whole calculation, the number on its tag.
+    parts: (formula.inputs ?? []).map((input, index) => ({ value: formatNumber(Number(input.value)), label: input.label || "", key: input.evidence_key, index, page: input.page, bbox: input.bbox }))
+      .filter((part) => part.page === page && part.bbox),
     label: `Tính từ ${inputs.map((input) => `${formatNumber(Number(input.value))}${input.label ? ` (${input.label})` : ""}`).join(" và ")}`,
     method: "phép tính",
     unsure: false,
     key: `formula-${formula.expression ?? formula.result}`,
     computed: true,
+    formula,
   };
 }
 
@@ -101,7 +104,9 @@ export function linkNumbers(text, answer) {
       const formula = formulas.find((item) => resultNumbers(item.result).some((value) => candidates.some((candidate) => sameNumber(candidate, value) || sameNumber(candidate, value * 100))));
       // Each calculated number is its own chip, so tapping one lights only that one.
       const base = formula ? chipFromFormula(formula) : null;
-      if (base) chip = { ...base, key: `formula-${start}-${match[0]}` };
+      // Which of the script's results this number is, so the bar can show its own formula.
+      const row = formula && (formula.result_rows ?? []).find((item) => readNumberCandidates(String(item.value)).some((value) => candidates.some((candidate) => sameNumber(candidate, value) || sameNumber(candidate, value * 100))));
+      if (base) chip = { ...base, key: `formula-${start}-${match[0]}`, result: row?.name ?? null };
     }
     if (!chip) continue;
     if (start > cursor) parts.push({ text: source.slice(cursor, start) });
@@ -131,7 +136,25 @@ export function formatNumber(value) {
   return value.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
 }
 
-/** Column totals that should equal the rows above them. */
+const isTotal = (cell) => TOTAL_ROW.test(String(cell.table_locator?.row_header ?? "").trim());
+
+/**
+ * The total rows of one table column, each with the rows it adds up: the rows
+ * between the previous total row and this one. A table with subtotals
+ * ("Tổng A" after A rows, "Tổng B" after B rows) gives one group per subtotal.
+ */
+export function totalGroups(columnCells) {
+  const sorted = [...columnCells].sort((a, b) => a.table_locator.row_index - b.table_locator.row_index);
+  const groups = [];
+  let parts = [];
+  for (const cell of sorted) {
+    if (isTotal(cell)) { groups.push({ total: cell, parts }); parts = []; }
+    else if (!NOT_ADDITIVE.test(cell.table_locator.row_header ?? "")) parts.push(cell);
+  }
+  return groups;
+}
+
+/** Column totals that should equal the rows they add up. */
 export function checkTableTotals(evidences) {
   const tables = new Map();
   for (const evidence of evidences ?? []) {
@@ -145,27 +168,27 @@ export function checkTableTotals(evidences) {
   for (const cells of tables.values()) {
     const column = cells[0].table_locator.column_header ?? "";
     if (NOT_ADDITIVE.test(column)) continue;
-    const total = cells.find((cell) => TOTAL_ROW.test(String(cell.table_locator.row_header ?? "").trim()));
-    if (!total) continue;
-    const parts = cells.filter((cell) => cell !== total && cell.table_locator.row_index < total.table_locator.row_index && !NOT_ADDITIVE.test(cell.table_locator.row_header ?? ""));
-    if (parts.length < 2) continue;
-    const totalValue = Number(total.current_numeric_value);
-    const values = parts.map((cell) => Number(cell.current_numeric_value));
-    if (total.current_numeric_value == null || parts.some((cell) => cell.current_numeric_value == null) || !Number.isFinite(totalValue) || values.some((value) => !Number.isFinite(value))) continue;
-    const sum = values.reduce((acc, value) => acc + value, 0);
-    const unit = 10 ** -Math.max(...[total, ...parts].map(decimals));
-    const tolerance = 0.5 * unit * parts.length + 1e-9;
-    const diff = totalValue - sum;
-    const page = total.page_number;
-    checks.push({
-      ok: Math.abs(diff) <= tolerance,
-      column,
-      total: totalValue,
-      sum,
-      diff,
-      count: parts.length,
-      chip: { page, boxes: [total, ...parts].filter((cell) => cell.page_number === page && cell.bbox).map((cell) => cell.bbox), label: `${column}: ${parts.length} dòng và dòng tổng`, method: "kiểm tra tổng", key: `total-${total.evidence_key}` },
-    });
+    for (const { total, parts } of totalGroups(cells)) {
+      if (parts.length < 2) continue;
+      const totalValue = Number(total.current_numeric_value);
+      const values = parts.map((cell) => Number(cell.current_numeric_value));
+      if (total.current_numeric_value == null || parts.some((cell) => cell.current_numeric_value == null) || !Number.isFinite(totalValue) || values.some((value) => !Number.isFinite(value))) continue;
+      const sum = values.reduce((acc, value) => acc + value, 0);
+      const unit = 10 ** -Math.max(...[total, ...parts].map(decimals));
+      const tolerance = 0.5 * unit * parts.length + 1e-9;
+      const diff = totalValue - sum;
+      const page = total.page_number;
+      checks.push({
+        ok: Math.abs(diff) <= tolerance,
+        column,
+        total: totalValue,
+        sum,
+        diff,
+        count: parts.length,
+        keys: [total, ...parts].map((cell) => cell.evidence_key),
+        chip: { page, boxes: [total, ...parts].filter((cell) => cell.page_number === page && cell.bbox).map((cell) => cell.bbox), label: `${column}: ${parts.length} dòng và dòng tổng`, method: "kiểm tra tổng", key: `total-${total.evidence_key}` },
+      });
+    }
   }
   return checks;
 }
@@ -204,7 +227,8 @@ export function buildBriefing(evidences) {
   };
 }
 
-const PERIOD = /^(quý|q|tháng|năm|nửa|6 tháng|9 tháng|cuối|đầu|fy|h[12])\b/i;
+// Letter lookahead, not \b: \b does not count "ý" or "ă" as letters, so "quý" never matched.
+const PERIOD = /^(quý|q|tháng|năm|nửa|6 tháng|9 tháng|cuối|đầu|fy|h[12])(?!\p{L})/iu;
 const NOT_A_MEASURE = /chú thích|ghi chú|đơn vị|nguồn|note|source|unit|stt|^tt$/i;
 const NAME_OK = (text) => {
   const value = String(text ?? "").trim();
@@ -214,9 +238,14 @@ const NAME_OK = (text) => {
 const lowerFirst = (text) => text.charAt(0).toLocaleLowerCase("vi") + text.slice(1);
 
 /** A column header split into what is measured and for which period ("Doanh thu thuần · Quý 2/2026"). */
-function splitColumn(header) {
-  const parts = String(header ?? "").split(" · ").map((part) => part.trim()).filter(Boolean);
-  const period = parts.find((part) => PERIOD.test(part) || /\d{1,2}\/\d{4}|\b20\d{2}\b/.test(part)) ?? "";
+export function splitColumn(header) {
+  // "Doanh thu · Quý 2/2026", or "Doanh thu / Quý 2/2026" when a period word follows the slash.
+  // "Quý 1 / 2026", "EV / EBITDA" and "Nợ / Vốn chủ sở hữu" stay whole.
+  const parts = String(header ?? "").split(" · ").flatMap((part) => {
+    const at = part.lastIndexOf(" / ");
+    return at > 0 && PERIOD.test(part.slice(at + 3).trim()) ? [part.slice(0, at), part.slice(at + 3)] : [part];
+  }).map((part) => part.trim()).filter(Boolean);
+  const period = parts.find((part) => PERIOD.test(part) || /\d{1,2}\/\d{4}|(?<!\d)20\d{2}(?=[EeFf]?(?![\p{L}\d]))/u.test(part)) ?? "";
   const measure = parts.filter((part) => part !== period).join(" ");
   return { measure, period };
 }

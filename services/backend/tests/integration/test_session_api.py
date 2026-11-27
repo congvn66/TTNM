@@ -93,6 +93,7 @@ def test_health_docs_and_openapi_expose_only_the_main_flow() -> None:
         "/api/v1/sessions/{session_id}/documents/{document_id}/extraction",
         "/api/v1/sessions/{session_id}/documents/{document_id}/evidences",
         "/api/v1/sessions/{session_id}/documents/{document_id}/brief",
+        "/api/v1/sessions/{session_id}/documents/{document_id}/recalculate",
         "/api/v1/sessions/{session_id}/documents/{document_id}/evidences/{evidence_key}/revisions",
         "/api/v1/sessions/{session_id}/messages",
             "/api/v1/sessions/{session_id}/messages/{message_id}/trace",
@@ -1535,3 +1536,33 @@ def test_document_brief_needs_the_tools_assistant(monkeypatch):
         assert response.json()["detail"]["code"] == "BRIEF_UNAVAILABLE"
     finally:
         cleanup_session(created["id"])
+
+
+def test_recalculate_runs_a_stored_answer_script_on_other_cells_with_todays_numbers(monkeypatch) -> None:
+    session_id, base, rows = _document_with_numbers(monkeypatch, ("north", "200", "200", 1), ("south", "300", "300", 1), ("total", "1000", "1000", 1))
+    try:
+        document_id = base.rsplit("/", 1)[1]
+        script = "a = value('north')\nb = value('total')\nresult = round(a / b * 100, 2)"
+        api_main.catalog["sessions"][session_id]["messages"].append({
+            "id": "answer-1", "role": "assistant", "document_id": document_id,
+            "structured_answer": {"formulas": [{"name": "Python", "expression": script, "substitution": "Tỷ trọng"}]}})
+        swapped = client.post(f"{base}/recalculate", json={"message_id": "answer-1", "swap": {"north": "south"}})
+        assert swapped.status_code == 200, swapped.text
+        assert swapped.json()["formula"]["result"] == "30.00"
+        # A corrected number is what the calculation reads, as for a new answer.
+        client.post(f"{base}/evidences/total/revisions", json={"numeric_value": "800", "reason": "Đối chiếu PDF", "expected_revision_id": rows["total"]["current_revision_id"]})
+        assert client.post(f"{base}/recalculate", json={"message_id": "answer-1"}).json()["formula"]["result"] == "25.00"
+        # Nothing is saved on the answer.
+        assert api_main.catalog["sessions"][session_id]["messages"][-1]["structured_answer"]["formulas"][0]["expression"] == script
+
+        assert client.post(f"{base}/recalculate", json={"message_id": "missing"}).json()["detail"]["code"] == "FORMULA_NOT_FOUND"
+        assert client.post(f"{base}/recalculate", json={"message_id": "answer-1", "swap": {"south": "north"}}).status_code == 422
+        # Two runs at once per reader at most; a third is told to wait instead of holding a worker.
+        slot = api_main._recalculation_slots[next(iter(api_main._recalculation_slots))]
+        slot.acquire(); slot.acquire()
+        try:
+            assert client.post(f"{base}/recalculate", json={"message_id": "answer-1"}).json()["detail"]["code"] == "RECALCULATE_BUSY"
+        finally:
+            slot.release(); slot.release()
+    finally:
+        cleanup_session(session_id)

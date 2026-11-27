@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useState } from "react";
 
 /** Example questions come from the report itself, so they never invite one it cannot answer. */
-export const AskBox = forwardRef(function AskBox({ value, onChange, onSubmit, asking, disabled, note, examples = [] }, ref) {
+export const AskBox = forwardRef(function AskBox({ value, onChange, onSubmit, asking, disabled, note, examples = [], suggestions = [], suggestionsLabel = "" }, ref) {
   const [example, setExample] = useState(0);
   useEffect(() => {
     if (value || examples.length < 2) return undefined;
@@ -13,6 +13,7 @@ export const AskBox = forwardRef(function AskBox({ value, onChange, onSubmit, as
   const placeholder = examples.length && !narrow ? `Ví dụ: ${examples[example % examples.length]}` : "Hỏi về số liệu trong báo cáo…";
   const submit = (event) => { event.preventDefault(); if (!asking && !disabled && value.trim()) onSubmit(value); };
   return <form className="rd-ask" onSubmit={submit} data-tour="ask">
+    {suggestions.length > 0 && <div className="rd-asksugs" id="rd-asksugs" role="group" aria-labelledby="rd-asksugs-label"><span id="rd-asksugs-label">{suggestionsLabel}</span>{suggestions.map((question) => <button type="button" key={question} disabled={asking} onClick={() => onSubmit(question)}>{question}</button>)}</div>}
     <label htmlFor="rd-ask-input" className="rd-sr">Câu hỏi về báo cáo</label>
     <textarea id="rd-ask-input" ref={ref} rows={2} value={value} disabled={disabled} placeholder={placeholder}
       onChange={(event) => onChange(event.target.value)}

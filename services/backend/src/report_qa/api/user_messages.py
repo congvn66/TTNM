@@ -28,6 +28,10 @@ MESSAGES = {
     "DOCUMENT_NAME_INVALID": "Tên tài liệu không hợp lệ.",
     "DOCUMENT_FILE_MISSING": "Không tìm thấy tệp PDF đã lưu của tài liệu này.",
     "MESSAGE_TRACE_NOT_FOUND": "Không tìm thấy nhật ký xử lý của câu trả lời này.",
+    "FORMULA_NOT_FOUND": "Không tìm thấy phép tính này trong câu trả lời.",
+    "FORMULA_NOT_RECALCULABLE": "Phép tính này không tính lại được với ô khác.",
+    "FORMULA_SWAP_INVALID": "Ô cần đổi không có trong phép tính, hoặc ô mới không có trong tài liệu.",
+    "RECALCULATE_BUSY": "Đang tính lại phép tính trước, thử lại sau giây lát.",
     # Uploads
     "UPLOAD_FORM_INVALID": "Không đọc được tệp tải lên. Tên tệp có thể quá dài; hãy đổi tên tệp ngắn hơn (tối đa 255 ký tự) rồi tải lên lại.",
     "PDF_REQUIRED": "Chỉ chấp nhận tệp .pdf.",

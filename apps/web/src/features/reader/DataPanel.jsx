@@ -8,7 +8,7 @@ function totalImpact(all, evidence, value) {
   const locator = evidence.table_locator;
   if (!locator?.table_region_key || value == null || value === "") return "";
   const column = all.filter((item) => item.table_locator?.table_region_key === locator.table_region_key && item.table_locator?.column_index === locator.column_index);
-  const after = checkTableTotals(column.map((item) => item.evidence_key === evidence.evidence_key ? { ...item, current_numeric_value: String(value) } : item))[0];
+  const after = checkTableTotals(column.map((item) => item.evidence_key === evidence.evidence_key ? { ...item, current_numeric_value: String(value) } : item)).find((check) => check.keys.includes(evidence.evidence_key));
   if (!after) return "";
   return after.ok ? "Dòng tổng của cột này vẫn khớp." : `Dòng tổng của cột này sẽ lệch ${formatValue(Math.abs(after.diff))}.`;
 }
@@ -27,7 +27,7 @@ function previewText(preview) {
  * Correct one number. The server reads the typed text in the report's own
  * number format; a dry run shows what will be saved before it is saved.
  */
-function EditForm({ evidence, all, basePath, onCancel, onSaved, onConflict }) {
+export function EditForm({ evidence, all, basePath, onCancel, onSaved, onConflict }) {
   const ids = useId();
   const [text, setText] = useState(evidence.current_numeric_value == null ? "" : formatNumber(evidence.current_numeric_value));
   const [reason, setReason] = useState("");

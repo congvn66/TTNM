@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { answerBlocks } from "./AnswerText.jsx";
-import { distinctFormulas, formatNumber as formatDecimal, readableLabel, scriptResultRows, withoutDecimalRepr } from "./format.js";
+import { distinctFormulas, formatNumber as formatDecimal, readableLabel, scriptResultRows, scrollBehavior, withoutDecimalRepr } from "./format.js";
 import { chipFromFormula, formatNumber, linkNumbers, readNumberCandidates, resultNumbers } from "./reportChecks.js";
 import { useElapsed } from "./signals.js";
-import { PART_COLORS } from "./partColors.js";
+import { InputTag, partColor, peekProps } from "./Calc.jsx";
 
 const ESTIMATED = /biểu đồ|ước lượng|trục|ocr/i;
 
@@ -32,8 +32,12 @@ export function showNumber(value) {
 
 /** A number you can tap to see its cell on the page. */
 export function NumberChip({ chip, text, active, onFocus }) {
-  const name = `${text}${chip.label ? `, ${chip.label}` : ""}. Xem trên trang ${chip.page}`;
-  return <button type="button" className={`rd-chip${chip.unsure ? " unsure" : ""}${active ? " active" : ""}`} aria-pressed={active} aria-label={name} title={name} onClick={() => onFocus({ ...chip, value: text })}>{text}</button>;
+  // A calculated number says so in words too: the "ƒ" is only drawn, and screen readers never hear it.
+  const name = chip.computed
+    ? `${text}. Số do máy tính ra${chip.label ? `, ${chip.label.charAt(0).toLowerCase()}${chip.label.slice(1)}` : ""}. Xem trên trang ${chip.page}`
+    : `${text}${chip.label ? `, ${chip.label}` : ""}. Xem trên trang ${chip.page}`;
+  // A calculated number looks different from one read off the page: underlined with "ƒ", not filled.
+  return <button type="button" className={`rd-chip${chip.computed ? " computed" : ""}${chip.unsure ? " unsure" : ""}${active ? " active" : ""}`} aria-pressed={active} aria-label={name} title={name} onClick={() => onFocus({ ...chip, value: text })}>{text}</button>;
 }
 
 function Linked({ text, answer, activeKey, onFocus }) {
@@ -118,7 +122,7 @@ const RESULT_NAMES = [
 function resultName(name) {
   const raw = String(name ?? "").trim();
   const hit = RESULT_NAMES.find(([pattern]) => pattern.test(raw.replace(/\s+/g, "_")));
-  return hit ? { name: hit[1], unit: hit[2] ?? "" } : { name: raw, unit: "" };
+  return hit ? { name: hit[1], unit: hit[2] ?? "", known: true } : { name: raw, unit: "", known: false };
 }
 
 function ResultValue({ formula }) {
@@ -140,7 +144,7 @@ function SourcesDetails({ answer, id, activeKey, onFocus, scanned, label = "Ngu�
   const formulas = realFormulas(answer);
   const pages = [...new Set([...rows, ...quotes].map((item) => item.page).filter(Boolean))];
   if (!rows.length && !quotes.length && !formulas.length) return null;
-  return <details className="rd-sources" onToggle={(event) => { if (event.currentTarget.open) { const node = event.currentTarget; window.requestAnimationFrame(() => node.scrollIntoView({ block: "nearest", behavior: "smooth" })); } }}>
+  return <details className="rd-sources" onToggle={(event) => { if (event.currentTarget.open) { const node = event.currentTarget; window.requestAnimationFrame(() => node.scrollIntoView({ block: "nearest", behavior: scrollBehavior() })); } }}>
     <summary>{label}{pages.length ? ` · trang ${pages.join(", ")}` : ""}{formulas.length ? " · cách tính" : ""}</summary>
     {rows.length > 0 && <ul className="rd-source-list">{rows.map((row) => <li key={row.key}><button type="button" className={activeKey === row.key ? "active" : ""} onClick={() => onFocus(row)}><span>Trang {row.page} · {row.label || "số trong bảng"}</span><b>{row.value}</b></button></li>)}</ul>}
     {quotes.map((quote, index) => <button type="button" key={index} className="rd-quote" onClick={() => onFocus({ page: quote.page, boxes: quote.bbox ? [quote.bbox] : [], quote: quote.quote, label: `Đoạn văn ở trang ${quote.page}`, key: `quote-${id}-${index}` })}>“{quote.quote}”<small>Trang {quote.page}{scanned ? " · đọc từ ảnh scan, có thể sai chữ" : ""}</small></button>)}
@@ -162,31 +166,103 @@ function sentenceHasPercent(sentence, value) {
   });
 }
 
+/** Which of a script's results the sentence is about: the one it writes as a %, else the first it writes at all. */
+function headlineRow(sentence, rows) {
+  // A number ends at its last digit: "24.050." at the end of a sentence is 24.050.
+  const written = (String(sentence ?? "").match(/-?\d+(?:[.,]\d+)*/g) ?? []).flatMap(readNumberCandidates);
+  const appears = (row) => readNumberCandidates(String(row.value)).some((value) => written.some((number) => Math.abs(number - value) <= Math.max(0.005, Math.abs(value) * 1e-6)));
+  // Among results the sentence writes as a %, one named like a percentage first, then the closest:
+  // in "3 chi nhánh, chiếm 3%" the 3% is the share (3,2), not the count (3).
+  const percents = (String(sentence ?? "").match(/-?\d+(?:[.,]\d+)*\s?%/g) ?? []).flatMap(readNumberCandidates);
+  const gap = (row) => Math.min(...readNumberCandidates(String(row.value)).flatMap((value) => percents.map((written) => Math.abs(written - value))));
+  const named = (row) => (/pct|percent|ty_?le|tỷ lệ|growth|tang_truong|share|chiem|margin|bien/i.test(row.name ?? "") ? 0 : 1);
+  const percent = rows.map((row, index) => ({ index, named: named(row), gap: sentenceHasPercent(sentence, row.value) ? gap(row) : Infinity }))
+    .filter((item) => Number.isFinite(item.gap))
+    .sort((a, b) => a.named - b.named || a.gap - b.gap)[0];
+  return percent ? percent.index : rows.findIndex(appears);
+}
+
+/**
+ * The cells behind one result of a script, keeping each one's number in the
+ * whole calculation (a script can read 6 cells and use 2 for this result).
+ */
+function resultInputs(formula, row) {
+  const keys = row?.source_keys;
+  return (formula.inputs ?? []).map((input, index) => ({ ...input, index })).filter((input) => !keys?.length || keys.includes(input.evidence_key));
+}
+
+/** The chip of one result: only its own cells light up on the page. */
+function resultChip(formula, inputs) {
+  // The page to show is the page of this result's own cells, not of the script's first cell.
+  const chip = chipFromFormula({ ...formula, inputs });
+  if (!chip) return null;
+  const indexOf = new Map(inputs.map((input) => [input.evidence_key, input.index]));
+  return { ...chip, formula, parts: chip.parts.map((part) => ({ ...part, index: indexOf.get(part.key) ?? part.index })) };
+}
+
 export function headlineOf(answer) {
   if (!answer || answer.not_found) return null;
   const rows = sourceRows(answer);
   const formulas = realFormulas(answer);
   if (formulas.length === 1) {
-    const results = scriptResultRows(formulas[0]);
-    const chip = chipFromFormula(formulas[0]);
-    if (results.length !== 1 || !chip) return null;
-    const { name, unit } = resultName(results[0].name);
-    let value = `${results[0].value}${unit && !String(results[0].value).includes(unit) ? unit : ""}`;
+    const formula = formulas[0];
+    const results = scriptResultRows(formula);
+    if (!chipFromFormula(formula) || !results.length) return null;
+    // A script may give several results ({diff, pct}); the headline is the one the sentence states.
+    const at = results.length === 1 ? 0 : (formula.result_rows?.length === results.length ? headlineRow(answer.answer, formula.result_rows) : -1);
+    if (at < 0) return null;
+    const row = formula.result_rows?.[at];
+    const result = row?.name ?? null;
+    const inputs = resultInputs(formula, row);
+    const chip = resultChip(formula, inputs);
+    if (!chip?.parts.length) return null;
+    const { name, unit, known } = resultName(results[at].name);
+    let value = `${results[at].value}${unit && !String(results[at].value).includes(unit) ? unit : ""}`;
     // The script returns a bare number; the sentence says whether it is a percentage.
-    if (!value.includes("%") && sentenceHasPercent(answer.answer, results[0].value)) value += "%";
-    return { value, label: name && name !== "Kết quả" ? name : "", parts: chip.parts, chip: { ...chip, value } };
+    if (!value.includes("%") && sentenceHasPercent(answer.answer, formula.result_rows?.[at]?.value ?? results[at].value)) value += "%";
+    // Only a known name ("Tỷ lệ thay đổi"); a script's own variable name ("sum_q1") means nothing to the reader.
+    return { value, label: known && name !== "Kết quả" ? name : "", parts: chip.parts, inputs, chip: { ...chip, value, result }, formula, result };
   }
   if (formulas.length || rows.length !== 1 || !rows[0].value || rows[0].value === "—") return null;
   return { value: rows[0].value, label: rows[0].label || `Số ở trang ${rows[0].page}`, chip: rows[0] };
 }
 
-function Headline({ headline, active, onFocus }) {
-  return <button type="button" className={`rd-headline${headline.chip.unsure ? " unsure" : ""}${active ? " active" : ""}`} aria-pressed={active} onClick={() => onFocus(headline.chip)}>
-    <b>{headline.value}</b>
-    {headline.parts?.length > 1
-      ? <span>{headline.label && `${headline.label}, `}tính từ{headline.parts.map((part, i) => <span key={i} className="rd-part" style={{ "--part": PART_COLORS[i % PART_COLORS.length] }}><i aria-hidden="true" />{part.value}{part.label && <small>{part.label}</small>}</span>)}<em>Xem trên trang</em></span>
-      : <span>{headline.label} · trang {headline.chip.page}<em>Xem trên trang</em></span>}
-  </button>;
+/** The headline after the reader swapped cells: the same result of the same script, run on the chosen cells. */
+export function swappedHeadline(headline, formula) {
+  const rows = scriptResultRows(formula);
+  const at = Math.max(0, (formula.result_rows ?? []).findIndex((row) => row.name === headline.result));
+  const inputs = resultInputs(formula, formula.result_rows?.[at]);
+  const chip = resultChip(formula, inputs);
+  if (!rows[at] || !chip) return headline;
+  const value = `${rows[at].value}${headline.value.endsWith("%") && !String(rows[at].value).includes("%") ? "%" : ""}`;
+  return { ...headline, value, parts: chip.parts, inputs, chip: { ...chip, value, result: headline.result, key: `${chip.key}-swapped` }, formula, original: headline.value };
+}
+
+/**
+ * The answer's number, large, and under it each input of its calculation with
+ * its numbered tag: tap one to see its cell, hover or focus it to outline the
+ * cell, "Đổi ô" when the AI read the wrong cell.
+ */
+function Headline({ headline, active, activeKey, onFocus, onPeek, onPick, busy, doubtful }) {
+  const inputs = headline.inputs ?? [];
+  const many = inputs.length > 1;
+  return <div className={`rd-headline${headline.chip.unsure || doubtful ? " unsure" : ""}${active ? " active" : ""}${headline.original ? " changed" : ""}`}>
+    <button type="button" className="rd-headline-value" aria-pressed={active} onClick={() => onFocus(headline.chip)}>
+      <b>{doubtful && <i className="rd-mark unsure" aria-hidden="true">?</i>}{headline.value}{doubtful && <span className="rd-sr">, có thể không có nghĩa</span>}</b>
+      {/* Words, not only a dashed outline: a swapped result must never read as the AI's answer. */}
+      <span>{headline.original && "Kết quả sau khi bạn đổi ô · "}{headline.label}{headline.label && " · "}{many ? "tính từ các số dưới" : headline.formula ? `tính từ 1 số ở trang ${headline.chip.page}` : `trang ${headline.chip.page}`}<em>Xem trên trang</em></span>
+    </button>
+    {many && <ul className="rd-inputs">{inputs.map(({ index, ...input }) => {
+      const chip = { page: input.page, boxes: input.bbox ? [input.bbox] : [], label: readableLabel(input.label), value: formatNumber(Number(input.value)), key: input.evidence_key };
+      // Keyed by the input's place, so a swap keeps the same row and its "Đổi ô" can take focus back.
+      return <li key={index} style={{ "--part": partColor(index) }}>
+        <button type="button" className={`rd-input${activeKey === chip.key ? " active" : ""}`} aria-pressed={activeKey === chip.key} onClick={() => onFocus(chip)} {...peekProps(input.evidence_key, onPeek)}>
+          <InputTag index={index} /><b>{chip.value}</b><small>{chip.label || `trang ${input.page}`}</small>
+        </button>
+        {onPick && <button type="button" className="rd-button small" aria-disabled={busy || undefined} onClick={() => { if (!busy) onPick(index); }} title={busy ? "Đang tính lại…" : "Lấy nhầm ô? Chọn ô đúng trên trang"} aria-label={`Đổi ô số ${index + 1}`}>Đổi ô</button>}
+      </li>;
+    })}</ul>}
+  </div>;
 }
 
 function WorkingReply({ reply, onStop }) {
@@ -198,8 +274,10 @@ function WorkingReply({ reply, onStop }) {
   </div>;
 }
 
-export function AnswerCard({ note, activeKey, onFocus, onAsk, onEdit, onOpenData, onStop, scanned }) {
+export function AnswerCard({ note, activeKey, onFocus, onAsk, onEdit, onOpenData, onStop, scanned, onPeek, onPick, pickBusy = false, swap, onUndoSwap }) {
   const { question, reply } = note;
+  // Hooks before any early return: a reply goes from "working" to done in the same card.
+  const [copied, setCopied] = useState(false);
   if (reply && (reply.status === "processing" || reply.structured_answer?.presentation === "processing_v1")) {
     return <article className="rd-card rd-qa waiting" aria-live="polite">{question && <p className="rd-question">{question.body}</p>}<WorkingReply reply={reply} onStop={onStop} /></article>;
   }
@@ -208,17 +286,22 @@ export function AnswerCard({ note, activeKey, onFocus, onAsk, onEdit, onOpenData
   const failed = reply && reply.status === "failed";
   const confidence = confidenceOf(answer);
   const rows = sourceRows(answer);
-  const headline = failed ? null : headlineOf(answer);
-  const [copied, setCopied] = useState(false);
+  const original = failed ? null : headlineOf(answer);
+  const headline = original && swap ? swappedHeadline(original, swap.formula) : original;
+  // Only a calculation can be run again on other cells; its place in the stored list names it to the server.
+  const formulaIndex = original?.formula ? (answer.formulas ?? []).indexOf(original.formula) : -1;
   const quotes = (answer?.evidence ?? []).filter((item) => item.kind === "text" && item.quote);
   const pages = [...new Set([...rows, ...quotes].map((item) => item.page).filter(Boolean))];
   const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1500); } catch { /* clipboard refused */ } };
 
-  return <article className={`rd-card rd-qa${failed ? " failed" : ""}`}>
+  return <article id={`note-${note.id}`} tabIndex={-1} className={`rd-card rd-qa${failed ? " failed" : ""}`}>
     {question && <p className="rd-question">{question.body}</p>}
     {failed && <><p className="rd-error-text">{friendlyError(reply.body?.replace(/^Không thể tạo câu trả lời:\s*/, ""))}</p><button type="button" className="rd-button" onClick={() => onAsk(question?.body ?? "")}>Hỏi lại</button></>}
     {!failed && reply && <>
-      {headline && <Headline headline={headline} active={activeKey === headline.chip.key} onFocus={onFocus} />}
+      {headline && <Headline headline={headline} active={activeKey === headline.chip.key} activeKey={activeKey} onFocus={onFocus} onPeek={onPeek} busy={pickBusy} doubtful={Boolean(swap?.warning)}
+        onPick={onPick && formulaIndex >= 0 && !reply.needs_update ? (index) => onPick({ note, base: original, headline, formulaIndex, index }) : null} />}
+      {swap && <p className="rd-fyi changed">Bạn đã đổi ô: {swap.changes.map((change) => `${change.from} thành ${change.to}`).join("; ")}. Câu trả lời gốc ra {original.value}, phần chữ bên dưới vẫn theo số gốc. Đây chỉ là tính thử, không được lưu. {!pickBusy && <button type="button" className="rd-link" onClick={() => onUndoSwap(note.id)}>Hoàn tác</button>}</p>}
+      {swap?.warning && <p className="rd-fyi warn"><i className="rd-mark unsure" aria-hidden="true">?</i><span>{swap.warning} Kết quả có thể không có nghĩa. Nếu không đúng ý, bấm Hoàn tác.</span></p>}
       <AnswerSentence text={text} answer={answer} activeKey={activeKey} onFocus={onFocus} />
       {confidence && <p className={`rd-confidence ${confidence.kind}`}><i aria-hidden="true" />{confidence.text}</p>}
       {reply.needs_update && <p className="rd-confidence neutral"><i aria-hidden="true" />Dữ liệu của báo cáo đã thay đổi sau câu trả lời này. Hỏi lại để có kết quả mới.</p>}
@@ -275,13 +358,14 @@ export function FailedCard({ report, onRetry, busy }) {
   </article>;
 }
 
-function CheckLine({ check, activeKey, onFocus }) {
+function CheckLine({ check, activeKey, onFocus, onDismiss }) {
   const chip = <NumberChip chip={check.chip} text={formatNumber(check.total)} active={activeKey === check.chip.key} onFocus={onFocus} />;
   const rounding = check.ok && Math.abs(check.diff) > 1e-9;
   if (rounding) return <li className="ok"><span aria-hidden="true">✓</span><p>{check.column}: {check.count} dòng cộng lại {formatNumber(check.sum)}, dòng tổng ghi {chip}. Lệch {formatNumber(Math.abs(check.diff))}, trong mức làm tròn.</p></li>;
   return check.ok
     ? <li className="ok"><span aria-hidden="true">✓</span><p>{check.column}: {check.count} dòng cộng lại đúng bằng dòng tổng {chip}</p></li>
-    : <li className="bad"><span aria-hidden="true">!</span><p>{check.column}: các dòng cộng lại {formatNumber(check.sum)}, nhưng dòng tổng ghi {chip}. Lệch {formatNumber(Math.abs(check.diff))}.</p></li>;
+    : <li className="bad"><span aria-hidden="true">!</span><p>{check.column}: các dòng cộng lại {formatNumber(check.sum)}, nhưng dòng tổng ghi {chip}. Lệch {formatNumber(Math.abs(check.diff))}.
+      {onDismiss && <button type="button" className="rd-link rd-dismiss" onClick={() => onDismiss(check)} aria-label={`Không phải lỗi: ${check.column}`}>Không phải lỗi</button>}</p></li>;
 }
 
 /** The overview's own text: the caution line goes in its own box. */
@@ -301,12 +385,13 @@ function firstSentence(text) {
  * The report overview: what the report is, its key points with numbers you
  * can tap, what it warns about, and what SourceLens checked on its own.
  */
-export function BriefCard({ brief, briefing, activeKey, onFocus, onAsk, onRetry, onOpenData, asked, collapsed, scanned, hint }) {
+export function BriefCard({ brief, briefing, dismissed = new Set(), onDismiss, onRestore, activeKey, onFocus, onAsk, onRetry, onOpenData, asked, collapsed, scanned, hint }) {
   const [open, setOpen] = useState(!collapsed);
   useEffect(() => { if (collapsed) setOpen(false); }, [collapsed]);
   const answer = brief?.status === "ready" ? brief.answer : null;
   const { main, caution } = splitCaution(answer?.answer);
-  const bad = briefing?.checks.filter((check) => !check.ok) ?? [];
+  const bad = briefing?.checks.filter((check) => !check.ok && !dismissed.has(check.chip.key)) ?? [];
+  const skipped = briefing?.checks.filter((check) => !check.ok && dismissed.has(check.chip.key)).length ?? 0;
   const good = briefing?.checks.filter((check) => check.ok) ?? [];
   const questions = (briefing?.suggestions?.length ? briefing.suggestions : FALLBACK_QUESTIONS).filter((question) => !asked?.has(question.trim()));
   return <article className={`rd-card rd-brief${open ? "" : " folded"}`} data-tour="briefing">
@@ -327,8 +412,9 @@ export function BriefCard({ brief, briefing, activeKey, onFocus, onAsk, onRetry,
         <SourcesDetails answer={answer} id="brief" activeKey={activeKey} onFocus={onFocus} scanned={scanned} label="Nguồn của tóm tắt" />
       </>}
       {scanned && <p className="rd-banner">Đây là bản scan. Chữ được đọc từ ảnh nên có thể sai, nhất là số trong bảng. Hãy chạm số để tự kiểm trên trang.</p>}
-      {bad.length > 0 && <div className="rd-alert"><strong>Mình thấy số không khớp trong báo cáo</strong><ul className="rd-checks">{bad.map((check) => <CheckLine key={check.chip.key} check={check} activeKey={activeKey} onFocus={onFocus} />)}</ul></div>}
-      {!bad.length && good.length > 0 && <p className="rd-verified"><span aria-hidden="true">✓</span>Mình đã tự cộng lại {good.length} dòng tổng trong bảng: đều khớp.</p>}
+      {bad.length > 0 && <div className="rd-alert"><strong>Mình thấy số không khớp trong báo cáo</strong><ul className="rd-checks">{bad.map((check) => <CheckLine key={check.chip.key} check={check} activeKey={activeKey} onFocus={onFocus} onDismiss={onDismiss} />)}</ul></div>}
+      {skipped > 0 && <p className="rd-skipped">{skipped} chỗ không khớp bạn đã bỏ qua · <button type="button" className="rd-link" onClick={onRestore}>Hiện lại</button></p>}
+      {!bad.length && !skipped && good.length > 0 && <p className="rd-verified"><span aria-hidden="true">✓</span>Mình đã tự cộng lại {good.length} dòng tổng trong bảng: đều khớp.</p>}
       {questions.length > 0 && <div className="rd-suggest"><span>Thử hỏi</span>{questions.map((question) => <button type="button" key={question} onClick={() => onAsk(question)}>{question}</button>)}</div>}
       <button type="button" className="rd-link rd-brief-data" onClick={onOpenData}>Xem tất cả số đã đọc</button>
     </>}

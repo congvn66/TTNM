@@ -1,6 +1,7 @@
 """Persist document-aware assistant answers using the local session runtime."""
 
 import json
+import re
 from collections import defaultdict
 from uuid import uuid4
 
@@ -20,10 +21,12 @@ from report_qa.application.document_assistant import (
     evidence_label,
     named_pages,
     page_relevance,
+    result_rows,
     run_assistant,
     stated_quantities,
     with_time_budget,
 )
+from report_qa.application.python_calculator import run_calculation
 from report_qa.application.extraction_contract import validate_extraction_batch
 from report_qa.application.text_evidence import quote_bbox
 from report_qa.application.text_safety import storable
@@ -171,6 +174,35 @@ def _formula(record, by_key):
         ],
         "calculation": {"status": "succeeded", "computed_result": _display(result["result"]), "unit": None},
     }
+
+
+# How a script reads a cell: value('ev-…') or value( "ev-…" ). Used only to show the swapped script.
+_VALUE_CALL = re.compile(r"""value\(\s*(['"])([^'"]+)\1\s*\)""")
+
+
+def recalculate(formula, by_key, swap):
+    """Run an answer's stored script again on today's numbers, with some cells swapped for others.
+
+    ``swap`` maps a key the script reads to the key to read instead. The
+    runner swaps inside value(), so the script text is never rewritten for
+    running and a key read through a list or a loop swaps too. The script is
+    the stored one, never code from the caller. Nothing is saved.
+    """
+    code = formula.get("expression") or ""
+    if "value(" not in code:
+        raise ValueError("FORMULA_NOT_RECALCULABLE")
+    if any(new not in by_key for new in swap.values()):
+        raise ValueError("FORMULA_SWAP_INVALID")
+    result = run_calculation(code, by_key, swap)
+    if result["status"] != "succeeded":
+        return {"status": "failed", "error": result.get("error") or "Calculation failed"}
+    # A swap of a cell the script never reads changed nothing: say so instead of returning the old result.
+    if set(swap) - set(result.get("swapped_keys", [])):
+        raise ValueError("FORMULA_SWAP_INVALID")
+    result["result_rows"] = result_rows(result["result_rows"], by_key)
+    # The script as it ran, for the formula shown to the reader.
+    shown = _VALUE_CALL.sub(lambda match: f"value({match.group(1)}{swap.get(match.group(2), match.group(2))}{match.group(1)})", code)
+    return {"status": "succeeded", "formula": _formula({"code": shown, "explanation": formula.get("substitution") or "", "result": result}, by_key)}
 
 
 def extraction_marker(document):
