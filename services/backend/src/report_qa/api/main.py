@@ -1230,6 +1230,11 @@ def recalculate_formula(session_id: str, document_id: str, body: FormulaRecalcul
         slot.release()
 
 
+def _tool_errors(exc: AssistantError) -> list[dict[str, Any]]:
+    """Each rejected step with what it named (untraced numbers, bad quotes), so a failed answer can be traced."""
+    return [{k: v for k, v in item.items() if k != "tool"} for item in getattr(exc, "tool_results", []) if item.get("error")]
+
+
 # The document overview: one AI answer per reading of a document that says
 # what the report is, its key points with their numbers, and what it flags.
 # It is stored on the document, not in the chat, and made again after a re-read.
@@ -1310,7 +1315,7 @@ def create_document_brief(session_id: str, document_id: str, request: Request) -
         raise ai_failure(exc.code, str(exc), trace_id, exc.http_status) from exc
     except AssistantError as exc:
         flow_log("ASSISTANT_INCOMPLETE", trace_id=trace_id, session_id=session_id, document_id=document["id"], purpose="brief",
-                 tool_errors=[item.get("error") for item in getattr(exc, "tool_results", []) if item.get("error")])
+                 tool_errors=_tool_errors(exc))
         raise ai_failure("ASSISTANT_INCOMPLETE", str(exc), trace_id) from exc
     finally:
         with catalog_lock:
@@ -1806,7 +1811,7 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
             raise ai_failure(exc.code, str(exc), trace_id, exc.http_status) from exc
         except AssistantError as exc:
             flow_log("ASSISTANT_INCOMPLETE", trace_id=trace_id, session_id=session_id, document_id=document["id"],
-                     tool_errors=[item.get("error") for item in getattr(exc, "tool_results", []) if item.get("error")])
+                     tool_errors=_tool_errors(exc))
             raise ai_failure("ASSISTANT_INCOMPLETE", str(exc), trace_id) from exc
     # Only a clarification asked about *this* document can be answered here;
     # a pending clarification on another PDF in the session must not be

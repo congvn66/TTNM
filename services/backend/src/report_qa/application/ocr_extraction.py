@@ -29,15 +29,21 @@ class OcrEngine(Protocol):
 class TesseractPdfOcr:
     """Tesseract + PyMuPDF implementation, loaded only when OCR is needed."""
 
+    # Reports are Vietnamese: read without "vie", "220 tỷ đồng" comes out as
+    # "220 ty dong", so numbers lose their unit and quotes never match the page.
+    LANGUAGES = ("vie", "eng")
+
     def available(self) -> tuple[bool, str | None]:
         try:
             import pymupdf  # noqa: F401
             import pytesseract
-            pytesseract.get_tesseract_version()
+            installed = set(pytesseract.get_languages(config=""))
         except ModuleNotFoundError:
             return False, "OCR_PYTHON_DEPENDENCY_MISSING"
         except Exception:
             return False, "TESSERACT_ENGINE_UNAVAILABLE"
+        if not set(self.LANGUAGES) <= installed:
+            return False, "TESSERACT_VIETNAMESE_MISSING"
         return True, None
 
     def read_page(self, path: Path, page_number: int) -> OcrPage:
@@ -52,7 +58,7 @@ class TesseractPdfOcr:
         page = document.load_page(page_number - 1)
         pixmap = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), alpha=False)
         image = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
-        data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT, config="--oem 1 --psm 6")
+        data = pytesseract.image_to_data(image, lang="+".join(self.LANGUAGES), output_type=pytesseract.Output.DICT, config="--oem 1 --psm 6")
         tokens: list[dict[str, Any]] = []
         for index, raw in enumerate(data["text"]):
             text = str(raw).strip()

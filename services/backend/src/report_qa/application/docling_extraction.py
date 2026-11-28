@@ -325,10 +325,14 @@ def extract_docling_artifact(
             page_context = next(
                 (item["text"] for item in pages if item["page"] == number), ""
             )
+            # page_context is the tokens joined by one space, so a token starts where the previous one ended + 1.
+            offset = -1
             for oi, token in enumerate(ocr_page.tokens):
                 text = str(token.get("text", "")).strip()
                 if not text:
                     continue
+                offset += 1
+                start, offset = offset, offset + len(text)
                 matches = list(NUMBER.finditer(text))
                 if len(matches) != 1:
                     if matches:
@@ -338,6 +342,11 @@ def extract_docling_artifact(
                         )
                     continue
                 match = matches[0]
+                # Read the number's own sentence, as for native text: "220 tỷ đồng" is billions even
+                # on a page whose table says "(đơn vị: triệu đồng)". A number with no unit written
+                # after it (a scanned table cell) takes the page's unit note.
+                semantic = sentence_semantics(page_context, start + match.start(), match.group(), page_years.get(number))
+                semantic["unit"] = semantic["unit"] or unit_note(page_context)
                 emit(
                     match.group(),
                     page_context,
@@ -348,6 +357,7 @@ def extract_docling_artifact(
                     original=text,
                     extraction_method="ocr",
                     confidence=float(token.get("confidence", 0.0)),
+                    semantic=semantic,
                 )
 
         # Exact native word boxes avoid guessed character widths. Docling
