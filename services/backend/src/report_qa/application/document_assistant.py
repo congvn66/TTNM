@@ -161,7 +161,9 @@ _SCALE_WORD = re.compile(r"\s*(nghìn|ngàn|triệu|tỷ|tỉ)(?!\w)", re.IGNORE
 _SCALE = {"nghìn": Decimal(10**3), "ngàn": Decimal(10**3), "triệu": Decimal(10**6), "tỷ": Decimal(10**9), "tỉ": Decimal(10**9)}
 # Magnitude of a Data row's unit; PERCENT is "%". Any other unit says nothing about magnitude.
 _UNIT = {"VND": Decimal(1), "VND_THOUSAND": Decimal(10**3), "VND_MILLION": Decimal(10**6), "VND_BILLION": Decimal(10**9),
-         "THOUSAND": Decimal(10**3), "MILLION": Decimal(10**6), "BILLION": Decimal(10**9), "PERCENT": "%"}
+         "THOUSAND": Decimal(10**3), "MILLION": Decimal(10**6), "BILLION": Decimal(10**9), "PERCENT": "%",
+         # Quantities: "312,4 nghìn tấn" is a value of 312.4 in THOUSAND_TONNE.
+         "TONNE": Decimal(1), "THOUSAND_TONNE": Decimal(10**3)}
 _PAGE_WORD = re.compile(r"(?:\btrang|\bpage)\s+$", re.IGNORECASE)
 # A direction word before a number, at most one word apart, gives it a sign: "giảm 5%", "tăng trưởng 3,2%".
 _DIRECTION = re.compile(r"\b(tăng|giảm)(?:\s+\w+)?\s+$", re.IGNORECASE)
@@ -571,8 +573,12 @@ class _Turn:
                 accepted.append({"page": page, **match})
         return accepted, rejected
 
-    def finish(self, action, kind, question):
-        """Validated final answer, or None after recording why it must be retried."""
+    def finish(self, action, kind, question, *, drop_untraced=False):
+        """Validated final answer, or None after recording why it must be retried.
+
+        drop_untraced (an overview on its last step): sentences whose numbers
+        cannot be traced are left out instead of failing the whole answer.
+        """
         answer = action.get("answer")
         if not isinstance(answer, str) or not answer.strip():
             self.reject("answer must be a non-empty string")
@@ -619,13 +625,20 @@ class _Turn:
             return None
         succeeded = [c for c in self.calculations if c["result"]["status"] == "succeeded"]
         cited = [by_key[k] for k in keys]
-        untraced = untraced_numbers(
-            answer, evidences=cited,
-            quotes=sources,
-            results=[n for c in succeeded for n in c["result"]["traced_numbers"]],
-            rows=self.context["evidences"], locale=self.context.get("number_locale"),
-            cited_pages={e["page_number"] for e in cited} | {s["page"] for s in sources} | set(pages),
-        ) if kind == "answer" else []
+        def untraced_in(text):
+            return untraced_numbers(
+                text, evidences=cited,
+                quotes=sources,
+                results=[n for c in succeeded for n in c["result"]["traced_numbers"]],
+                rows=self.context["evidences"], locale=self.context.get("number_locale"),
+                cited_pages={e["page_number"] for e in cited} | {s["page"] for s in sources} | set(pages),
+            ) if kind == "answer" else []
+        untraced = untraced_in(answer)
+        if untraced and drop_untraced:
+            kept = without_sentences_using(answer, untraced)
+            if kept and not untraced_in(kept):
+                self.trace.append({"stage": "number_validation", "status": "dropped_untraced_sentences", "numbers": untraced})
+                answer, untraced = kept, []
         if untraced:
             corrected = corrected_numbers(untraced, self.context["evidences"], self.context.get("number_locale"))
             self.reject("Every quantity in the answer must come from a python result, a cited evidence key "
@@ -650,7 +663,26 @@ class _Turn:
         }
 
 
-def run_assistant(question, context, *, complete, read_chart, max_steps=7):
+def without_sentences_using(answer: str, numbers: list[str]) -> str:
+    """The answer without the sentences (or list lines) that write one of ``numbers``."""
+    patterns = []
+    for item in numbers:
+        token = re.match(r"[-+(]?\d[\d.,]*", str(item).strip())
+        if token:
+            digits = token.group(0).lstrip("+(")
+            patterns.append(re.compile(r"(?<![\d.,])" + re.escape(digits) + r"(?![\d]|[.,]\d)"))
+    kept_lines = []
+    for line in answer.splitlines():
+        sentences = re.split(r"(?<=[.!?…])\s+", line)
+        kept = [sentence for sentence in sentences if not any(p.search(sentence) for p in patterns)]
+        if kept:
+            kept_lines.append(" ".join(kept))
+        elif not line.strip():
+            kept_lines.append(line)
+    return "\n".join(kept_lines).strip()
+
+
+def run_assistant(question, context, *, complete, read_chart, max_steps=7, drop_untraced_on_last_step=False):
     """Injected tools allow offline tests; provider failures never fake success."""
     turn = _Turn(context, read_chart)
     for step in range(max_steps):
@@ -669,7 +701,7 @@ def run_assistant(question, context, *, complete, read_chart, max_steps=7):
         elif kind == "python":
             turn.python_action(action)
         elif kind in {"answer", "clarify"}:
-            final = turn.finish(action, kind, question)
+            final = turn.finish(action, kind, question, drop_untraced=drop_untraced_on_last_step and step == max_steps - 1)
             if final is not None:
                 return {**final, "tool_results": turn.tools, "trace": turn.trace}
         else:

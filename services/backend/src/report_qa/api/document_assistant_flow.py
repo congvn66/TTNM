@@ -258,7 +258,7 @@ def _history(session, document_id):
 def answer_document(
     session, document, question, trace_id, trace, catalog, *,
     overlay, snapshot, complete=None, load_extraction=None, resolve_pdf=None, save=None, persist_chart=None,
-    record=True, max_steps=7,
+    record=True, max_steps=7, drop_untraced_on_last_step=False,
 ):
     """Answer with the tools assistant and persist the exchange.
 
@@ -349,7 +349,8 @@ def answer_document(
             "all_evidences": [e for e in refreshed["evidence_batch"]["evidences"] if e["page_number"] in sent_pages],
         }
 
-    result = run_assistant(question, context, complete=complete, read_chart=chart_tool, max_steps=max_steps)
+    result = run_assistant(question, context, complete=complete, read_chart=chart_tool, max_steps=max_steps,
+                           drop_untraced_on_last_step=drop_untraced_on_last_step)
     by_key = {e["evidence_key"]: e for e in context["evidences"]}
     used = [by_key[k] for k in result["evidence_keys"]]
     pdf_path = resolve_pdf(document["storage_name"])

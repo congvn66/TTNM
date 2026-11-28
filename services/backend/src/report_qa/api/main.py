@@ -1478,6 +1478,8 @@ def create_document_brief(session_id: str, document_id: str, request: Request) -
             record=False,
             # A five-point overview of a dense report needs a few more turns than one question.
             max_steps=10,
+            # A point whose number cannot be traced (often an unsure scan value) is left out, not the whole overview.
+            drop_untraced_on_last_step=True,
         )
         message = result["assistant_message"]
         brief = {"structured_answer": message["structured_answer"], "citations": message["citations"], "created_at": message["created_at"], "marker": marker}

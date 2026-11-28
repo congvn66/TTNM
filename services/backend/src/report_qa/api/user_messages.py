@@ -74,7 +74,7 @@ MESSAGES = {
     "BRIEF_TIMEOUT": "Tóm tắt mất quá lâu. Thử lại sau.",
     "BRIEF_INCOMPLETE": "Chưa tóm tắt được báo cáo này. Thử lại sau.",
     "ANSWER_FAILED": "Không thể tạo câu trả lời. Hãy thử lại.",
-    "ASSISTANT_INCOMPLETE": "Câu hỏi quá dài. Thử hỏi ngắn hơn.",
+    "ASSISTANT_INCOMPLETE": "Chưa trả lời được câu này. Thử hỏi cách khác.",
     "AI_PROVIDER_BAD_RESPONSE": "Không trả lời được. Thử lại.",
     "AI_ANSWER_TIMEOUT": "Câu hỏi quá dài. Thử hỏi ngắn hơn.",
     "AI_FAILED": "Không trả lời được. Thử lại.",

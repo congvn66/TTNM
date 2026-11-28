@@ -1033,3 +1033,26 @@ def test_a_rejected_number_the_user_corrected_comes_back_with_its_current_value(
         {"written": "220 tỷ", "evidence_key": "ev-target", "page": 1, "printed": "220", "current_value": "250"}
     ]
     assert corrected_numbers(["31%"], rows) == []
+
+
+def test_an_overview_drops_sentences_with_untraced_numbers_on_its_last_step():
+    draft = {"action": "answer", "answer": "- Q2 là 130.\n- Tổng là 999.", "evidence_keys": ["b"]}
+    complete = sequence(draft, draft)
+    result = run_assistant("Tóm tắt", context(), complete=complete, read_chart=Mock(), max_steps=2, drop_untraced_on_last_step=True)
+    assert result["answer"] == "- Q2 là 130."
+
+
+def test_a_question_still_fails_when_its_numbers_cannot_be_traced():
+    draft = {"action": "answer", "answer": "Q2 là 130. Tổng là 999.", "evidence_keys": ["b"]}
+    with pytest.raises(AssistantError):
+        run_assistant("Q2?", context(), complete=sequence(draft, draft), read_chart=Mock(), max_steps=2)
+
+
+def test_a_quantity_in_thousand_tonnes_keeps_its_scale_word():
+    from report_qa.application.document_assistant import untraced_numbers
+
+    row = {"evidence_key": "k", "numeric_value": "312.4", "raw_text": "312,4", "semantic": {"unit": "THOUSAND_TONNE"}}
+    check = lambda answer: untraced_numbers(answer, evidences=[row], quotes=[], results=[], locale="vi")
+    assert check("Bắc - Nam đạt 312,4 nghìn tấn.") == []
+    assert check("Bắc - Nam đạt 312,4.") == []
+    assert check("Bắc - Nam đạt 312,4 triệu tấn.") == ["312,4 triệu"]

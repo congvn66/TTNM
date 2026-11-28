@@ -37,7 +37,7 @@ export function errorKind(error) {
 }
 
 const ERROR_TEXT = {
-  steps: "Câu hỏi quá dài. Thử hỏi ngắn hơn.",
+  steps: "Chưa trả lời được câu này. Thử hỏi cách khác.",
   busy: "Hệ thống đang bận. Thử lại sau một phút.",
   timeout: "Trả lời quá lâu nên đã dừng. Thử lại.",
   server: "Máy chủ gặp lỗi. Thử lại.",
