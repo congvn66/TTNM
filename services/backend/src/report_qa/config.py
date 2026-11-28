@@ -13,8 +13,8 @@ from dataclasses import dataclass
 
 
 # The project every account starts with. The first name is used for new ones; the older
-# name still finds projects made before it changed.
-DEFAULT_PROJECT_NAMES = ("Báo cáo của tôi", "Workspace cá nhân")
+# names (one misspelt by migration 0006) still find projects made before 0009 renamed them.
+DEFAULT_PROJECT_NAMES = ("Báo cáo của tôi", "Workspace cá nhân", "Workspace \u00e1 nh\u00e2n")
 
 
 def psycopg_url(url: str) -> str:
