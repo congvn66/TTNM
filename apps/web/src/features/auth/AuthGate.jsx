@@ -4,19 +4,21 @@ import { request } from "../../shared/api/client.js";
 const initialForm = { email: "", password: "", display_name: "" };
 
 const PASSWORD_MIN_LENGTH = 8;
+const TITLES = { login: "Đăng nhập", register: "Đăng ký", forgot: "Quên mật khẩu", reset: "Đặt mật khẩu mới" };
+const NOTES = { forgot: "Nhập email để nhận liên kết đặt lại.", reset: "Các thiết bị khác sẽ bị đăng xuất." };
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+$/;
 
 // The fields of each mode, checked here so the messages are Vietnamese and sit
 // next to their field (the browser's own messages follow the browser language).
 function formErrors(mode, form) {
   const errors = {};
-  if (mode === "register" && form.display_name.trim().length < 2) errors.display_name = "Hãy nhập tên hiển thị, ít nhất 2 ký tự.";
+  if (mode === "register" && form.display_name.trim().length < 2) errors.display_name = "Tên cần ít nhất 2 ký tự.";
   if (mode !== "reset") {
-    if (!form.email.trim()) errors.email = "Hãy nhập email.";
-    else if (!EMAIL_SHAPE.test(form.email.trim())) errors.email = "Email chưa đúng dạng, ví dụ ten@congty.vn.";
+    if (!form.email.trim()) errors.email = "Nhập email.";
+    else if (!EMAIL_SHAPE.test(form.email.trim())) errors.email = "Email không hợp lệ.";
   }
-  if (mode === "reset" && !form.token.trim()) errors.token = "Hãy dán mã đặt lại trong email.";
-  if (mode === "login" && !form.password) errors.password = "Hãy nhập mật khẩu.";
+  if (mode === "reset" && !form.token.trim()) errors.token = "Dán mã đặt lại.";
+  if (mode === "login" && !form.password) errors.password = "Nhập mật khẩu.";
   if ((mode === "register" || mode === "reset") && form.password.length < PASSWORD_MIN_LENGTH) errors.password = `Mật khẩu cần ít nhất ${PASSWORD_MIN_LENGTH} ký tự.`;
   return errors;
 }
@@ -63,9 +65,9 @@ export default function AuthGate({ children }) {
     }
   };
 
-  if (state.status === "checking") return <div className="auth-loading"><div className="auth-spinner"></div><span>Đang kiểm tra phiên đăng nhập…</span></div>;
+  if (state.status === "checking") return <div className="auth-loading"><div className="auth-spinner"></div><span>Đang tải…</span></div>;
   if (state.status === "authenticated") return typeof children === "function" ? children({ user: state.user, signOut }) : children;
-  if (state.status === "unavailable") return <main className="auth-gate"><section className="auth-card"><AuthMark /><p className="auth-eyebrow">SourceLens</p><h1>Chưa thể mở phiên làm việc</h1><p className="auth-muted">Dịch vụ đăng nhập hiện chưa sẵn sàng. Hãy kiểm tra kết nối rồi thử lại.</p><button className="auth-primary" onClick={() => window.location.reload()}>Thử lại</button></section></main>;
+  if (state.status === "unavailable") return <main className="auth-gate"><section className="auth-card"><AuthMark /><h1>Không kết nối được</h1><button className="auth-primary" onClick={() => window.location.reload()}>Thử lại</button></section></main>;
 
   const switchMode = (nextMode) => {
     const nextPath = nextMode === "forgot" ? "/forgot-password" : nextMode === "reset" ? "/reset-password" : "/login";
@@ -83,7 +85,7 @@ export default function AuthGate({ children }) {
     try {
       if (mode === "forgot") {
         await request("/api/v1/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: form.email }) });
-        setSuccess("Nếu email tồn tại, hướng dẫn đặt lại mật khẩu đã được gửi. Kiểm tra hộp thư của bạn.");
+        setSuccess("Nếu email đã đăng ký, bạn sẽ nhận được liên kết đặt lại.");
       } else if (mode === "reset") {
         const body = await request("/api/v1/auth/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: form.token, password: form.password }) });
         setState({ status: "authenticated", user: body.user });
@@ -106,19 +108,18 @@ export default function AuthGate({ children }) {
 
   return <main className="auth-gate">
     <section className="auth-card">
-      <div className="auth-brand"><AuthMark /><div><strong>SourceLens</strong><span>Evidence-first workspace</span></div></div>
-      <div className="auth-copy"><p className="auth-eyebrow">{mode === "login" ? "Chào mừng trở lại" : mode === "register" ? "Tạo workspace riêng" : mode === "forgot" ? "Khôi phục tài khoản" : "Đặt lại mật khẩu"}</p><h1>{mode === "login" ? "Đăng nhập vào tài liệu của bạn" : mode === "register" ? "Bắt đầu với SourceLens" : mode === "forgot" ? "Lấy lại quyền truy cập" : "Chọn mật khẩu mới"}</h1><p className="auth-muted">{mode === "forgot" ? "Nhập email đã đăng ký. Chúng tôi sẽ gửi hướng dẫn an toàn nếu tìm thấy tài khoản." : mode === "reset" ? "Mật khẩu mới sẽ đăng xuất các phiên đang hoạt động để bảo vệ tài khoản." : "Tổ chức PDF, hỏi AI có căn cứ và giữ lại mọi nguồn dẫn theo từng phiên."}</p></div>
+      <div className="auth-brand"><AuthMark /><div><strong>SourceLens</strong></div></div>
+      <div className="auth-copy"><h1>{TITLES[mode]}</h1>{NOTES[mode] && <p className="auth-muted">{NOTES[mode]}</p>}</div>
       <form className="auth-form" onSubmit={submit} noValidate>
-        {mode === "register" && <label>Tên hiển thị<input {...field("display_name")} placeholder="Nguyễn Văn A" /></label>}<FieldError id={fieldErrorId("display_name")}>{fieldErrors.display_name}</FieldError>
-        {mode !== "reset" && <label>Email<input {...field("email")} type="email" autoComplete="email" placeholder="you@example.com" /></label>}<FieldError id={fieldErrorId("email")}>{fieldErrors.email}</FieldError>
+        {mode === "register" && <label>Tên<input {...field("display_name")} placeholder="Nguyễn Văn A" /></label>}<FieldError id={fieldErrorId("display_name")}>{fieldErrors.display_name}</FieldError>
+        {mode !== "reset" && <label>Email<input {...field("email")} type="email" autoComplete="email" placeholder="ten@congty.vn" /></label>}<FieldError id={fieldErrorId("email")}>{fieldErrors.email}</FieldError>
         {mode === "reset" && <label>Mã đặt lại<input {...field("token")} placeholder="Dán mã trong email" /></label>}<FieldError id={fieldErrorId("token")}>{fieldErrors.token}</FieldError>
-        {mode !== "forgot" && <label>Mật khẩu<input {...field("password")} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder={`Tối thiểu ${PASSWORD_MIN_LENGTH} ký tự`} /></label>}<FieldError id={fieldErrorId("password")}>{fieldErrors.password}</FieldError>
+        {mode !== "forgot" && <label>Mật khẩu<input {...field("password")} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder={mode === "login" ? undefined : `Tối thiểu ${PASSWORD_MIN_LENGTH} ký tự`} /></label>}<FieldError id={fieldErrorId("password")}>{fieldErrors.password}</FieldError>
         {error && <div className="auth-error" role="alert">{error}</div>}
         {success && <div className="auth-success" role="status">{success}</div>}
-        <button className="auth-primary" type="submit" disabled={busy}>{busy ? "Đang xử lý…" : mode === "login" ? "Đăng nhập" : mode === "register" ? "Tạo tài khoản" : mode === "forgot" ? "Gửi hướng dẫn" : "Đặt lại mật khẩu"}</button>
+        <button className="auth-primary" type="submit" disabled={busy}>{busy ? "Đang xử lý…" : mode === "login" ? "Đăng nhập" : mode === "register" ? "Đăng ký" : mode === "forgot" ? "Gửi liên kết" : "Đặt lại mật khẩu"}</button>
       </form>
-      <div className="auth-links">{mode === "login" && <button className="auth-switch secondary" onClick={() => switchMode("forgot")}>Quên mật khẩu?</button>}{mode !== "login" && <button className="auth-switch" onClick={() => switchMode("login")}>Quay lại đăng nhập</button>}{(mode === "login" || mode === "register") && <button className="auth-switch" onClick={() => switchMode(mode === "login" ? "register" : "login")}>{mode === "login" ? "Chưa có tài khoản? Tạo tài khoản" : "Đã có tài khoản? Đăng nhập"}</button>}</div>
-      <small className="auth-footnote">Cookie phiên được bảo vệ ở phía máy chủ · Không lưu mật khẩu trong trình duyệt</small>
+      <div className="auth-links">{mode === "login" && <button className="auth-switch secondary" onClick={() => switchMode("forgot")}>Quên mật khẩu?</button>}{mode !== "login" && <button className="auth-switch" onClick={() => switchMode("login")}>Quay lại đăng nhập</button>}{(mode === "login" || mode === "register") && <button className="auth-switch" onClick={() => switchMode(mode === "login" ? "register" : "login")}>{mode === "login" ? "Chưa có tài khoản? Đăng ký" : "Đã có tài khoản? Đăng nhập"}</button>}</div>
     </section>
   </main>;
 }

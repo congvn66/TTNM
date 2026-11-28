@@ -27,6 +27,22 @@ from report_qa.infrastructure.postgres.job_queue import PostgresJobQueue
 
 logger = logging.getLogger("report_qa.worker")
 STOP = False
+# Expired guests are removed when the worker is idle, at most this often.
+CLEANUP_EVERY_SECONDS = 3600
+
+
+def _clean_expired_guests() -> None:
+    from psycopg.rows import dict_row
+
+    from report_qa.api.object_storage_runtime import object_storage
+    from report_qa.application.guest_cleanup import remove_expired_guests
+    try:
+        with psycopg.connect(settings.database_url, row_factory=dict_row) as connection:
+            removed = remove_expired_guests(connection, object_storage)
+        if removed:
+            logger.info("removed %d expired guests", removed)
+    except Exception:
+        logger.exception("guest cleanup failed; trying again in an hour")
 
 
 class StaleJobError(RuntimeError):
@@ -112,6 +128,7 @@ def run(*, poll_seconds: float = 1.0, worker_id: str | None = None, once: bool =
     # process.  Fall back to the PID for local/manual runs.
     worker_id = worker_id or os.getenv("SOURCELENS_WORKER_ID") or f"worker-{os.getpid()}"
     reconnect_delay = max(1.0, poll_seconds)
+    next_cleanup = 0.0
     while not STOP:
         try:
             job = queue.claim(worker_id=worker_id)
@@ -129,6 +146,9 @@ def run(*, poll_seconds: float = 1.0, worker_id: str | None = None, once: bool =
         if job is None:
             if once:
                 return
+            if time.monotonic() >= next_cleanup:
+                next_cleanup = time.monotonic() + CLEANUP_EVERY_SECONDS
+                _clean_expired_guests()
             time.sleep(poll_seconds)
             continue
         job_id = UUID(job["id"])

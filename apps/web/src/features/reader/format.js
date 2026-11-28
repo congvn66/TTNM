@@ -87,7 +87,7 @@ const DATA_STATUS_LABELS = {
 /** What the status of a number says, or "" when it is a verified number. */
 export function dataStatusLabel(status) {
   if (!status || status === "valid") return "";
-  return DATA_STATUS_LABELS[status] ?? "Cần kiểm tra";
+  return DATA_STATUS_LABELS[status] ?? "Có thể đọc sai";
 }
 
 /** True when the number was not verified and the user should check it. */

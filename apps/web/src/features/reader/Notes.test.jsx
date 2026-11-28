@@ -6,7 +6,7 @@ const cell = { kind: "data", page: 1, evidence_key: "ev-1", value: "3722", raw_t
 it("treats a calculation that only copies one cell as a lookup", () => {
   const answer = { answer: "Lợi nhuận là 3.722 tỷ.", evidence: [cell], formulas: [{ expression: "result = value('ev-1')", result: "3722", inputs: [{ evidence_key: "ev-1", value: "3722", page: 1, bbox: cell.bbox }] }] };
   expect(realFormulas(answer)).toHaveLength(0);
-  expect(confidenceOf(answer).text).toBe("Đọc thẳng từ bảng trong báo cáo.");
+  expect(confidenceOf(answer)).toBeNull();
   expect(headlineOf(answer)).toMatchObject({ value: "3.722", chip: { key: "ev-1", raw: "3,722" } });
 });
 
@@ -68,8 +68,17 @@ it("picks the closest result the sentence writes as a percentage", async () => {
   expect(headlineOf({ answer: "Có 3 chi nhánh, chiếm 3% tổng.", evidence: [], formulas: [formula] })).toMatchObject({ result: "share" });
 });
 
-it("says a number read from a paragraph came from the text, not a table", () => {
+it("adds no line for numbers read straight from the report, and flags the ones that need a look", () => {
   const prose = { ...cell, method_label: "đọc từ văn bản" };
-  expect(confidenceOf({ answer: "Mục tiêu là 250 tỷ đồng.", evidence: [prose] }).text).toBe("Đọc thẳng từ đoạn văn trong báo cáo.");
-  expect(confidenceOf({ answer: "…", evidence: [prose, { ...cell, evidence_key: "ev-2", method_label: "đọc từ ô bảng" }] }).text).toBe("Đọc thẳng từ bảng và đoạn văn trong báo cáo.");
+  expect(confidenceOf({ answer: "Mục tiêu là 250 tỷ đồng.", evidence: [prose] })).toBeNull();
+  expect(confidenceOf({ answer: "…", evidence: [prose, { ...cell, evidence_key: "ev-2", method_label: "đọc từ ô bảng" }] })).toBeNull();
+  expect(confidenceOf({ answer: "…", evidence: [{ ...cell, method_label: "đọc bằng OCR" }] }).text).toBe("1 số đọc từ ảnh, có thể sai");
+  expect(confidenceOf({ answer: "…", evidence: [{ kind: "text", page: 3, quote: "Mục tiêu tăng trưởng" }] }).text).toBe("Xem trang 3");
+});
+
+it("offers the choices of a clarifying question", async () => {
+  const { clarifyOptions } = await import("./Notes.jsx");
+  expect(clarifyOptions({ options: ["Số tuyệt đối", "Phần trăm"] })).toEqual(["Số tuyệt đối", "Phần trăm"]);
+  expect(clarifyOptions({ presentation: "clarification_v1", sections: [{ points: ["Quý 1", "Quý 2"] }] })).toEqual(["Quý 1", "Quý 2"]);
+  expect(clarifyOptions({ answer: "Tổng là 30." })).toEqual([]);
 });

@@ -1,5 +1,5 @@
-// Problems the reader marked "Không phải lỗi", kept per report in this browser
-// so they stay hidden after a reload. "Hiện lại" brings them all back.
+// Problems the reader marked "Bỏ qua", kept per report in this browser so they stay
+// hidden after a reload. "Hiện lại" brings them all back; "Hoàn tác" brings back one.
 import { useCallback, useEffect, useState } from "react";
 
 const STORE_KEY = "sourcelens-dismissed-v1";
@@ -29,6 +29,7 @@ export function useDismissed(reportId) {
   useEffect(() => { setDismissed(loadDismissed(reportId)); }, [reportId]);
   const change = useCallback((make) => setDismissed((old) => { const next = make(old); saveDismissed(reportId, next); return next; }), [reportId]);
   const dismiss = useCallback((key) => change((old) => new Set([...old, key])), [change]);
+  const undismiss = useCallback((key) => change((old) => new Set([...old].filter((item) => item !== key))), [change]);
   const restore = useCallback(() => change(() => new Set()), [change]);
-  return { dismissed, dismiss, restore };
+  return { dismissed, dismiss, undismiss, restore };
 }

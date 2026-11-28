@@ -123,9 +123,9 @@ export function explainCell(cell, evidences) {
     // Same rules as the summary's own check (rounding, % columns, missing rows), so the two never disagree.
     const check = checkTableTotals(table).find((item) => item.keys[0] === cell.evidence_key);
     if (check?.ok) lines.push({ text: Math.abs(check.diff) > 1e-9
-      ? `Là tổng ${check.count} dòng trên: cộng lại ${formatNumber(check.sum)}, lệch ${formatNumber(Math.abs(check.diff))}, trong mức làm tròn.`
-      : `Là tổng ${check.count} dòng trên, cộng lại khớp (${formatNumber(check.sum)}).` });
-    else if (check) lines.push({ text: `Là tổng ${check.count} dòng trên, nhưng cộng lại ra ${formatNumber(check.sum)}, lệch ${formatNumber(Math.abs(check.diff))}.`, bad: true });
+      ? `Tổng ${check.count} dòng · khớp (làm tròn)`
+      : `Tổng ${check.count} dòng · khớp` });
+    else if (check) lines.push({ text: `Tổng ${check.count} dòng · lệch ${formatNumber(Math.abs(check.diff))}`, bad: true });
   }
 
   // The other period of the same measure in this row, e.g. Quý 1 next to Quý 2.
@@ -164,7 +164,7 @@ export function explainCell(cell, evidences) {
   const sameSign = parts.every((other) => cellNumber(other) >= 0) || parts.every((other) => cellNumber(other) <= 0);
   if (parts.length >= 2 && sameSign && cellNumber(group.total) && !NOT_ADDITIVE.test(cell.table_locator.column_header ?? "")) {
     const rank = [...parts].sort((a, b) => cellNumber(b) - cellNumber(a)).findIndex(same) + 1;
-    lines.push({ text: `Chiếm ${pct(value / cellNumber(group.total) * 100)} dòng tổng, lớn thứ ${rank}/${parts.length}.` });
+    lines.push({ text: `Chiếm ${pct(value / cellNumber(group.total) * 100)} · thứ ${rank}/${parts.length}` });
   }
   return lines;
 }
@@ -188,12 +188,12 @@ export function summarizeSelection(cells) {
   const sum = numbers.reduce((acc, value) => acc + value, 0);
   const caveats = [];
   const unsure = cells.filter(cellUnsure).length;
-  if (unsure) caveats.push(`gồm ${unsure} số mình chưa chắc`);
+  if (unsure) caveats.push(`${unsure} số có thể sai`);
   const skipped = cells.length - numbers.length;
-  if (skipped) caveats.push(`${skipped} ô không có số nên không cộng`);
+  if (skipped) caveats.push(`${skipped} ô trống`);
   // A total and a row it adds up, both picked: the same money is counted twice.
   const sameColumn = (a, b) => a.table_locator?.table_region_key === b.table_locator?.table_region_key && a.table_locator?.column_index === b.table_locator?.column_index;
-  if (cells.some((total) => isTotalRow(total) && cells.some((part) => !isTotalRow(part) && sameColumn(part, total) && part.table_locator.row_index < total.table_locator.row_index))) caveats.push("có cả dòng tổng nên bị cộng trùng");
+  if (cells.some((total) => isTotalRow(total) && cells.some((part) => !isTotalRow(part) && sameColumn(part, total) && part.table_locator.row_index < total.table_locator.row_index))) caveats.push("gồm dòng tổng, bị cộng trùng");
   // A sum of percentages or ratios means nothing; neither does one across different measures.
   const headers = cells.map((cell) => cell.table_locator?.column_header ?? "");
   const additive = !headers.some((header) => NOT_ADDITIVE.test(header));

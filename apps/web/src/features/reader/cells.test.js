@@ -34,7 +34,7 @@ describe("explainCell", () => {
   it("compares a region with the other quarter and with the whole table", () => {
     const lines = explainCell(cell(2, 1), EVIDENCES).map((line) => line.text);
     expect(lines[0]).toBe("Quý 1/2026 → Quý 2/2026 tăng 9,35%, thấp hơn cả bảng (17,95%).");
-    expect(lines[1]).toBe("Chiếm 34,92% dòng tổng, lớn thứ 2/4.");
+    expect(lines[1]).toBe("Chiếm 34,92% · thứ 2/4");
   });
   it("says a value that starts from zero is new instead of dividing by zero", () => {
     const [first] = explainCell(cell(3, 1), EVIDENCES);
@@ -44,7 +44,7 @@ describe("explainCell", () => {
   it("checks a total against the rows above it", () => {
     const [line] = explainCell(cell(4, 3), EVIDENCES);
     expect(line).toMatchObject({ bad: true });
-    expect(line.text).toContain("cộng lại ra 14.525, lệch 100");
+    expect(line.text).toBe("Tổng 4 dòng · lệch 100");
   });
 });
 
@@ -53,8 +53,8 @@ describe("selections", () => {
     const unsure = cell(1, 3, { data_status: "ambiguous" });
     const summary = summarizeSelection([cell(0, 3), unsure, cell(4, 3)]);
     expect(summary).toMatchObject({ count: 3, sum: 6405 + 2760 + 14625 });
-    expect(summary.caveats).toEqual(["gồm 1 số mình chưa chắc", "có cả dòng tổng nên bị cộng trùng"]);
-    expect(summarizeSelection([cell(1, 2), cell(0, 2)]).caveats).toEqual(["1 ô không có số nên không cộng"]);
+    expect(summary.caveats).toEqual(["1 số có thể sai", "gồm dòng tổng, bị cộng trùng"]);
+    expect(summarizeSelection([cell(1, 2), cell(0, 2)]).caveats).toEqual(["1 ô trống"]);
   });
   it("writes full questions, and asks for the change instead of a percentage when a value starts at zero", () => {
     const picked = [cell(2, 0), cell(2, 1), cell(3, 0), cell(3, 1)];
@@ -78,8 +78,8 @@ describe("edge cases from review", () => {
 
   it("checks each subtotal against its own rows, and ranks a row inside its own group", () => {
     const list = [one("a", "A", 1, 10), one("b", "B", 2, 20), one("ta", "Tổng A", 3, 30), one("c", "C", 4, 5), one("d", "D", 5, 7), one("tb", "Tổng B", 6, 12)];
-    expect(explainCell(list[5], list)[0]).toEqual({ text: "Là tổng 2 dòng trên, cộng lại khớp (12)." });
-    expect(explainCell(list[3], list).at(-1).text).toBe("Chiếm 41,67% dòng tổng, lớn thứ 2/2.");
+    expect(explainCell(list[5], list)[0]).toEqual({ text: "Tổng 2 dòng · khớp" });
+    expect(explainCell(list[3], list).at(-1).text).toBe("Chiếm 41,67% · thứ 2/2");
   });
   it("agrees with the summary check on rounding, % columns and missing rows", () => {
     const rounded = [one("a", "A", 1, 1.25, { raw_text: "1,25" }), one("b", "B", 2, 2.25, { raw_text: "2,25" }), one("t", "Tổng", 3, 3.49, { raw_text: "3,49" })];

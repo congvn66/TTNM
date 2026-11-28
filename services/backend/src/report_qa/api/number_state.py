@@ -23,7 +23,8 @@ from uuid import UUID, uuid5
 
 
 _IDS = UUID("6f2b8f0e-2d43-4c4e-9a59-2b1e8f3c7a10")
-INITIAL_REASON = "Giá trị trích xuất gốc, không thể sửa trực tiếp."
+# The web labels the first revision itself.
+INITIAL_REASON = ""
 REREAD_REASON = "Giá trị được đọc lại và xác minh."
 
 

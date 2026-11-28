@@ -15,9 +15,8 @@ export default class ErrorBoundary extends Component {
     if (!this.state.hasError) return this.props.children;
     return <main className="connection-screen" role="alert">
       <section className="connection-card">
-        <span className="eyebrow">GIAO DIỆN TẠM DỪNG</span>
-        <h1>Không thể hiển thị workspace</h1>
-        <p>Trạng thái tài liệu vẫn được lưu ở backend. Tải lại trang để khôi phục giao diện.</p>
+        <h1>Đã xảy ra lỗi</h1>
+        <p>Tải lại trang để tiếp tục.</p>
         <button onClick={() => window.location.reload()}>Tải lại</button>
       </section>
     </main>;

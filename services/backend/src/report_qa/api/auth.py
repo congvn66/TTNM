@@ -21,7 +21,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
-from report_qa.config import settings
+from report_qa.config import DEFAULT_PROJECT_NAMES, settings
 from .user_messages import error_detail, user_error
 
 
@@ -30,6 +30,13 @@ settings_router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
 SESSION_COOKIE = "sourcelens_session"
 DEMO_OWNER_ID = UUID("00000000-0000-0000-0000-000000000001")
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+# Guests use the app before they have an account. Their reports are kept this many days.
+GUEST_DAYS = 7
+GUEST_UPLOADS_PER_DAY = 3
+GUESTS_PER_ADDRESS_PER_HOUR = 30
+GUEST_NAME = "Khách"
+# Every table with an owner_id column; signing in moves a guest's rows to the account.
+OWNER_TABLES = ("projects", "folders", "chats", "documents", "project_documents", "jobs", "message_pins", "request_keys")
 
 
 class RegisterRequest(BaseModel):
@@ -121,7 +128,9 @@ def _token_hash(token: str) -> str:
 
 
 def _public_user(row: dict[str, Any]) -> dict[str, Any]:
-    return {"id": str(row["id"]), "email": row["email"], "display_name": row["display_name"], "email_verified": False}
+    expires = row.get("guest_expires_at")
+    return {"id": str(row["id"]), "email": row["email"], "display_name": row["display_name"], "email_verified": False,
+            "is_guest": bool(row.get("is_guest")), "guest_expires_at": expires.isoformat() if hasattr(expires, "isoformat") else expires}
 
 
 def web_origins() -> list[str]:
@@ -189,7 +198,7 @@ def _user_from_request(request: Request) -> dict[str, Any] | None:
     try:
         with _connection() as connection:
             row = connection.execute(
-                """SELECT u.id,u.email,u.display_name FROM auth_sessions s JOIN users u ON u.id=s.user_id
+                """SELECT u.id,u.email,u.display_name,u.is_guest,u.guest_expires_at FROM auth_sessions s JOIN users u ON u.id=s.user_id
                    WHERE s.token_hash=%s AND s.revoked_at IS NULL AND s.expires_at>now() AND u.deleted_at IS NULL""",
                 (_token_hash(token),),
             ).fetchone()
@@ -229,20 +238,103 @@ def owner_id_for_request(request: Request) -> UUID:
     return DEMO_OWNER_ID
 
 
+def adopt_guest(connection: Any, guest_id: Any, user_id: Any) -> int:
+    """Move a guest's reports to the account they signed in to; returns how many reports moved.
+
+    One transaction with the owner pairs checked at commit (migration 0010). The
+    guest's default project folds into the account's own. If the move fails the
+    sign-in still stands and the reports stay with the guest until they expire.
+    """
+    import logging
+    try:
+        with connection.transaction():
+            connection.execute("SET CONSTRAINTS ALL DEFERRED")
+            count = connection.execute("SELECT count(*) AS n FROM documents WHERE owner_id=%s AND deleted_at IS NULL", (guest_id,)).fetchone()["n"]
+            default = "SELECT id FROM projects WHERE owner_id=%s AND name = ANY(%s) AND deleted_at IS NULL ORDER BY created_at LIMIT 1"
+            target = connection.execute(default, (user_id, list(DEFAULT_PROJECT_NAMES))).fetchone()
+            source = connection.execute(default, (guest_id, list(DEFAULT_PROJECT_NAMES))).fetchone()
+            for table in OWNER_TABLES:
+                connection.execute(f"UPDATE {table} SET owner_id=%s WHERE owner_id=%s", (user_id, guest_id))
+            if target and source:
+                for table in ("chats", "folders", "project_documents"):
+                    connection.execute(f"UPDATE {table} SET project_id=%s WHERE project_id=%s", (target["id"], source["id"]))
+                connection.execute("UPDATE projects SET deleted_at=now(),updated_at=now() WHERE id=%s", (source["id"],))
+            connection.execute("UPDATE users SET deleted_at=now(),updated_at=now() WHERE id=%s AND is_guest", (guest_id,))
+        return int(count)
+    except Exception:
+        logging.getLogger(__name__).exception("GUEST_ADOPTION_FAILED guest=%s", guest_id)
+        return 0
+
+
+def guest_uploads_left(owner_id: UUID) -> int | None:
+    """Uploads a guest may still make today; None for an account (no limit)."""
+    if settings.persistence_backend != "postgres":
+        return None
+    with _connection() as connection:
+        row = connection.execute("SELECT is_guest FROM users WHERE id=%s", (owner_id,)).fetchone()
+        if not row or not row["is_guest"]:
+            return None
+        used = connection.execute("SELECT count(*) AS n FROM documents WHERE owner_id=%s AND created_at > now() - interval '1 day'", (owner_id,)).fetchone()["n"]
+    return max(0, GUEST_UPLOADS_PER_DAY - int(used))
+
+
+@router.post("/guest", status_code=status.HTTP_201_CREATED)
+def start_guest(request: Request, response: Response) -> dict[str, Any]:
+    """Start using SourceLens without an account. Called on the first upload, not on page view."""
+    _require_postgres()
+    _csrf_guard(request)
+    existing = _user_from_request(request)
+    if existing:
+        return {"user": _public_user(existing), "authenticated": True}
+    address = _request_ip_hash(request)
+    try:
+        with _connection() as connection:
+            with connection.transaction():
+                if address:
+                    recent = connection.execute(
+                        """SELECT count(*) AS n FROM auth_sessions s JOIN users u ON u.id=s.user_id
+                           WHERE u.is_guest AND s.ip_hash=%s AND u.created_at > now() - interval '1 hour'""", (address,)).fetchone()["n"]
+                    if recent >= GUESTS_PER_ADDRESS_PER_HOUR:
+                        raise user_error(429, "GUEST_LIMIT")
+                user_id = uuid4()
+                row = connection.execute(
+                    """INSERT INTO users (id,email,normalized_email,password_hash,display_name,is_guest,guest_expires_at)
+                       VALUES (%s,'',%s,'!',%s,true,now() + %s * interval '1 day') RETURNING id,email,display_name,is_guest,guest_expires_at""",
+                    (user_id, f"guest:{user_id}", GUEST_NAME, GUEST_DAYS)).fetchone()
+                token, _ = _create_session(connection, user_id, request=request)
+        _set_session_cookie(response, token)
+        return {"user": _public_user(dict(row)), "authenticated": True}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise user_error(503, "AUTH_DATABASE_UNAVAILABLE") from exc
+
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, request: Request, response: Response) -> dict[str, Any]:
     _require_postgres()
     _csrf_guard(request)
     email = _normalize_email(payload.email)
     password_hash = _hash_password(payload.password)
+    guest = _user_from_request(request)
+    guest = guest if guest and guest.get("is_guest") else None
     try:
         with _connection() as connection:
             with connection.transaction():
                 if connection.execute("SELECT 1 FROM users WHERE normalized_email=%s AND deleted_at IS NULL", (email,)).fetchone():
                     raise user_error(409, "EMAIL_ALREADY_REGISTERED")
-                user_id = uuid4()
-                row = connection.execute("INSERT INTO users (id,email,normalized_email,password_hash,display_name) VALUES (%s,%s,%s,%s,%s) RETURNING id,email,display_name", (user_id, email, email, password_hash, payload.display_name.strip())).fetchone()
-                token, _ = _create_session(connection, user_id, request=request)
+                if guest:
+                    # The guest becomes the account: same id, so every report stays where it is.
+                    user_id = guest["id"]
+                    row = connection.execute(
+                        """UPDATE users SET email=%s,normalized_email=%s,password_hash=%s,display_name=%s,is_guest=false,guest_expires_at=NULL,updated_at=now()
+                           WHERE id=%s AND is_guest RETURNING id,email,display_name,is_guest,guest_expires_at""",
+                        (email, email, password_hash, payload.display_name.strip(), user_id)).fetchone()
+                else:
+                    user_id = uuid4()
+                    row = connection.execute("INSERT INTO users (id,email,normalized_email,password_hash,display_name) VALUES (%s,%s,%s,%s,%s) RETURNING id,email,display_name,is_guest,guest_expires_at", (user_id, email, email, password_hash, payload.display_name.strip())).fetchone()
+                # A new session id after the account changes (OWASP); the guest's cookie stops working.
+                token, _ = _create_session(connection, user_id, revoke_token=request.cookies.get(SESSION_COOKIE), request=request)
         _set_session_cookie(response, token)
         return {"user": _public_user(dict(row)), "authenticated": True}
     except HTTPException:
@@ -256,15 +348,18 @@ def login(payload: LoginRequest, request: Request, response: Response) -> dict[s
     _require_postgres()
     _csrf_guard(request)
     email = _normalize_email(payload.email)
+    guest = _user_from_request(request)
+    guest = guest if guest and guest.get("is_guest") else None
     try:
         with _connection() as connection:
-            row = connection.execute("SELECT id,email,display_name,password_hash FROM users WHERE normalized_email=%s AND deleted_at IS NULL", (email,)).fetchone()
+            row = connection.execute("SELECT id,email,display_name,password_hash,is_guest,guest_expires_at FROM users WHERE normalized_email=%s AND deleted_at IS NULL AND NOT is_guest", (email,)).fetchone()
             if not row or not _verify_password(payload.password, row["password_hash"]):
                 raise user_error(401, "INVALID_CREDENTIALS")
             with connection.transaction():
                 token, _ = _create_session(connection, row["id"], revoke_token=request.cookies.get(SESSION_COOKIE), request=request)
+            moved = adopt_guest(connection, guest["id"], row["id"]) if guest else 0
         _set_session_cookie(response, token)
-        return {"user": _public_user(dict(row)), "authenticated": True}
+        return {"user": _public_user(dict(row)), "authenticated": True, "moved_reports": moved}
     except HTTPException:
         raise
     except Exception as exc:

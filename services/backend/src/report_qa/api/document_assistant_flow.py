@@ -234,15 +234,7 @@ def _calculation_summary(calculations):
     return "Phép tính được chạy bằng script Python trên giá trị hiện tại của bảng Dữ liệu."
 
 
-NO_DATA_WARNING = "Báo cáo ghi “—” (không có số liệu) ở một số ô được dẫn."
-
-
-def _unverified_warning(evidences):
-    if not evidences:
-        return []
-    if all(e.get("source_type") == "chart" for e in evidences):
-        return ["Một số giá trị biểu đồ chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
-    return ["Một số giá trị chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
+NO_DATA_WARNING = "Báo cáo để trống (—) ở một số ô được dùng."
 
 
 def _history(session, document_id):
@@ -376,8 +368,9 @@ def answer_document(
         "formulas": [_formula(record, by_key) for record in result["calculations"]],
         "tables": [],
         "claims": [],
-        "warnings": _unverified_warning([by_key[k] for k in result["unverified_keys"]])
-        + ([NO_DATA_WARNING] if result["no_data_keys"] else []),
+        # Numbers that may be misread are flagged per number on the page and in the answer;
+        # the one answer-level warning is a cited cell the report leaves empty.
+        "warnings": [NO_DATA_WARNING] if result["no_data_keys"] else [],
         "cited_pages": sorted({c["page"] for c in citations}),
         "evidence": citations,
         "not_found": result["not_found"],

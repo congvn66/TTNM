@@ -1031,7 +1031,7 @@ def test_extraction_failure_logs_the_traceback_and_stores_a_stable_code(monkeypa
 
 def test_object_storage_errors_are_readable_vietnamese() -> None:
     response = api_main.object_storage_error_handler(None, api_main.ObjectStorageError("down"))
-    assert json.loads(response.body)["detail"]["message"] == "Cloudflare R2 tạm thời không sẵn sàng; hãy thử lại sau."
+    assert json.loads(response.body)["detail"]["message"] == "Không lưu được tệp. Thử lại sau."
 
 
 def test_every_error_response_carries_the_vietnamese_message_of_its_code(monkeypatch) -> None:
@@ -1428,6 +1428,17 @@ def test_typed_number_must_be_well_formed_in_the_documents_format(monkeypatch) -
         assert (too_long.status_code, too_long.json()["detail"]["code"]) == (422, "INVALID_DECIMAL")
         preview = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": "1,234,567.89"})
         assert preview.json() == {"parsed_value": "1234567.89", "plain_value": "1234567.89", "display": "1,234,567.89", "decimal_separator": ".", "locale": "en"}
+    finally:
+        cleanup_session(session_id)
+
+
+def test_a_number_is_saved_without_a_note(monkeypatch) -> None:
+    session_id, base, rows = _document_with_numbers(monkeypatch, ("target", "21.5", "21.5", 1))
+    try:
+        saved = client.post(f"{base}/evidences/target/revisions", json={"input_text": "22", "expected_revision_id": rows["target"]["current_revision_id"]})
+        assert saved.status_code == 200 and saved.json()["revision"]["reason"] == ""
+        history = client.get(f"{base}/evidences/target/revisions").json()["revisions"]
+        assert [revision["reason"] for revision in history] == ["", ""]
     finally:
         cleanup_session(session_id)
 

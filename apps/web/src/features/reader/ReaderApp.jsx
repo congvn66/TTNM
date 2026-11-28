@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { request } from "../../shared/api/client.js";
 import { useTheme } from "../theme/ThemeProvider.jsx";
 import { AskBox } from "./AskBox.jsx";
-import { ConfirmDialog, DropOverlay, HelpDialog, RenameDialog, Toasts, TopBar, Tour, TOUR_LENGTH } from "./Chrome.jsx";
+import { ConfirmDialog, DropOverlay, HelpDialog, RenameDialog, Sidebar, Toasts, TopBar } from "./Chrome.jsx";
 import { DataPanel } from "./DataPanel.jsx";
 import { Home, SAMPLE_URL } from "./Home.jsx";
 import { AnswerCard, BriefCard, FailedCard, PendingCard, ReadingCard, showNumber } from "./Notes.jsx";
@@ -20,31 +20,22 @@ import { useConversation } from "./useConversation.js";
 import { useSwaps } from "./useSwaps.js";
 import "./reader.css";
 
-// No upfront tour: a one-line tip in the summary until the first tap on a number.
-const TAPPED_KEY = "sourcelens-tapped-v1";
-const hasTapped = () => { try { return localStorage.getItem(TAPPED_KEY) === "yes"; } catch { return true; } };
-
-const EDIT_NOT_KEPT_REASONS = { NOT_IN_NEW_READING: "không còn trong lần đọc mới", LOCATION_CHANGED: "vị trí đã thay đổi" };
-
-/** What a re-read did to the user's corrections and old answers (from the audit). */
+/** The re-read toast: old answers that used a changed number need asking again (from the audit). */
 export function rereadSummary(report) {
-  const run = report.extraction_history?.at(-1);
-  const kept = Array.isArray(run?.edits_carried_over) ? run.edits_carried_over : [];
-  const lost = Array.isArray(run?.edits_not_carried_over) ? run.edits_not_carried_over : [];
-  const parts = [];
-  if (kept.length) parts.push(`giữ lại ${kept.length} số bạn đã sửa`);
-  if (lost.length) {
-    const counts = new Map();
-    for (const item of lost) { const reason = EDIT_NOT_KEPT_REASONS[item.code] ?? "không khớp lần đọc mới"; counts.set(reason, (counts.get(reason) ?? 0) + 1); }
-    parts.push([...counts].map(([reason, count]) => `${count} số không giữ được vì ${reason}`).join(", "));
-  }
-  const flagged = run?.affected_message_ids?.length ?? 0;
-  return `Đã đọc lại ${report.file_name}: ${report.numeric_evidence_count ?? 0} số liệu${parts.length ? `, ${parts.join("; ")}` : ""}.${flagged ? ` ${flagged} câu trả lời cần hỏi lại.` : ""}`;
+  const flagged = report.extraction_history?.at(-1)?.affected_message_ids?.length ?? 0;
+  return `Đã đọc lại ${report.file_name}${flagged ? ` · ${flagged} câu trả lời cần hỏi lại` : ""}`;
 }
 
 function firstDataSource(reply) {
   const item = (reply?.structured_answer?.evidence ?? []).find((evidence) => evidence.kind === "data" && evidence.page);
   return item ? { page: item.page, boxes: item.bbox ? [item.bbox] : [], label: item.label, value: showNumber(item.value ?? item.raw_text), key: item.evidence_key, unsure: Boolean(item.data_status && item.data_status !== "valid") } : null;
+}
+
+const SIDEBAR_KEY = "sourcelens-sidebar";
+const narrowScreen = () => Boolean(window.matchMedia?.("(max-width: 900px)").matches);
+function initialSidebar() {
+  if (narrowScreen()) return false;
+  try { return localStorage.getItem(SIDEBAR_KEY) !== "0"; } catch { return true; }
 }
 
 export default function ReaderApp({ user = null, onSignOut = null, onNavigate }) {
@@ -59,11 +50,17 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
   const [question, setQuestion] = useState("");
   const [toasts, setToasts] = useState([]);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [tourStep, setTourStep] = useState(null);
   const [dataOpen, setDataOpen] = useState(false);
   const [evidence, setEvidence] = useState({ key: null, data: null, loading: false });
   const [revision, setRevision] = useState(0);
   const [sound, setSound] = useState(soundEnabled);
+  const [sidebarOpen, setSidebarOpenState] = useState(initialSidebar);
+  const setSidebarOpen = useCallback((open) => {
+    setSidebarOpenState(open);
+    if (!narrowScreen()) { try { localStorage.setItem(SIDEBAR_KEY, open ? "1" : "0"); } catch { /* storage blocked */ } }
+  }, []);
+  // On a phone the sidebar is a drawer: it closes after a pick.
+  const pickReport = useCallback((id) => { reports.select(id); if (narrowScreen()) setSidebarOpenState(false); }, [reports, setSidebarOpen]);
   const [renaming, setRenaming] = useState(null);
   const [confirm, setConfirm] = useState(null);
   // The calculation input under the pointer or keyboard focus, outlined on the page.
@@ -85,10 +82,8 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
   }, []);
   const closeToast = useCallback((id) => setToasts((items) => items.filter((entry) => entry.id !== id)), []);
 
-  const [tapped, setTapped] = useState(hasTapped);
   const focusOn = useCallback((next) => {
     setFocus(next?.page ? { ...next, nonce: Date.now() } : null);
-    if (next?.page) { setTapped(true); try { localStorage.setItem(TAPPED_KEY, "yes"); } catch { /* private mode */ } }
     // On narrow screens the page sits above the notes: bring it into view.
     if (next?.page && window.matchMedia?.("(max-width: 1000px)").matches) document.querySelector(".rd-stage-wrap")?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
   }, []);
@@ -108,10 +103,10 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
     if (event.kind === "ready" && (event.report.extraction_history?.length ?? 0) > 1) {
       toast({ kind: "ready", group: `report-${event.report.id}`, text: rereadSummary(event.report) });
     } else if (event.kind === "ready") {
-      toast({ kind: "ready", group: `report-${event.report.id}`, text: mine ? `Đã đọc xong ${event.report.file_name}. Hỏi thử một câu nhé!` : `Đã đọc xong ${event.report.file_name}.`, action: mine ? null : { label: "Mở", onClick: () => reports.select(event.report.id) } });
+      toast({ kind: "ready", group: `report-${event.report.id}`, text: `${event.report.file_name} đã sẵn sàng`, action: mine ? null : { label: "Mở", onClick: () => reports.select(event.report.id) } });
       if (mine) window.setTimeout(() => askRef.current?.focus(), 300);
     } else {
-      toast({ kind: "error", group: `report-${event.report.id}`, text: `Chưa đọc được ${event.report.file_name}.` });
+      toast({ kind: "error", group: `report-${event.report.id}`, text: `Không đọc được ${event.report.file_name}.` });
     }
   }, [selected?.id, toast, reports]));
 
@@ -139,7 +134,7 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
       let result = await request(base);
       if (result?.status !== "ready") result = await request(base, { method: "POST" });
       const answer = result?.brief?.structured_answer;
-      if (!answer) throw new Error("Máy chủ chưa trả về bản tóm tắt.");
+      if (!answer) throw new Error("Không tải được bản tóm tắt.");
       setBrief((current) => current.key === key ? { key, status: "ready", answer } : current);
     } catch (error) {
       setBrief((current) => current.key === key ? { key, status: error.code === "BRIEF_UNAVAILABLE" ? "unavailable" : "error", error: { message: error.message, code: error.code, status: error.status, detail: error.detail } } : current);
@@ -179,14 +174,12 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
     if (node && conversation.pending.length) node.scrollTo({ top: node.scrollHeight, behavior: scrollBehavior() });
   }, [conversation.pending.length]);
 
-  const closeTour = () => setTourStep(null);
-
   const upload = useCallback(async (file) => {
     if (!file) return;
     unlockSound();
     try {
       const document = await reports.upload(file);
-      if (document) toast({ group: `report-${document.id}`, text: `Đã tải lên ${document.file_name}. Đang đọc, xong sẽ có tiếng chuông.` });
+      if (document) toast({ group: `report-${document.id}`, text: `Đang đọc ${document.file_name}…` });
     } catch (error) {
       toast({ kind: "error", text: error.message });
     }
@@ -198,7 +191,7 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
       const blob = await (await fetch(SAMPLE_URL)).blob();
       await upload(new File([blob], "bao-cao-mau-huong-lua.pdf", { type: "application/pdf" }));
     } catch (error) {
-      toast({ kind: "error", text: `Không mở được báo cáo mẫu. ${error.message}` });
+      toast({ kind: "error", text: "Không mở được báo cáo mẫu." });
     }
   }, [upload, toast]);
 
@@ -212,7 +205,7 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
     setRevision((value) => value + 1);
     await conversation.reload().catch(() => {});
     const affected = result?.affected_message_ids?.length ?? 0;
-    toast({ text: affected ? `Đã lưu số mới. ${affected} câu trả lời dùng số cũ cần hỏi lại.` : "Đã lưu số mới." });
+    toast({ text: affected ? `Đã lưu · ${affected} câu trả lời cần hỏi lại` : "Đã lưu" });
   }, [conversation, toast]);
 
   // Re-reading is offered only where the server says it can do it.
@@ -230,7 +223,7 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
       const job = jobs.find((item) => item.kind === "answer_question" && item.payload?.assistant_message_id === reply.id && ["queued", "running"].includes(item.status));
       if (job) await request(`/api/v1/jobs/${job.id}/cancel`, { method: "POST" });
       await conversation.reload();
-      toast({ text: job ? "Đã dừng trả lời." : "Câu trả lời vừa xong, không cần dừng." });
+      if (job) toast({ text: "Đã dừng" });
     } catch (error) {
       toast({ kind: "error", text: error.message });
     }
@@ -257,31 +250,26 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
 
   const confirmReread = () => setConfirm({
     title: "Đọc lại báo cáo này?",
-    text: "SourceLens sẽ đọc lại từ đầu, mất khoảng nửa phút. Số bạn đã sửa được giữ nếu vẫn ở đúng chỗ; câu trả lời cũ dùng số thay đổi sẽ cần hỏi lại.",
+    text: "Các số bạn đã sửa sẽ được giữ lại nếu còn đúng chỗ.",
     confirmLabel: "Đọc lại",
-    onConfirm: () => reports.reextract(selected).then(() => toast({ group: `report-${selected.id}`, text: "Đang đọc lại báo cáo. Xong sẽ có tiếng chuông." })).catch((error) => toast({ kind: "error", text: error.message })),
+    busyLabel: "Đang đọc lại…",
+    onConfirm: () => reports.reextract(selected).then(() => toast({ group: `report-${selected.id}`, text: "Đang đọc lại…" })).catch((error) => toast({ kind: "error", text: error.message })),
   });
   const confirmDelete = (report) => setConfirm({
-    title: `Xoá ${report.file_name}?`,
-    text: "Báo cáo và các câu hỏi về nó sẽ không còn trong danh sách của bạn.",
-    confirmLabel: "Xoá báo cáo",
+    title: `Xóa ${report.file_name}?`,
+    text: "Các câu hỏi về báo cáo này cũng bị xóa.",
+    confirmLabel: "Xóa",
+    busyLabel: "Đang xóa…",
     danger: true,
-    onConfirm: () => reports.remove(report).then(() => toast({ text: `Đã xoá ${report.file_name}.` })).catch((error) => toast({ kind: "error", text: error.message })),
+    onConfirm: () => reports.remove(report).then(() => toast({ text: `Đã xóa ${report.file_name}` })).catch((error) => toast({ kind: "error", text: error.message })),
   });
   const menuItems = [
-    selected && { section: "Báo cáo này" },
-    selected && { label: "Số liệu đã đọc", hint: "Xem và sửa các con số", onClick: () => setDataOpen(true), disabled: !ready },
-    selected && { label: "Đổi tên", onClick: () => setRenaming(selected) },
-    selected && canReread && { label: "Đọc lại", hint: "Khi nhiều số bị đọc sai", onClick: confirmReread },
-    selected && { label: "Xoá báo cáo", danger: true, onClick: () => confirmDelete(selected) },
-    { section: "Ứng dụng" },
-    { label: "Giao diện", choices: [{ value: "light", label: "Sáng" }, { value: "dark", label: "Tối" }, { value: "system", label: "Theo máy" }].map((choice) => ({ ...choice, active: preference === choice.value })), onPick: setPreference },
-    { label: `Âm báo khi đọc xong: ${sound ? "bật" : "tắt"}`, onClick: () => { setSoundEnabled(!sound); setSound(!sound); } },
-    ready && { label: "Hướng dẫn từng bước", onClick: () => setTourStep(0) },
-    user && onNavigate && { label: "Thư viện tài liệu", hint: "Sắp xếp báo cáo theo thư mục", onClick: () => onNavigate("/app/library") },
-    user && onNavigate && { label: "Tài khoản", onClick: () => onNavigate("/app/settings/profile") },
-    onSignOut && { label: "Đăng xuất", onClick: onSignOut },
+    { label: "Số liệu", onClick: () => setDataOpen(true), disabled: !ready },
+    { label: "Đổi tên", onClick: () => setRenaming(selected) },
+    canReread && { label: "Đọc lại", onClick: confirmReread },
+    { label: "Xóa", danger: true, onClick: () => confirmDelete(selected) },
   ];
+
 
   const askedQuestions = useMemo(() => new Set([...conversation.notes.map((note) => note.question?.body?.trim()), ...conversation.pending.map((item) => item.question.trim())].filter(Boolean)), [conversation.notes, conversation.pending]);
 
@@ -292,8 +280,8 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
     return pages;
   }, [conversation.notes, openChecks]);
 
-  if (reports.loading) return <div className="rd-app"><div className="rd-boot" role="status"><span className="rd-spinner large" aria-hidden="true" />Đang mở SourceLens…</div></div>;
-  if (reports.error && !reports.reports.length) return <div className="rd-app"><div className="rd-boot" role="alert"><h1>Chưa kết nối được máy chủ</h1><p>Kiểm tra mạng hoặc thử lại sau ít phút.</p><button type="button" className="rd-button primary" onClick={() => window.location.reload()}>Thử lại</button></div></div>;
+  if (reports.loading) return <div className="rd-app"><div className="rd-boot" role="status"><span className="rd-spinner large" aria-hidden="true" />Đang tải…</div></div>;
+  if (reports.error && !reports.reports.length) return <div className="rd-app"><div className="rd-boot" role="alert"><h1>Không kết nối được</h1><button type="button" className="rd-button primary" onClick={() => window.location.reload()}>Thử lại</button></div></div>;
 
   const processing = isProcessing(selected);
   // Only this report's numbers: after switching reports the old list stays in state until the new one loads.
@@ -322,7 +310,7 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
     const data = chartData(selection, evidences);
     const kept = selection.map((key) => evidences.find((item) => item.evidence_key === key)).filter((cell) => cell?.table_locator?.table_region_key === data.tableKey && cell.page_number === data.page);
     const names = Object.fromEntries(kept.map((cell) => [cell.evidence_key, [cell.table_locator.row_header, cell.table_locator.column_header]]));
-    if (charts.length >= MAX_CHARTS) toast({ text: `Mỗi báo cáo giữ tối đa ${MAX_CHARTS} biểu đồ, nên biểu đồ cũ nhất đã được xoá.` });
+    if (charts.length >= MAX_CHARTS) toast({ text: "Đã xóa biểu đồ cũ nhất" });
     changeCharts((list) => [...list, { id, keys: kept.map((cell) => cell.evidence_key), names }].slice(-MAX_CHARTS));
     setSelection([]); setAskingSelection(false);
     // The new card takes focus, so a keyboard user lands on what was made.
@@ -362,7 +350,7 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
     const removed = charts[at];
     changeCharts((list) => list.filter((item) => item.id !== id));
     setPeekKey(null);
-    toast({ text: "Đã xoá biểu đồ.", action: removed && { label: "Hoàn tác", onClick: () => changeCharts((list) => (list.some((item) => item.id === id) ? list : [...list.slice(0, at), removed, ...list.slice(at)])) } });
+    toast({ text: "Đã xóa biểu đồ", action: removed && { label: "Hoàn tác", onClick: () => changeCharts((list) => (list.some((item) => item.id === id) ? list : [...list.slice(0, at), removed, ...list.slice(at)])) } });
     window.requestAnimationFrame(() => askRef.current?.focus({ preventScroll: true }));
   };
   // The answer takes focus too, or a keyboard user is left on a card that just closed.
@@ -370,7 +358,7 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
   const dismissProblem = (check) => {
     problems.dismiss(check.chip.key);
     if (focus?.key === check.chip.key) clearFocus();
-    toast({ text: "Đã ẩn chỗ không khớp này. Muốn xem lại, mở «Tóm tắt báo cáo» rồi bấm «Hiện lại»." });
+    toast({ text: "Đã ẩn", action: { label: "Hoàn tác", onClick: () => problems.undismiss(check.chip.key) } });
     // The button pressed is gone: focus the next one, else "Hiện lại".
     window.requestAnimationFrame(() => (document.querySelector(".rd-alert .rd-dismiss") ?? document.querySelector(".rd-skipped button"))?.focus({ preventScroll: true }));
   };
@@ -378,22 +366,25 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
     onAsk={(text) => { setOpenCell(null); setQuestion(text); window.requestAnimationFrame(() => askRef.current?.focus()); }}
     onGotoAnswer={gotoAnswer} onGotoCheck={(check) => { const key = openCell; setOpenCell(null); focusOn(check.chip); window.requestAnimationFrame(() => document.querySelector(`[data-cell="${CSS.escape(key)}"]`)?.focus({ preventScroll: true })); }}
     onSaved={onEvidenceSaved} onConflict={() => setRevision((value) => value + 1)} />;
-  return <div className="rd-app">
+  return <div className={`rd-app${sidebarOpen ? " side-open" : ""}`}>
     <a className="rd-skip" href="#main-content">Bỏ qua điều hướng</a>
-    <TopBar reports={reports.reports} selected={selected} onHome={() => reports.select(null)} onOpen={reports.select} onNew={() => uploadRef.current?.click()} onHelp={() => setHelpOpen(true)} menuItems={menuItems} />
+    <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} reports={reports.reports} selected={selected} onOpen={pickReport} onHome={() => pickReport(null)} onNew={() => uploadRef.current?.click()}
+      onLibrary={user && onNavigate ? () => onNavigate("/app/library") : null} user={user} onSettings={() => onNavigate?.("/app/settings/profile")} onSignOut={onSignOut}
+      theme={preference} onTheme={setPreference} sound={sound} onSound={() => { setSoundEnabled(!sound); setSound(!sound); }} />
+    <TopBar selected={selected} sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen(true)} onHelp={() => setHelpOpen(true)} menuItems={menuItems} />
     <input ref={uploadRef} type="file" accept="application/pdf,.pdf" hidden onChange={(event) => { upload(event.target.files?.[0]); event.target.value = ""; }} />
     {!selected
-      ? <Home reports={reports.reports} onOpen={reports.select} onFile={upload} onSample={useSample} uploading={reports.uploading} onDelete={confirmDelete} />
+      ? <Home onFile={upload} onSample={useSample} uploading={reports.uploading} />
       : <main className="rd-work" id="main-content">
-        <div className="rd-stage-wrap" data-tour="page"><PdfStage report={selected} focus={focus} onClearFocus={clearFocus} processing={processing} markedPages={markedPages} evidences={evidences}
+        <div className="rd-stage-wrap"><PdfStage report={selected} focus={focus} onClearFocus={clearFocus} processing={processing} markedPages={markedPages} evidences={evidences}
           openKey={openCell} onOpenCell={openCellCard} onCloseCard={closeCellCard} selection={selection} onSelect={selectCells} renderCard={renderCard}
           checks={openChecks} onDismissCheck={dismissProblem} peekKey={peekKey} onPeek={setPeekKey}
           pick={swaps.pick} onPickHover={swaps.hover} onPickChoose={swaps.choose} onPickCancel={swaps.cancel} onAskSelection={selectionQuestionList.length ? askAboutSelection : null} askingSelection={askingSelection} onChartSelection={canChart ? drawChart : null} /></div>
-        <aside className="rd-notes" aria-label="Ghi chú và câu trả lời">
+        <aside className="rd-notes" aria-label="Câu trả lời">
           <div className="rd-notes-scroll" ref={notesRef}>
             {processing && <ReadingCard report={selected} />}
             {selected.extraction_status === "failed" && <FailedCard report={selected} onRetry={canReread ? (report) => reports.reextract(report).catch((error) => toast({ kind: "error", text: error.message })) : null} />}
-            {ready && <BriefCard brief={brief.key === briefKey ? brief : { status: "loading" }} briefing={briefing} dismissed={problems.dismissed} onDismiss={dismissProblem} onRestore={problems.restore} activeKey={focus?.key} onFocus={focusOn} onAsk={ask} onRetry={() => loadBrief(briefKey, selected)} onOpenData={() => setDataOpen(true)} asked={askedQuestions} collapsed={conversation.notes.length > 0} scanned={briefing?.scanned} hint={!tapped} />}
+            {ready && <BriefCard brief={brief.key === briefKey ? brief : { status: "loading" }} briefing={briefing} dismissed={problems.dismissed} onDismiss={dismissProblem} onRestore={problems.restore} activeKey={focus?.key} onFocus={focusOn} onAsk={ask} onRetry={() => loadBrief(briefKey, selected)} onOpenData={() => setDataOpen(true)} asked={askedQuestions} collapsed={conversation.notes.length > 0} scanned={briefing?.scanned} />}
             {conversation.notes.map((note) => <AnswerCard key={note.id} note={note} activeKey={focus?.key} onFocus={focusOn} onPeek={setPeekKey} onPick={swaps.start} pickBusy={Boolean(swaps.busy)} swap={swaps.swaps[note.id]}
               onUndoSwap={(id) => { swaps.undo(id); window.requestAnimationFrame(() => document.querySelector(`#note-${CSS.escape(id)} .rd-headline-value`)?.focus({ preventScroll: true })); }} onAsk={ask} onOpenData={() => setDataOpen(true)} onStop={stopAnswer} scanned={briefing?.scanned} onEdit={(text) => { setQuestion(text); askRef.current?.focus(); }} />)}
             {ready && charts.map((chart) => <ChartCard key={chart.id} chart={chart} evidences={evidences} loading={evidence.loading || !evidence.data} activeKey={openCell ?? focus?.key} onPeek={setPeekKey}
@@ -401,15 +392,14 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
               onChange={(id, patch) => changeCharts((list) => list.map((item) => (item.id === id ? { ...item, ...patch } : item)))} onRemove={removeChart} />)}
             {conversation.pending.map((item) => <PendingCard key={item.id} item={item} onRetry={(entry) => conversation.ask(entry.question, entry.id)} onDismiss={conversation.dismiss} />)}
           </div>
-          <AskBox ref={askRef} value={question} onChange={setQuestion} onSubmit={ask} asking={conversation.asking} disabled={selected.extraction_status === "failed"} note={processing ? "Đang đọc báo cáo. Câu hỏi sẽ được trả lời khi đọc xong." : undefined} examples={(briefing?.suggestions ?? []).filter((item) => !askedQuestions.has(item.trim()))}
-            suggestions={selectionSuggestions} suggestionsLabel={`Gợi ý câu hỏi về ${selection.length} ô đã chọn:`} />
+          <AskBox ref={askRef} value={question} onChange={setQuestion} onSubmit={ask} asking={conversation.asking} disabled={selected.extraction_status === "failed"} note={processing ? "Đang đọc báo cáo…" : undefined}
+            suggestions={selectionSuggestions} suggestionsLabel="Gợi ý" />
         </aside>
       </main>}
     <DataPanel open={dataOpen} data={evidence.data} loading={evidence.loading} basePath={selected ? `/api/v1/sessions/${selected.sessionId}/documents/${selected.id}` : ""} onClose={() => setDataOpen(false)} onFocus={focusOn} onSaved={onEvidenceSaved} onReload={() => setRevision((value) => value + 1)} />
-    {renaming && <RenameDialog report={renaming} onClose={() => setRenaming(null)} onSave={async (report, name) => { await reports.rename(report, name); toast({ text: `Đã đổi tên thành ${name}.` }); }} />}
+    {renaming && <RenameDialog report={renaming} onClose={() => setRenaming(null)} onSave={async (report, name) => { await reports.rename(report, name); toast({ text: "Đã đổi tên" }); }} />}
     <ConfirmDialog dialog={confirm} onClose={() => setConfirm(null)} />
-    <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} onTour={() => setTourStep(0)} canTour={ready} />
-    {tourStep !== null && tourStep < TOUR_LENGTH && ready && <Tour step={tourStep} onNext={() => setTourStep((step) => step + 1)} onClose={closeTour} onFinish={() => { closeTour(); window.setTimeout(() => askRef.current?.focus(), 50); }} />}
+    <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
     <Toasts toasts={toasts} onClose={closeToast} />
     <DropOverlay onFile={upload} />
   </div>;

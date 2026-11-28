@@ -75,8 +75,8 @@ export function useReports() {
   const upload = useCallback(async (file) => {
     if (!file) return null;
     const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name ?? "");
-    if (!isPdf) throw new Error("Chỉ nhận tệp PDF. Hãy chọn một báo cáo dạng .pdf.");
-    if (file.size > MAX_BYTES) throw new Error("Tệp lớn hơn 100 MB. Hãy chọn tệp nhỏ hơn.");
+    if (!isPdf) throw new Error("Chỉ nhận tệp PDF.");
+    if (file.size > MAX_BYTES) throw new Error("Tệp lớn hơn 100 MB.");
     let sessionId = uploadSessionId;
     if (!sessionId) sessionId = (await load())[0]?.id;
     setUploading({ name: file.name, size: file.size });

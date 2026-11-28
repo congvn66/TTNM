@@ -41,7 +41,7 @@ from report_qa.domain.contracts import validate_calculation_result_v1, validate_
 from .ai_provider import ProviderError, _load_local_env, assistant_mode, live_provider, planner_client, provider_mode
 from .jobs import router as jobs_router
 from .library import router as library_router
-from .auth import DEMO_OWNER_ID, owner_id_for_request, router as auth_router, settings_router as auth_settings_router, web_origins
+from .auth import DEMO_OWNER_ID, guest_uploads_left, owner_id_for_request, router as auth_router, settings_router as auth_settings_router, web_origins
 from .devices import router as auth_sessions_router
 from .extraction_slots import ExtractionSlots
 from .user_messages import MESSAGES, error_detail, user_error
@@ -377,7 +377,7 @@ class EvidenceRevisionCreateRequest(StorableRequest):
 
     input_text: str | None = Field(default=None, min_length=1, max_length=80)
     numeric_value: str | None = Field(default=None, min_length=1, max_length=80)
-    reason: str = Field(min_length=3, max_length=1000)
+    reason: str = Field(default="", max_length=1000)
     expected_revision_id: str = Field(min_length=1, max_length=80)
 
     @model_validator(mode="after")
@@ -896,6 +896,8 @@ def delete_session(session_id: str, request: Request) -> dict[str, Any]:
 async def upload_session_document(session_id: str, request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> dict[str, Any]:
     owner_id = owner_id_for_request(request)
     session = get_session(session_id, owner_id)
+    if guest_uploads_left(owner_id) == 0:
+        raise user_error(429, "GUEST_UPLOAD_LIMIT")
     trace_id = trace_id_for(request)
     flow_log("UPLOAD_ACCEPTED", trace_id=trace_id, session_id=session_id, file_name_present=bool(file.filename))
     document = await persist_pdf(file, session, trace_id=trace_id)
@@ -1536,7 +1538,7 @@ def _database_evidence_state(document: dict[str, Any], extraction: dict[str, Any
         initial = {
             "id": str(uuid4()), "revision_no": 1, "action": "initialize", "created_at": utc_now(),
             "numeric_value": evidence.get("numeric_value"), "old_numeric_value": None,
-            "previous_revision_id": None, "reason": "Giá trị trích xuất gốc, không thể sửa trực tiếp.",
+            "previous_revision_id": None, "reason": "",
         }
         items[key] = {
             "evidence_key": key, "original_numeric_value": evidence.get("numeric_value"),
@@ -1553,7 +1555,7 @@ def _record_reread_value(state: dict[str, Any], item: dict[str, Any], value: str
     revision = {
         "id": str(uuid4()), "revision_no": len(item["revisions"]) + 1, "action": "reread", "created_at": utc_now(),
         "numeric_value": value, "old_numeric_value": None, "previous_revision_id": current["id"],
-        "reason": "Giá trị được đọc lại và xác minh.",
+        "reason": "",
     }
     item["revisions"].append(revision)
     item["current_revision_id"] = revision["id"]
@@ -1678,14 +1680,14 @@ def _planner_call() -> dict[str, Any]:
 
 
 def _persist_unsupported(session, session_id, document, question, question_plan, trace, trace_id) -> dict[str, Any]:
-    message = "Câu hỏi này nằm ngoài phạm vi hệ thống hỗ trợ, ví dụ dự báo, xin ý kiến hoặc phép tính nhiều bước. Hệ thống không đưa ra con số nào."
+    message = "Chưa trả lời được câu này. Thử hỏi về một số liệu trong báo cáo."
     trace.append(trace_event("question_unsupported", "stopped", code="QUESTION_UNSUPPORTED"))
     now = utc_now()
     user_message = {"id": str(uuid4()), "role": "user", "body": question, "document_id": document["id"], "created_at": now}
     assistant_message = {
         "id": str(uuid4()), "role": "assistant", "body": message, "document_id": document["id"], "created_at": now, "mode": "question_unsupported",
         "citations": [], "trace_id": trace_id, "question_plan": question_plan,
-        "structured_answer": {"presentation": "unsupported_v1", "answer": message, "summary": "Hệ thống chưa truy hồi dữ liệu hoặc thực hiện phép tính.",
+        "structured_answer": {"presentation": "unsupported_v1", "answer": message, "summary": "",
                               "sections": [], "formulas": [], "tables": [], "claims": [], "warnings": [], "cited_pages": []},
     }
     snapshot_answer_revision(assistant_message)
@@ -1882,7 +1884,7 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
             "structured_answer": {
                 "presentation": "clarification_v1",
                 "answer": clarification["question_to_user"],
-                "summary": "Câu hỏi có nhiều cách hiểu; hệ thống chưa truy hồi dữ liệu hoặc thực hiện phép tính.",
+                "summary": "",
                 "sections": [{"heading": "Cần làm rõ", "points": clarification["options"], "evidence_pages": []}],
                 "formulas": [],
                 "tables": [],

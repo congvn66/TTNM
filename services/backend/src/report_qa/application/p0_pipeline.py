@@ -110,8 +110,8 @@ def build_question_plan(
             "source_strategy": {"priority": ["table", "text", "chart"], "chart_policy": "only_if_required_fact_unresolved", "chart_fact_keys": []},
             "clarification": {
                 "reason_code": ambiguity,
-                "question_to_user": "Bạn muốn xem mức thay đổi tuyệt đối hay tỷ lệ thay đổi phần trăm?",
-                "options": ["Mức thay đổi tuyệt đối", "Tỷ lệ thay đổi phần trăm"],
+                "question_to_user": "Tăng bao nhiêu hay tăng bao nhiêu %?",
+                "options": ["Số tuyệt đối", "Phần trăm"],
             },
         }
 
@@ -133,7 +133,7 @@ def build_question_plan(
             "source_strategy": {"priority": ["table", "text", "chart"], "chart_policy": "only_if_required_fact_unresolved", "chart_fact_keys": []},
             "clarification": {
                 "reason_code": "AMBIGUOUS_PERIOD",
-                "question_to_user": "Bạn muốn so sánh kỳ này với kỳ nào?",
+                "question_to_user": "So sánh với kỳ nào?",
                 "options": ["Cùng kỳ năm trước", "Kỳ liền trước"],
             },
         }
@@ -294,10 +294,10 @@ def _public_operand(binding: dict[str, Any]) -> dict[str, Any]:
 def calculation_answer(plan: dict[str, Any], result: dict[str, Any], bindings: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
     if result["status"] != "succeeded":
         reason_messages = {
-            "missing_data": "Không đủ dữ liệu để thực hiện phép tính.",
-            "zero_denominator": "Không thể tính tỷ lệ thay đổi vì giá trị kỳ gốc bằng 0.",
-            "unit_mismatch": "Không thể tính vì các giá trị không tương thích đơn vị.",
-            "ambiguous": "Chưa thể xác định một kết quả duy nhất.",
+            "missing_data": "Không đủ số liệu để tính.",
+            "zero_denominator": "Không tính được tỷ lệ vì kỳ gốc bằng 0.",
+            "unit_mismatch": "Không tính được vì khác đơn vị.",
+            "ambiguous": "Không xác định được một kết quả.",
         }
         answer = reason_messages[result["status"]]
     else:
@@ -308,10 +308,10 @@ def calculation_answer(plan: dict[str, Any], result: dict[str, Any], bindings: l
     structured = {
         "presentation": "deterministic_calculation_v1",
         "answer": answer,
-        "summary": "Kết quả được tính bằng chương trình từ các evidence đã liên kết; AI không thực hiện phép tính.",
+        "summary": "",
         "sections": [{"heading": "Kết quả", "points": [answer], "evidence_pages": cited_pages}],
         "formulas": [{"name": result["formula_id"], "expression": result["formula_id"], "substitution": " ; ".join(f"{item['fact_key']}={item['value']}" for item in result["operands"]), "result": result.get("value"), "unit": result.get("unit"), "evidence_pages": cited_pages, "calculation": {"status": result["status"], "computed_result": result.get("value"), "unit": result.get("unit"), "calculator": result["formula_id"]}}],
-        "tables": [{"title": "Dữ liệu đầu vào", "columns": ["Fact", "Giá trị", "Đơn vị", "Nguồn"], "rows": [[item["fact_key"], item["value"], item.get("unit") or "", item["method_label"]] for item in bindings], "evidence_pages": cited_pages}],
+        "tables": [{"title": "Dữ liệu đầu vào", "columns": ["Số liệu", "Giá trị", "Đơn vị", "Nguồn"], "rows": [[item["fact_key"], item["value"], item.get("unit") or "", item["method_label"]] for item in bindings], "evidence_pages": cited_pages}],
         "claims": [],
         "warnings": result["warnings"],
         "cited_pages": cited_pages,

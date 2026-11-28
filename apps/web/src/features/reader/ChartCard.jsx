@@ -136,14 +136,14 @@ export function ChartCard({ chart, evidences, loading = false, activeKey, onPeek
   if (!data && loading) {
     return <article id={`chart-${chart.id}`} tabIndex={-1} className="rd-card rd-chart" aria-busy="true">
       <span className="rd-kicker">Biểu đồ</span>
-      <p className="rd-chart-take">Đang tải số liệu để vẽ lại…</p>
+      <p className="rd-chart-take">Đang tải…</p>
     </article>;
   }
   if (!data) {
     return <article id={`chart-${chart.id}`} tabIndex={-1} className="rd-card rd-chart">
       <span className="rd-kicker">Biểu đồ</span>
-      <p>Các ô của biểu đồ này không còn sau lần đọc lại báo cáo.</p>
-      <button type="button" className="rd-button" onClick={() => onRemove(chart.id)}>Xoá biểu đồ</button>
+      <p>Biểu đồ không còn dữ liệu</p>
+      <button type="button" className="rd-button" onClick={() => onRemove(chart.id)}>Xóa</button>
     </article>;
   }
 
@@ -156,7 +156,7 @@ export function ChartCard({ chart, evidences, loading = false, activeKey, onPeek
   const seriesName = (id) => (data.turned ? "" : data.series.find((item) => item.id === id)?.label ?? "");
   const describe = (bar) => [bar.group, seriesName(bar.series)].filter(Boolean).join(" · ");
   // How to use the bars is said once, on the chart; each bar says only what it is.
-  const spoken = (bar) => `${describe(bar)}: ${bar.value == null ? "không có số" : show(bar.value, share, data.percent)}${bar.unsure ? ", mình chưa chắc số này" : ""}`;
+  const spoken = (bar) => `${describe(bar)}: ${bar.value == null ? "không có số" : show(bar.value, share, data.percent)}${bar.unsure ? ", có thể sai" : ""}`;
   const current = Math.min(at, bars.length - 1);
   const lit = hover ?? null;
   const tip = lit && bars.find((bar) => bar.key === lit);
@@ -166,7 +166,7 @@ export function ChartCard({ chart, evidences, loading = false, activeKey, onPeek
   const leavesNumbers = (next) => data.groups.some((group) => group.bars.some((bar) => !next.includes(bar.series) && bar.value != null));
   const toggle = (id) => {
     const next = off.includes(id) ? off.filter((item) => item !== id) : [...off, id];
-    if (leavesNumbers(next)) { setNotice(""); onChange(chart.id, { off: next }); } else setNotice("Cần giữ ít nhất một cột có số trong biểu đồ.");
+    if (leavesNumbers(next)) { setNotice(""); onChange(chart.id, { off: next }); } else setNotice("Cần giữ ít nhất một cột có số");
   };
   const ratioHidden = data.hidden.some((id) => off.includes(id));
   const mixedShown = data.series.some((item) => item.ratio && !off.includes(item.id)) && data.series.some((item) => !item.ratio && !off.includes(item.id));
@@ -185,7 +185,7 @@ export function ChartCard({ chart, evidences, loading = false, activeKey, onPeek
   return <article id={`chart-${chart.id}`} tabIndex={-1} className="rd-card rd-chart">
     <div className="rd-chart-head">
       <div><span className="rd-kicker">Biểu đồ · trang {data.page}</span><h3>{data.title}</h3></div>
-      <button type="button" className="rd-focus-close" onClick={() => onRemove(chart.id)} aria-label="Xoá biểu đồ">×</button>
+      <button type="button" className="rd-focus-close" onClick={() => onRemove(chart.id)} aria-label="Xóa biểu đồ">×</button>
     </div>
     {takeaway && <p className="rd-chart-take">{takeaway}</p>}
     {data.series.length > 1 && !data.turned && <div className="rd-chart-series" role="group" aria-label="Các cột trong biểu đồ">
@@ -214,26 +214,26 @@ export function ChartCard({ chart, evidences, loading = false, activeKey, onPeek
         })}
       </svg>
     </div>
-    <p className="rd-chart-tip" aria-hidden="true">{tip ? `${describe(tip)}: ${show(tip.value, share, data.percent)}${tip.unsure ? " · mình chưa chắc số này" : ""} · ô ở trang ${data.page}` : touch ? "Chạm một cột để mở ô của nó trên trang." : "Rê chuột hoặc dùng mũi tên qua một cột để thấy ô của nó trên trang. Bấm để mở ô."}</p>
+    <p className="rd-chart-tip" aria-hidden="true">{tip ? `${describe(tip)}: ${show(tip.value, share, data.percent)}${tip.unsure ? " · có thể sai" : ""} · trang ${data.page}` : ""}</p>
     {(unsure > 0 || data.notes.length > 0 || ratioHidden || mixedShown) && <ul className="rd-chart-notes">
-      {ratioHidden && <li>Cột tỷ lệ đang ẩn vì khác đơn vị với các cột còn lại. Bấm tên cột để hiện.</li>}
-      {mixedShown && <li><i className="rd-mark unsure" aria-hidden="true">?</i>Cột tỷ lệ và cột số tiền đang chung một trục, nên không so được với nhau.</li>}
-      {unsure > 0 && <li><i className="rd-mark unsure" aria-hidden="true">?</i>Cột gạch chéo là số mình chưa chắc đọc đúng ({unsure}).</li>}
+      {ratioHidden && <li>Đã ẩn cột tỷ lệ (khác đơn vị)</li>}
+      {mixedShown && <li><i className="rd-mark unsure" aria-hidden="true">?</i>Khác đơn vị, không so trực tiếp</li>}
+      {unsure > 0 && <li><i className="rd-mark unsure" aria-hidden="true">?</i>Gạch chéo: có thể sai ({unsure})</li>}
       {data.notes.map((note) => <li key={note}>{note}</li>)}
     </ul>}
     <div className="rd-chart-actions">
       {data.share && <div className="rd-seg" role="group" aria-label="Cách vẽ">
         <button type="button" aria-pressed={!share} onClick={() => onChange(chart.id, { mode: "value" })}>Giá trị</button>
-        <button type="button" aria-pressed={share} onClick={() => onChange(chart.id, { mode: "share" })}>Tỷ trọng trong tổng</button>
+        <button type="button" aria-pressed={share} onClick={() => onChange(chart.id, { mode: "share" })}>Tỷ trọng</button>
       </div>}
-      <button type="button" className="rd-link" onClick={() => onShowCells(chart.keys)}>Chọn lại các ô trên trang</button>
+      <button type="button" className="rd-link" onClick={() => onShowCells(chart.keys)}>Xem trên trang</button>
     </div>
     <details className="rd-chart-table">
-      <summary>Xem số dạng bảng</summary>
+      <summary>Xem bảng</summary>
       <table>
         <thead><tr><th scope="col">{data.turned ? "Kỳ" : "Dòng"}</th>{data.turned ? <th scope="col">{data.series[0].label}</th> : data.series.map((item) => <th key={item.id} scope="col">{item.label}</th>)}</tr></thead>
         <tbody>{data.groups.map((group) => <tr key={group.id}><th scope="row">{group.label}</th>
-          {(data.turned ? data.series.slice(0, 1) : data.series).map((item) => { const bar = data.turned ? group.bars[0] : group.bars.find((entry) => entry.series === item.id); return <td key={item.id}>{bar ? `${show(barValue(bar, mode, data.share), share, data.percent)}${bar.unsure ? " (chưa chắc)" : ""}` : "—"}</td>; })}</tr>)}</tbody>
+          {(data.turned ? data.series.slice(0, 1) : data.series).map((item) => { const bar = data.turned ? group.bars[0] : group.bars.find((entry) => entry.series === item.id); return <td key={item.id}>{bar ? `${show(barValue(bar, mode, data.share), share, data.percent)}${bar.unsure ? " (có thể sai)" : ""}` : "—"}</td>; })}</tr>)}</tbody>
       </table>
     </details>
   </article>;
