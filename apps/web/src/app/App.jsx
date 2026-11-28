@@ -22,6 +22,6 @@ export default function App() {
 
 function AuthGateEnabled({ required }) {
   return required
-    ? <AuthGate>{({ user, signOut, startGuest, openSignIn }) => <AppRouter user={user} onSignOut={signOut} startGuest={startGuest} openSignIn={openSignIn} />}</AuthGate>
+    ? <AuthGate>{({ user, signOut, startGuest, openSignIn, updateUser }) => <AppRouter user={user} onSignOut={signOut} startGuest={startGuest} openSignIn={openSignIn} onUserChange={updateUser} />}</AuthGate>
     : <AppRouter />;
 }
