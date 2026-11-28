@@ -230,13 +230,18 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
   }, [conversation, toast]);
 
   // The Library page sends people here with ?upload=1 to add a report.
+  // It waits for the reports to load (the upload box does not exist before) and shows the home
+  // screen with its drop zone; the file picker opens only while the browser still counts the
+  // Library click as the person's action, since a picker opened by script alone is blocked.
   useEffect(() => {
+    if (reports.loading) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("upload") !== "1") return;
     params.delete("upload");
     window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
-    window.setTimeout(() => uploadRef.current?.click(), 100);
-  }, []);
+    reports.select(null);
+    if (navigator.userActivation?.isActive !== false) window.setTimeout(() => uploadRef.current?.click(), 0);
+  }, [reports.loading]);
 
   useEffect(() => {
     const onKey = (event) => {
@@ -373,7 +378,12 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
       theme={preference} onTheme={setPreference} sound={sound} onSound={() => { setSoundEnabled(!sound); setSound(!sound); }} />
     <TopBar selected={selected} sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen(true)} onHelp={() => setHelpOpen(true)} menuItems={menuItems} />
     <input ref={uploadRef} type="file" accept="application/pdf,.pdf" hidden onChange={(event) => { upload(event.target.files?.[0]); event.target.value = ""; }} />
-    {!selected
+    {reports.uploading
+      ? <main className="rd-work" id="main-content">
+        <div className="rd-stage-wrap"><div className="rd-boot" role="status"><span className="rd-spinner large" aria-hidden="true" />Đang tải lên {reports.uploading.name}…</div></div>
+        <aside className="rd-notes" aria-label="Tiến độ tải lên"><div className="rd-notes-scroll"><ReadingCard uploading report={{ file_name: reports.uploading.name, created_at: reports.uploading.startedAt }} /></div></aside>
+      </main>
+      : !selected
       ? <Home onFile={upload} onSample={useSample} uploading={reports.uploading} />
       : <main className="rd-work" id="main-content">
         <div className="rd-stage-wrap"><PdfStage report={selected} focus={focus} onClearFocus={clearFocus} processing={processing} markedPages={markedPages} evidences={evidences}

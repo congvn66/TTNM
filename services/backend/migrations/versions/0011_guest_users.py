@@ -14,8 +14,8 @@ from __future__ import annotations
 from alembic import op
 
 
-revision = "0010_guest_users"
-down_revision = "0009_optional_edit_reason"
+revision = "0011_guest_users"
+down_revision = "0010_optional_edit_reason"
 branch_labels = None
 depends_on = None
 

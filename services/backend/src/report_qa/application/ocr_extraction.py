@@ -56,8 +56,8 @@ class TesseractPdfOcr:
 
         document = pymupdf.open(path)
         page = document.load_page(page_number - 1)
-        pixmap = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), alpha=False)
-        image = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
+        pixmap, gray = _clean_page(page)
+        image = Image.fromarray(gray)
         data = pytesseract.image_to_data(image, lang="+".join(self.LANGUAGES), output_type=pytesseract.Output.DICT, config="--oem 1 --psm 6")
         tokens: list[dict[str, Any]] = []
         for index, raw in enumerate(data["text"]):
@@ -72,4 +72,57 @@ class TesseractPdfOcr:
         return OcrPage(page_number, pixmap.width, pixmap.height, tuple(tokens))
 
 
-__all__ = ["OcrEngine", "OcrPage", "TesseractPdfOcr"]
+# Scans are read at 4x: at 2x a ~290 dpi page loses detail; 4x keeps the source's own resolution.
+SCAN_SCALE = 4
+
+
+def remove_ruling_lines(gray):
+    """The page with table and box lines painted white.
+
+    Tesseract cannot read digits that sit between grid lines: on a scanned
+    table it returns tokens like "2248|" for "273.458". A line is a run of
+    dark pixels at least 1/30 of the page wide (or tall); text strokes are
+    much shorter, so they stay.
+    """
+    import cv2
+    import numpy as np
+
+    binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    length = max(10, gray.shape[1] // 30)
+    horizontal = cv2.morphologyEx(binary, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (length, 1)))
+    vertical = cv2.morphologyEx(binary, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, length)))
+    lines = cv2.dilate(horizontal | vertical, np.ones((3, 3), np.uint8))
+    cleaned = gray.copy()
+    cleaned[lines > 0] = 255
+    return cleaned
+
+
+def _clean_page(page):
+    """(pixmap, grayscale image without ruling lines) of one page at SCAN_SCALE."""
+    import cv2
+    import numpy as np
+    import pymupdf
+
+    pixmap = page.get_pixmap(matrix=pymupdf.Matrix(SCAN_SCALE, SCAN_SCALE), alpha=False)
+    rgb = np.frombuffer(pixmap.samples, np.uint8).reshape(pixmap.height, pixmap.width, 3)
+    return pixmap, remove_ruling_lines(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY))
+
+
+def clean_scan(path: Path, target: Path) -> Path:
+    """A copy of a scanned PDF with ruling lines removed, same page sizes, so boxes stay in page coordinates."""
+    import cv2
+    import pymupdf
+
+    with pymupdf.open(path) as source, pymupdf.open() as copy:
+        for page in source:
+            _, gray = _clean_page(page)
+            ok, png = cv2.imencode(".png", gray)
+            if not ok:
+                raise RuntimeError("Could not encode a cleaned scan page")
+            new_page = copy.new_page(width=page.rect.width, height=page.rect.height)
+            new_page.insert_image(new_page.rect, stream=png.tobytes())
+        copy.save(target)
+    return target
+
+
+__all__ = ["OcrEngine", "OcrPage", "SCAN_SCALE", "TesseractPdfOcr", "clean_scan", "remove_ruling_lines"]

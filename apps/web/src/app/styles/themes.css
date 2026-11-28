@@ -2,31 +2,31 @@
   --ink: var(--color-text);
   --ink-soft: var(--color-secondary);
   --muted: var(--color-muted);
-  --subtle: #94a3b8;
+  --subtle: #8f8a82;
   --canvas: var(--color-background);
   --surface: var(--color-surface);
   --surface-soft: var(--color-surface-subtle);
-  --surface-muted: #e2e8f0;
+  --surface-muted: #e9e8e4;
   --border: var(--color-border);
-  --border-strong: #cbd5e1;
+  --border-strong: #d3d0c9;
   --blue: var(--color-cta);
   --green: var(--color-success);
   --red: var(--color-danger);
-  --gold: #a16207;
-  --gold-dark: #854d0e;
-  --gold-soft: #fef9c3;
-  --green-soft: #ecfdf5;
-  --red-soft: #fff1f2;
+  --gold: #2f5bea;
+  --gold-dark: #2148c9;
+  --gold-soft: #edf1ff;
+  --green-soft: #e9f6ee;
+  --red-soft: #fdeeec;
   /* Accent for navigation, links and selected rows. */
-  --accent: #0369a1;
-  --accent-strong: #075985;
-  --accent-soft: #eff6ff;
-  --accent-border: #bae6fd;
+  --accent: #2f5bea;
+  --accent-strong: #2148c9;
+  --accent-soft: #edf1ff;
+  --accent-border: #c5d1fb;
   /* High-contrast fill for toasts, primary buttons and the user's bubble.
      Text colours (--ink) flip with the theme, so they must never be fills. */
-  --inverse-bg: #0f172a;
+  --inverse-bg: #17181a;
   --inverse-fg: #ffffff;
-  --inverse-hover: #1e293b;
+  --inverse-hover: #2a2b2e;
   --on-gold: #ffffff;
   --shadow-1: var(--shadow-sm);
   --shadow-2: var(--shadow-md);
@@ -34,24 +34,24 @@
 }
 
 [data-theme="dark"] {
-  --ink-soft: #e2e8f0;
-  --subtle: #94a3b8;
-  --surface-muted: #334155;
-  --border-strong: #475569;
-  --gold: #facc15;
-  --gold-dark: #fde68a;
-  --gold-soft: rgba(250, 204, 21, .12);
+  --ink-soft: #d6d6d8;
+  --subtle: #8a8680;
+  --surface-muted: #2e2c29;
+  --border-strong: #44413c;
+  --gold: #7c9bff;
+  --gold-dark: #9db4ff;
+  --gold-soft: #1e2847;
   --green-soft: rgba(16, 185, 129, .14);
   --red-soft: rgba(239, 68, 68, .14);
-  --green: #34d399;
-  --accent: #7dd3fc;
-  --accent-strong: #bae6fd;
-  --accent-soft: rgba(14, 165, 233, .14);
-  --accent-border: #164e63;
-  --inverse-bg: #e2e8f0;
-  --inverse-fg: #0f172a;
-  --inverse-hover: #cbd5e1;
-  --on-gold: #0f172a;
+  --green: #4ade80;
+  --accent: #7c9bff;
+  --accent-strong: #9db4ff;
+  --accent-soft: #1e2847;
+  --accent-border: #34447a;
+  --inverse-bg: #f3f3f4;
+  --inverse-fg: #17181a;
+  --inverse-hover: #d6d6d8;
+  --on-gold: #141312;
 }
 
 body { font-family: var(--font-sans); }
@@ -66,7 +66,7 @@ h1, h2, h3, h4, h5, h6,
 .job-center-header h3 {
   font-family: var(--font-display);
   font-weight: 600;
-  letter-spacing: -0.035em;
+  letter-spacing: 0;
 }
 
 button, input, textarea, select, label,
@@ -88,7 +88,7 @@ code, pre, kbd, samp,
 }
 .topbar, .reader-toolbar { background: color-mix(in srgb, var(--surface) 94%, transparent); }
 [data-theme="dark"] .topbar,
-[data-theme="dark"] .reader-toolbar { background: rgba(15, 23, 42, .96); }
+[data-theme="dark"] .reader-toolbar { background: rgba(20, 19, 18, .96); }
 [data-theme="dark"] .reader-column,
 [data-theme="dark"] .pdf-viewport { background-color: #111827; }
 [data-theme="dark"] .canvas-mat canvas { border-color: #475569; }

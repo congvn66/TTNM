@@ -19,6 +19,7 @@ from typing import Any, Callable
 from uuid import UUID, uuid4, uuid5
 
 from .revision_store import PostgresRevisionStore
+from report_qa.config import DEFAULT_PROJECT_NAMES
 
 
 RUNTIME_NAMESPACE = UUID("00000000-0000-0000-0000-000000000001")
@@ -487,8 +488,8 @@ class PostgresRuntimeStore(PostgresRevisionStore):
             )[0]["id"]
             session["project_id"] = str(project_id)
         if project_id is None:
-            default = self._execute("SELECT id FROM projects WHERE owner_id=%s AND name='Workspace cá nhân' AND deleted_at IS NULL ORDER BY created_at LIMIT 1", (self.owner_id,))
-            project_id = default[0]["id"] if default else self._execute("INSERT INTO projects (owner_id,name) VALUES (%s,%s) RETURNING id", (self.owner_id, "Workspace cá nhân"))[0]["id"]
+            default = self._execute("SELECT id FROM projects WHERE owner_id=%s AND name = ANY(%s) AND deleted_at IS NULL ORDER BY created_at LIMIT 1", (self.owner_id, list(DEFAULT_PROJECT_NAMES)))
+            project_id = default[0]["id"] if default else self._execute("INSERT INTO projects (owner_id,name) VALUES (%s,%s) RETURNING id", (self.owner_id, DEFAULT_PROJECT_NAMES[0]))[0]["id"]
             session["project_id"] = str(project_id)
         self._execute(
             """INSERT INTO chats (id,owner_id,project_id,title,data_revision,created_at,updated_at)

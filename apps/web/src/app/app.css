@@ -812,3 +812,113 @@ body { background: var(--canvas); }
   .session-heading .session-create-button { padding: 0 9px; }
   .session-heading .session-create-button span { display: none; }
 }
+
+/* Pages outside the reader (sign-in, library, settings) in the reader's look.
+   Values copy reader.css: its top bar (.rd-top), its buttons (.rd-button), one content width,
+   weights 400-600, no negative letter-spacing. Colours come from tokens.css. */
+.auth-loading, .auth-gate { background: var(--canvas); }
+.auth-card { border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-md); }
+.auth-mark, .brand > span, .library-brand span { background: var(--accent); color: #fff; box-shadow: none; border-radius: 8px; }
+[data-theme="dark"] .auth-mark, [data-theme="dark"] .brand > span, [data-theme="dark"] .library-brand span { color: #141312; }
+.auth-mark span { color: inherit; font-weight: 700; }
+.auth-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.auth-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.auth-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+[data-theme="dark"] .auth-primary { color: #141312; }
+.auth-error { border-color: var(--red-soft); }
+.auth-eyebrow { color: var(--accent); font-weight: 600; letter-spacing: .06em; }
+
+/* One button look everywhere: the reader's. */
+.library-secondary, .library-primary, .library-state button, .library-notice button,
+.settings-secondary, .settings-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px;
+  border: 1px solid var(--border-strong); border-radius: 10px; padding: 0 14px;
+  background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; font-weight: 600;
+  letter-spacing: 0; cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+}
+.library-secondary:hover:not(:disabled), .settings-secondary:hover:not(:disabled), .library-notice button:hover { border-color: var(--accent); color: var(--accent); }
+.library-primary, .library-state button, .settings-primary { border-color: var(--accent) !important; background: var(--accent); color: #fff; }
+.library-primary:hover:not(:disabled), .library-state button:hover, .settings-primary:hover:not(:disabled) { background: var(--accent-strong); }
+[data-theme="dark"] .library-primary, [data-theme="dark"] .library-state button, [data-theme="dark"] .settings-primary { color: #141312; }
+.library-secondary:disabled, .library-primary:disabled, .settings-secondary:disabled, .settings-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Library: a top bar like the reader's, then one column 1120 px wide. */
+.library-shell { min-height: 100vh; padding: 0 0 64px; background: var(--canvas); }
+[data-theme="dark"] .library-shell { background: var(--canvas); }
+.library-topbar { max-width: none; margin: 0 0 40px; gap: 12px; padding: 10px max(16px, calc((100% - 1120px) / 2)); border-bottom: 1px solid var(--border); background: var(--surface); }
+.library-brand { gap: 8px; font-size: 17px; letter-spacing: 0; }
+.library-brand strong { font-weight: 600; }
+.library-brand span { width: 28px; height: 28px; font-size: 14px; font-weight: 700; }
+.library-topbar nav button { padding: 7px 12px; font-weight: 500; font-size: 14px; color: var(--muted); }
+.library-topbar nav button:hover { background: var(--surface-soft); color: var(--ink); }
+.library-topbar nav button.active { background: var(--accent-soft); color: var(--accent); }
+.library-header, .library-notice, .library-workspace, .library-main, .library-toolbar, .library-grid { max-width: 1120px; margin-left: auto; margin-right: auto; }
+.library-header, .library-workspace { padding: 0 16px; }
+.library-header { align-items: flex-end; margin-bottom: 28px; }
+.library-header h1 { margin: 0 0 6px; font-size: 32px; font-weight: 600; letter-spacing: 0; }
+.library-subtitle { font-size: 15px; }
+.library-workspace { grid-template-columns: 240px minmax(0, 1fr); gap: 24px; }
+.library-rail { align-self: start; border-radius: 12px; padding: 12px; box-shadow: none; }
+.library-rail-title { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.library-rail-title button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--surface); color: var(--accent); }
+.library-project-list button, .library-folder-list > button, .library-folder-row > button { border-radius: 8px; padding: 9px 10px; color: var(--ink-soft); }
+.library-project-list button.selected, .library-folder-list > button.selected, .library-folder-row > button.selected { border-color: var(--accent-border); background: var(--accent-soft); color: var(--accent); }
+.library-project-list strong { font-weight: 600; }
+.library-project-heading { align-items: center; margin-bottom: 16px; }
+.library-project-heading h2 { margin: 0 0 4px; font-size: 22px; font-weight: 600; letter-spacing: 0; }
+.library-inline-actions { gap: 8px; }
+.library-toolbar { margin-bottom: 16px; padding: 0; align-items: center; }
+.library-toolbar input { min-height: 40px; border-radius: 10px; font-size: 14px; }
+.library-toolbar input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.library-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; padding: 0; }
+.library-card { min-height: 0; padding: 16px; border-radius: 12px; box-shadow: none; }
+.library-card:hover { border-color: var(--accent-border); transform: none; }
+.library-file-icon { width: 32px; height: 32px; border-radius: 8px; font-size: 12px; font-weight: 700; }
+.status-chip { padding: 3px 9px; font-size: 12px; font-weight: 600; }
+/* The library API says "completed" for a ready report. */
+.status-chip.ready, .status-chip.completed { background: var(--green-soft); color: var(--green); }
+.status-chip.failed { background: var(--red-soft); color: var(--red); }
+.library-card h2 { margin: 14px 0 4px; font-size: 15px; font-weight: 600; }
+.library-folder-select { font-size: 12px; font-weight: 600; }
+.library-folder-select select { min-height: 34px; border-radius: 8px; background: var(--surface); }
+.library-open { margin-top: 14px; padding-top: 12px; color: var(--accent); font-size: 14px; font-weight: 600; }
+.library-state { border-radius: 12px; }
+.library-notice { border-radius: 10px; }
+.library-notice.error { border-color: var(--red-soft); }
+.resource-modal-backdrop { background: rgba(23, 24, 26, .4); }
+.library-topbar nav button, .library-topbar .library-secondary, .library-header-actions button, .library-inline-actions button { white-space: nowrap; }
+@media (max-width: 860px) {
+  .library-header { flex-direction: column; align-items: flex-start; }
+  .library-workspace { grid-template-columns: minmax(0, 1fr); }
+  .library-rail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 14px; }
+  .folder-title { margin-top: 0; border-top: 0; padding-top: 4px; }
+}
+@media (max-width: 560px) {
+  .library-topbar { flex-wrap: wrap; row-gap: 8px; }
+  .library-topbar nav { order: 3; width: 100%; }
+  .library-header-actions { width: 100%; }
+  .library-header-actions button { flex: 1; }
+  .library-header h1 { font-size: 26px; }
+  .library-rail { display: block; }
+  .library-project-heading { flex-direction: column; align-items: flex-start; }
+  .library-inline-actions { width: 100%; }
+  .library-inline-actions button { flex: 1; }
+  .library-toolbar { flex-direction: column; align-items: stretch; }
+  .library-toolbar input { width: 100%; min-width: 0; }
+}
+
+/* Account: the same top bar and buttons. */
+.settings-topbar { min-height: 56px; padding: 0 max(16px, calc((100% - 1120px) / 2)); background: var(--surface); }
+[data-theme="dark"] .settings-topbar { background: var(--surface); }
+.settings-back { font-weight: 500; font-size: 14px; }
+.settings-user { font-weight: 500; }
+.settings-layout { width: min(1120px, calc(100% - 32px)); }
+.settings-heading h1, .settings-heading h2 { font-weight: 600; letter-spacing: 0; }
+.settings-card { border-radius: 12px; box-shadow: none; }
+.settings-nav > button { border-radius: 10px; }
+.settings-nav > button b { font-weight: 600; }
+.settings-nav > button.active { border-color: var(--accent-border); background: var(--accent-soft); color: var(--accent); }
+.settings-nav > button.active .settings-nav-icon { background: var(--surface); color: var(--accent); }
+.settings-nav-heading span { color: var(--accent); font-weight: 600; letter-spacing: .06em; }
+.profile-avatar { background: var(--accent); color: #fff; border-radius: 8px; font-weight: 600; }
+[data-theme="dark"] .profile-avatar { color: #141312; }

@@ -1,5 +1,31 @@
 import { useEffect, useState } from "react";
 import { request } from "../../shared/api/client.js";
+import "../reader/reader.css";
+
+const AUTH_PATHS = ["/login", "/register", "/forgot-password", "/reset-password"];
+const AFTER_LOGIN_KEY = "sourcelens-after-login";
+
+const onAuthPath = () => AUTH_PATHS.includes(window.location.pathname);
+
+/** Leave the sign-in address for the page the person asked for (or the reader). */
+function leaveAuthPath() {
+  if (!onAuthPath()) return;
+  let target = "/";
+  try { target = sessionStorage.getItem(AFTER_LOGIN_KEY) || "/"; sessionStorage.removeItem(AFTER_LOGIN_KEY); } catch { /* storage blocked */ }
+  window.history.replaceState({}, "", target);
+}
+
+/** Show the sign-in address, remembering the page to return to. */
+function goToAuthPath() {
+  if (onAuthPath()) return;
+  try { sessionStorage.setItem(AFTER_LOGIN_KEY, `${window.location.pathname}${window.location.search}`); } catch { /* storage blocked */ }
+  window.history.replaceState({}, "", "/login");
+}
+
+/** The reader's own start screen, so checking the session and loading reports look like one step. */
+export function BootScreen({ children = "Đang tải…" }) {
+  return <div className="rd-app"><div className="rd-boot" role="status"><span className="rd-spinner large" aria-hidden="true" />{children}</div></div>;
+}
 
 const initialForm = { email: "", password: "", display_name: "" };
 
@@ -48,6 +74,13 @@ export default function AuthGate({ children }) {
     return () => { active = false; };
   }, []);
 
+  // The address follows the state: signed in never shows /login, signed out always does.
+  if (state.status === "authenticated") leaveAuthPath();
+  if (state.status === "public" && mode === "login") goToAuthPath();
+  useEffect(() => {
+    if (state.status === "public") document.title = "Đăng nhập · SourceLens";
+  }, [state.status]);
+
   useEffect(() => {
     const onAuthRequired = () => setState({ status: "public", user: null });
     window.addEventListener("sourcelens:auth-required", onAuthRequired);
@@ -65,7 +98,7 @@ export default function AuthGate({ children }) {
     }
   };
 
-  if (state.status === "checking") return <div className="auth-loading"><div className="auth-spinner"></div><span>Đang tải…</span></div>;
+  if (state.status === "checking") return <BootScreen />;
   if (state.status === "authenticated") return typeof children === "function" ? children({ user: state.user, signOut }) : children;
   if (state.status === "unavailable") return <main className="auth-gate"><section className="auth-card"><AuthMark /><h1>Không kết nối được</h1><button className="auth-primary" onClick={() => window.location.reload()}>Thử lại</button></section></main>;
 

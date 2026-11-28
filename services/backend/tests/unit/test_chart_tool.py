@@ -1,3 +1,4 @@
+import pytest
 import json
 from pathlib import Path
 
@@ -206,31 +207,48 @@ S1_ORDERS_RAW = (
     "Mi<0xE1><0xBB><0x81>n Nam<0x0A>T2 | 35 | 15 | 30<0x0A>T3 | 41 | 19 | 36<0x0A>T4 | 44 | 21 | 35<0x0A>T5 | 49 | 24 | 37"
     "<0x0A>T6 | 47 | 30 | 38"
 )
+# The same chart cropped to its own picture: DePlot keeps the series header and the T1 row.
+S1_ORDERS_FULL_RAW = (
+    "TITLE | Bi<0xE1><0xBB><0x83>u đ<0xE1><0xBB><0x93> 1. S<0xE1><0xBB><0x91> đon hàng theo tháng, 6 th<0xE1><0xBA><0xA3>ng "
+    "đầu năm 2026<0x0A>Don vì: nghin đ<0xE1><0xBB><0x93>n<0x0A> | Miên B<0xE1><0xBA><0xAF>c | Mi<0xE1><0xBB><0x81>n Trung | "
+    "Mi<0xE1><0xBB><0x81>n Nam<0x0A>T1 | 38 | 17 | 33<0x0A>T2 | 35 | 15 | 30<0x0A>T3 | 41 | 19 | 36<0x0A>T4 | 44 | 21 | 35"
+    "<0x0A>T5 | 49 | 24 | 37<0x0A>T6 | 47 | 30 | 38"
+)
 
 
 def test_real_deplot_output_with_a_subtitle_line_and_byte_tokens_is_parsed():
     from report_qa.application.deplot_reading import parse_table
 
-    title, rows = parse_table(S1_ORDERS_RAW)
+    title, rows = parse_table(S1_ORDERS_FULL_RAW)
     assert title == "Biểu đồ 1. Số đon hàng theo tháng, 6 thảng đầu năm 2026 Don vì: nghin đồn"
-    assert ("T4", "Miền Nam", "35", "35") in rows and ("T5", "Miên Bắc", "49", "49") in rows
-    assert len(rows) == 15  # T1 is DePlot's header cell, so its bars were not read; nothing is guessed
+    assert ("T1", "Miên Bắc", "38", "38") in rows and ("T4", "Miền Nam", "35", "35") in rows
+    assert len(rows) == 18
+
+
+def test_a_header_fused_with_the_first_row_fails_instead_of_dropping_the_row():
+    from report_qa.application.deplot_reading import parse_table
+
+    # DePlot's output for the padded crop: "T1" took the header's first cell and T1's values are gone.
+    with pytest.raises(ValueError, match="fused"):
+        parse_table(S1_ORDERS_RAW)
+    with pytest.raises(ValueError, match="series names"):
+        parse_table("TITLE | x\nT1 | 38 | 17 | 33\nT2 | 35 | 15 | 30")
 
 
 def test_grouped_bar_chart_values_get_category_and_series_labels():
     result = read_chart_region(
-        PDF, REGION, "v", "q", complete=lambda *args: json.dumps({"rows": []}), predictor=lambda image: S1_ORDERS_RAW
+        PDF, REGION, "v", "q", complete=lambda *args: json.dumps({"rows": []}), predictor=lambda image: S1_ORDERS_FULL_RAW
     )
     labels = {(e["chart_read"]["category_label"], e["chart_read"]["series_label"]): e["raw_text"]
               for e in result["evidence_batch"]["evidences"]}
-    assert labels[("T4", "Miền Nam")] == "35" and labels[("T5", "Miên Bắc")] == "49"
+    assert labels[("T4", "Miền Nam")] == "35" and labels[("T5", "Miên Bắc")] == "49" and labels[("T1", "Miên Bắc")] == "38"
 
 
 def test_a_chart_value_takes_the_unit_its_chart_states():
     # The S1 orders chart says "Đơn vị: nghìn đơn" (OCR'd as "Don vì: nghin đồn"); its rows had no unit,
     # so "35 nghìn đơn" could not be traced to the 35 read from it.
     result = read_chart_region(
-        PDF, REGION, "v", "q", complete=lambda *args: json.dumps({"rows": []}), predictor=lambda image: S1_ORDERS_RAW
+        PDF, REGION, "v", "q", complete=lambda *args: json.dumps({"rows": []}), predictor=lambda image: S1_ORDERS_FULL_RAW
     )
     assert {e["semantic"]["unit"] for e in result["evidence_batch"]["evidences"]} == {"THOUSAND"}
 
@@ -242,3 +260,29 @@ def test_unit_notes_are_read_without_diacritics():
     assert unit_note("Bảng 1 (đơn vị: triệu đồng)") == "VND_MILLION"
     assert unit_note("Don vì: nghin đồn") == "THOUSAND"
     assert unit_note("Doanh thu theo tháng") is None
+
+
+def test_each_bar_of_the_s1_orders_chart_points_at_its_printed_label():
+    from pathlib import Path
+
+    import pymupdf
+
+    from report_qa.application.chart_geometry import find_bar_marks
+    from report_qa.application.chart_tool import chart_crop
+
+    source = Path(__file__).resolve().parents[4] / "apps" / "web" / "public" / "samples" / "bao-cao-mau-huong-lua.pdf"
+    if not source.exists():
+        pytest.skip("sample report not in this checkout")
+    with pymupdf.open(source) as pdf:
+        page = pdf[1]
+        images = page.get_image_info()
+        if not images:
+            pytest.skip("sample chart is not an image")
+        region = [v / s for v, s in zip(images[0]["bbox"], (page.rect.width, page.rect.height) * 2)]
+        rect = chart_crop(page, region)
+        png = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=rect, alpha=False).tobytes("png")
+        box = [rect.x0 / page.rect.width, rect.y0 / page.rect.height, rect.x1 / page.rect.width, rect.y1 / page.rect.height]
+    marks = find_bar_marks(png, box, ["T1", "T2", "T3", "T4", "T5", "T6"], ["Miền Bắc", "Miền Trung", "Miền Nam"])
+    assert marks[("T1", "Miền Bắc")]["text"] == "38" and marks[("T6", "Miền Trung")]["text"] == "30"
+    t1, t2 = marks[("T1", "Miền Bắc")]["label"], marks[("T2", "Miền Bắc")]["label"]
+    assert t1[2] < t2[0]  # each value has its own box, left to right

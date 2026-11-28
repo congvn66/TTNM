@@ -160,6 +160,12 @@ function sentenceHasPercent(sentence, value) {
 }
 
 /** Which of a script's results the sentence is about: the one it writes as a %, else the first it writes at all. */
+/** How many of the rows' values the sentence writes. */
+function statedCount(sentence, rows) {
+  const written = (String(sentence ?? "").match(/-?\d+(?:[.,]\d+)*/g) ?? []).flatMap(readNumberCandidates);
+  return rows.filter((row) => readNumberCandidates(String(row.value)).some((value) => written.some((number) => Math.abs(number - value) <= Math.max(0.005, Math.abs(value) * 1e-6)))).length;
+}
+
 function headlineRow(sentence, rows) {
   // A number ends at its last digit: "24.050." at the end of a sentence is 24.050.
   const written = (String(sentence ?? "").match(/-?\d+(?:[.,]\d+)*/g) ?? []).flatMap(readNumberCandidates);
@@ -210,6 +216,8 @@ export function headlineOf(answer) {
     const results = scriptResultRows(formula);
     if (!chipFromFormula(formula) || !results.length) return null;
     // A script may give several results ({diff, pct}); the headline is the one the sentence states.
+    // A sentence that lists three or more of them (one per month, one per region) has no single answer.
+    if (results.length >= 3 && formula.result_rows?.length === results.length && statedCount(answer.answer, formula.result_rows) >= 3) return null;
     const at = results.length === 1 ? 0 : (formula.result_rows?.length === results.length ? headlineRow(answer.answer, formula.result_rows) : -1);
     if (at < 0) return null;
     const row = formula.result_rows?.[at];
@@ -336,16 +344,17 @@ export function PendingCard({ item, onRetry, onDismiss }) {
 
 const SECONDS_PER_PAGE = 12;
 
-export function ReadingCard({ report }) {
+/** Progress of a new report. `uploading` is the moment before the server has the file. */
+export function ReadingCard({ report, uploading = false }) {
   const since = report?.created_at ? Date.parse(report.created_at) : null;
   const seconds = useElapsed(since);
   const estimate = Math.max(15, (report?.page_count ?? 3) * SECONDS_PER_PAGE);
-  const percent = Math.min(95, Math.round((seconds / estimate) * 100));
+  const percent = uploading ? 5 : Math.min(95, Math.round((seconds / estimate) * 100));
   const late = seconds > estimate * 1.5;
   return <article className="rd-card rd-reading" aria-live="polite">
-    <header><span className="rd-spinner large" aria-hidden="true" /><div><h3>Đang đọc báo cáo…</h3></div></header>
+    <header><span className="rd-spinner large" aria-hidden="true" /><div><h3>{uploading ? `Đang tải lên ${report.file_name}…` : "Đang đọc báo cáo…"}</h3></div></header>
     <div className="rd-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label="Tiến độ"><span style={{ width: `${percent}%` }} /></div>
-    {late && <p className="rd-hint">Lâu hơn bình thường</p>}
+    {late && !uploading && <p className="rd-hint">Lâu hơn bình thường</p>}
   </article>;
 }
 

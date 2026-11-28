@@ -12,8 +12,8 @@ from __future__ import annotations
 from alembic import op
 
 
-revision = "0009_optional_edit_reason"
-down_revision = "0008_drop_legacy_evidence_checks"
+revision = "0010_optional_edit_reason"
+down_revision = "0009_rename_default_project"
 branch_labels = None
 depends_on = None
 

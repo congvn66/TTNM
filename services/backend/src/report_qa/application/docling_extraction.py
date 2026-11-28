@@ -42,6 +42,33 @@ def _converter():
     )
 
 
+@lru_cache(maxsize=1)
+def _ocr_converter():
+    """Docling with Tesseract OCR, for PDFs that are scans only: it finds tables and their cells
+    in the page image, so a scanned table gets rows and columns like a digital one."""
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode, TesseractCliOcrOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+
+    from report_qa.application.ocr_extraction import SCAN_SCALE, TesseractPdfOcr
+
+    options = PdfPipelineOptions(
+        do_ocr=True,
+        do_table_structure=True,
+        ocr_options=TesseractCliOcrOptions(lang=list(TesseractPdfOcr.LANGUAGES), scale=SCAN_SCALE, force_full_page_ocr=True),
+    )
+    options.table_structure_options.mode = TableFormerMode.ACCURATE
+    return DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)})
+
+
+def _is_scan(path) -> bool:
+    """No page has a text layer."""
+    import pymupdf
+
+    with pymupdf.open(path) as pdf:
+        return all(not page.get_text().strip() for page in pdf)
+
+
 def normalized_box(box, width, height):
     if not box:
         raise ValueError("Missing source bounding box")
@@ -83,11 +110,29 @@ def extract_docling_artifact(
     )
     from report_qa.application.ocr_extraction import TesseractPdfOcr
 
-    result = (converter or _converter()).convert(path)
+    # A scan-only PDF is read by Docling's OCR on a copy without table lines (see ocr_extraction.clean_scan).
+    # The copy has the same page sizes, so every box still points at the original page.
+    scan = converter is None and _is_scan(path) and TesseractPdfOcr().available()[0]
+    if scan:
+        import tempfile
+
+        from report_qa.application.ocr_extraction import clean_scan
+
+        with tempfile.TemporaryDirectory() as folder:
+            result = _ocr_converter().convert(clean_scan(path, Path(folder) / "clean.pdf"))
+    else:
+        result = (converter or _converter()).convert(path)
     status = str(result.status).split(".")[-1].lower()
     if status != "success":
         raise RuntimeError(f"Docling conversion failed: {result.status}")
     data = result.document.export_to_dict()
+    if scan:
+        # OCR writes "Quý 1/2026" with a fraction slash (U+2044), which no period rule reads.
+        for item in data.get("texts", []):
+            item["text"] = item.get("text", "").replace("\u2044", "/")
+        for table in data.get("tables", []):
+            for cell in table.get("data", {}).get("table_cells", []):
+                cell["text"] = cell.get("text", "").replace("\u2044", "/")
     evidence, warnings, contexts, charts, pages, page_years = [], [], {}, [], [], {}
     paragraphs: list[dict] = []
     ocr_pages = {}
@@ -158,6 +203,10 @@ def extract_docling_artifact(
                     f"Trang {number} không có lớp chữ; chưa trích xuất số từ trang này.",
                 )
         # Unconfigured, numbers are read in the format the page text proves (as the API reads typed numbers).
+        # OCR misreads ("1.25" for "1,25") look like proof of English number format, so a document read
+        # only by OCR takes the format of the OCR language: Vietnamese.
+        if locale is None and ocr_pages and len(ocr_pages) == len(pages):
+            locale = "vi"
         locale = locale or detected_locale(page["text"] for page in pages)
 
         def emit(
@@ -329,6 +378,10 @@ def extract_docling_artifact(
             page_context = next(
                 (item["text"] for item in pages if item["page"] == number), ""
             )
+            # The same rule as printed text: headings ("1."), years and list markers are not values.
+            # Titles are often upper case ("6 THÁNG ĐẦU NĂM"): read the text in lower case too, same positions.
+            quantity_starts = {m.start() for m in quantities(page_context)} & {m.start() for m in quantities(page_context.lower())}
+            texts = [str(token.get("text", "")).strip() for token in ocr_page.tokens]
             # page_context is the tokens joined by one space, so a token starts where the previous one ended + 1.
             offset = -1
             for oi, token in enumerate(ocr_page.tokens):
@@ -337,7 +390,16 @@ def extract_docling_artifact(
                     continue
                 offset += 1
                 start, offset = offset, offset + len(text)
+                # A number in a table or chart comes from that table's cells or that chart's read.
+                if any(n == number and _inside(list(token["bbox"]), box) for n, box in table_boxes + picture_boxes):
+                    continue
                 matches = list(NUMBER.finditer(text))
+                if len(matches) == 1 and start + matches[0].start() not in quantity_starts:
+                    continue
+                # A section number: "1." followed by a capitalised heading word ("1. Định nghĩa").
+                following = next((later for later in texts[oi + 1:] if later), "")
+                if re.fullmatch(r"\d{1,2}\.", text) and following[:1].isupper():
+                    continue
                 if len(matches) != 1:
                     if matches:
                         warn(
