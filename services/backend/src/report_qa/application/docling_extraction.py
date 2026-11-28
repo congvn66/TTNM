@@ -89,6 +89,7 @@ def extract_docling_artifact(
         raise RuntimeError(f"Docling conversion failed: {result.status}")
     data = result.document.export_to_dict()
     evidence, warnings, contexts, charts, pages, page_years = [], [], {}, [], [], {}
+    paragraphs: list[dict] = []
     ocr_pages = {}
     with pymupdf.open(path) as pdf:
 
@@ -172,6 +173,7 @@ def extract_docling_artifact(
             confidence=0.85,
             headers=(),
             semantic=None,
+            paragraph=None,
         ):
             try:
                 value = decimal_text(raw, locale)
@@ -212,6 +214,8 @@ def extract_docling_artifact(
                     "dimensions": {},
                 },
                 "table_locator": locator,
+                # Where a text number sits in its paragraph: {paragraph_key, start, end} in its text.
+                "paragraph_locator": paragraph,
                 "chart_read": None,
                 "method_label": method_labels[method],
                 "confidence": confidence,
@@ -382,6 +386,9 @@ def extract_docling_artifact(
                     text_box[2] * page.rect.width,
                     text_box[3] * page.rect.height,
                 )
+                paragraph_key = f"para-{number}-{ti}-{pi}"
+                paragraphs.append({"paragraph_key": paragraph_key, "page_number": number, "bbox": text_box,
+                                   "text": item_text, "label": text.get("label")})
                 cursor = 0
                 for wi, word in enumerate(
                     page.get_text("words", clip=rect + (-1, -1, 1, 1))
@@ -393,8 +400,12 @@ def extract_docling_artifact(
                         raw = match.group()
                         if re.fullmatch(r"(?:19|20)\d{2}", raw.rstrip(".,")):
                             continue
-                        position = at + match.start() if at >= 0 else None
-                        if position is not None and not any(a <= position < b for a, b in values):
+                        # A word the Docling text does not hold is from a neighbouring region
+                        # (a header line, a side box): its number belongs to that region, not here.
+                        if at < 0:
+                            continue
+                        position = at + match.start()
+                        if not any(a <= position < b for a, b in values):
                             continue
                         box = [
                             word[0] / page.rect.width,
@@ -413,15 +424,13 @@ def extract_docling_artifact(
                                 f"{number}:{word[:5]}:{mi}".encode()
                             ).hexdigest()[:16]
                         )
-                        if any(e["evidence_key"] == key for e in evidence):
+                        # Overlapping Docling regions hold the same word twice: one number, one evidence.
+                        if any(e["evidence_key"] == key or (e["page_number"] == number and e["raw_text"] == raw and _inside(box, e["bbox"]))
+                               for e in evidence):
                             continue
-                        # A word the Docling text does not contain keeps its number, unlabelled.
-                        semantic = (
-                            sentence_semantics(item_text, position, raw.rstrip(".,"), page_years.get(number))
-                            if position is not None
-                            else {"measure": "unknown", "subject": None, "period": None, "unit": None, "dimensions": {}}
-                        )
-                        emit(raw, item_text, number, box, key, "text", semantic=semantic)
+                        semantic = sentence_semantics(item_text, position, raw.rstrip(".,"), page_years.get(number))
+                        emit(raw, item_text, number, box, key, "text", semantic=semantic,
+                             paragraph={"paragraph_key": paragraph_key, "start": position, "end": position + len(raw)})
         batch = {
             "schema_version": 2,
             "document_version_id": document_version_id,
@@ -434,6 +443,7 @@ def extract_docling_artifact(
         validate_extraction_batch(batch)
         return {
             "pages": pages,
+            "paragraphs": paragraphs,
             "evidence_batch": batch,
             "evidence_contexts": contexts,
             "chart_regions": charts,

@@ -87,8 +87,12 @@ export function confidenceOf(answer) {
   if (typed.length) return { kind: "warn", text: `Phép tính có số không lấy từ báo cáo: ${typed.map(showNumber).join(", ")}. Hãy kiểm tra lại.` };
   const estimated = data.filter((item) => (item.data_status && item.data_status !== "valid") || ESTIMATED.test(item.method_label ?? ""));
   if (estimated.length) return { kind: "warn", text: `Mình chưa chắc ${estimated.length} số đọc từ ảnh (biểu đồ hoặc bản scan). Chạm số để so với trang.` };
-  if (formulas.length) return { kind: "good", text: `Dựa trên ${formulas.reduce((count, formula) => count + (formula.inputs?.length ?? 0), 0) || data.length} số đọc trong bảng, phép tính do máy làm. Chạm từng số để xem trên trang.` };
-  if (data.length) return { kind: "good", text: "Đọc thẳng từ bảng trong báo cáo." };
+  // Where the numbers were read: a table, the running text, or both.
+  const fromText = data.some((item) => item.method_label === "đọc từ văn bản");
+  const fromTable = data.some((item) => item.method_label !== "đọc từ văn bản");
+  const where = fromText && !fromTable ? "đoạn văn" : fromText ? "bảng và đoạn văn" : "bảng";
+  if (formulas.length) return { kind: "good", text: `Dựa trên ${formulas.reduce((count, formula) => count + (formula.inputs?.length ?? 0), 0) || data.length} số đọc trong ${where}, phép tính do máy làm. Chạm từng số để xem trên trang.` };
+  if (data.length) return { kind: "good", text: `Đọc thẳng từ ${where} trong báo cáo.` };
   if (quotes.length) {
     const pages = [...new Set(quotes.map((item) => item.page).filter(Boolean))];
     return { kind: "warn", text: `Câu trả lời này không có con số nào để bạn kiểm.${pages.length ? ` Hãy đối chiếu trang ${pages.join(", ")}.` : ""}` };

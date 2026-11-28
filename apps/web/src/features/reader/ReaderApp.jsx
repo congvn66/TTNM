@@ -150,6 +150,8 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
   const briefing = useMemo(() => evidence.data && evidence.key === evidenceKey ? buildBriefing(evidence.data.evidences ?? []) : null, [evidence, evidenceKey]);
   const problems = useDismissed(selected?.id);
   const currentEvidences = useMemo(() => (selected && evidence.key?.startsWith(`${selected.id}:`) ? evidence.data?.evidences ?? [] : []), [selected, evidence]);
+  // The paragraphs that hold a number, by key: a text number's card shows its sentence.
+  const paragraphs = useMemo(() => new Map((selected && evidence.key?.startsWith(`${selected.id}:`) ? evidence.data?.paragraphs ?? [] : []).map((item) => [item.paragraph_key, item])), [selected, evidence]);
   const swaps = useSwaps({ basePath: selected ? `/api/v1/sessions/${selected.sessionId}/documents/${selected.id}` : "", evidences: currentEvidences, dataKey: evidence.key, focusOn, toast });
   // Checks the reader has not dismissed: the page marks, the cell card and the page rail use these.
   const openChecks = useMemo(() => (briefing?.checks ?? []).filter((check) => check.ok || isOpenProblem(check, problems.dismissed)), [briefing, problems.dismissed]);
@@ -372,7 +374,7 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
     // The button pressed is gone: focus the next one, else "Hiện lại".
     window.requestAnimationFrame(() => (document.querySelector(".rd-alert .rd-dismiss") ?? document.querySelector(".rd-skipped button"))?.focus({ preventScroll: true }));
   };
-  const renderCard = (cell, { narrow, onClose }) => <CellCard cell={cell} evidences={evidences} notes={conversation.notes} checks={openChecks} basePath={basePath} narrow={narrow} onClose={onClose}
+  const renderCard = (cell, { narrow, onClose }) => <CellCard cell={cell} evidences={evidences} paragraph={paragraphs.get(cell.paragraph_locator?.paragraph_key) ?? null} notes={conversation.notes} checks={openChecks} basePath={basePath} narrow={narrow} onClose={onClose}
     onAsk={(text) => { setOpenCell(null); setQuestion(text); window.requestAnimationFrame(() => askRef.current?.focus()); }}
     onGotoAnswer={gotoAnswer} onGotoCheck={(check) => { const key = openCell; setOpenCell(null); focusOn(check.chip); window.requestAnimationFrame(() => document.querySelector(`[data-cell="${CSS.escape(key)}"]`)?.focus({ preventScroll: true })); }}
     onSaved={onEvidenceSaved} onConflict={() => setRevision((value) => value + 1)} />;

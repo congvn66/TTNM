@@ -592,6 +592,15 @@ class PostgresRuntimeStore(PostgresRevisionStore):
     def _complete_extraction(self, chat_id: UUID, version_id: UUID, run_id: UUID, document: dict[str, Any], artifact: dict[str, Any]) -> None:
         existing = self._execute("SELECT 1 FROM extracted_evidences WHERE extraction_run_id=%s LIMIT 1", (run_id,))
         if not existing:
+            # The text of each paragraph, so a number read from it can be shown and checked in its sentence.
+            for paragraph in artifact.get("paragraphs") or []:
+                self._execute(
+                    """INSERT INTO source_regions (id,extraction_run_id,region_key,page_number,bbox,region_type,extracted_text,meta)
+                       VALUES (%s,%s,%s,%s,%s::jsonb,'paragraph',%s,%s::jsonb)
+                       ON CONFLICT (extraction_run_id,region_key) DO NOTHING""",
+                    (uuid5(run_id, f"region:{paragraph['paragraph_key']}"), run_id, paragraph["paragraph_key"], int(paragraph["page_number"]),
+                     self._json(paragraph["bbox"]), paragraph["text"], self._json({"label": paragraph.get("label")})),
+                )
             for item in (artifact.get("evidence_batch") or {}).get("evidences", []):
                 # One region per value. Two numbers in one text span used to
                 # share a region, which names a single evidence_key: the second
@@ -603,7 +612,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                     """INSERT INTO source_regions (id,extraction_run_id,region_key,page_number,bbox,region_type,extracted_text,meta)
                        VALUES (%s,%s,%s,%s,%s::jsonb,%s,%s,%s::jsonb)
                        ON CONFLICT (extraction_run_id,region_key) DO NOTHING""",
-                    (region_id, run_id, region_key, int(item["page_number"]), self._json(item.get("bbox")), region_type, item.get("raw_text"), self._json({"evidence_key": item["evidence_key"], "source_region_key": item.get("source_region_key"), "method_label": item.get("method_label"), "table_locator": item.get("table_locator"), "chart_read": item.get("chart_read")})),
+                    (region_id, run_id, region_key, int(item["page_number"]), self._json(item.get("bbox")), region_type, item.get("raw_text"), self._json({"evidence_key": item["evidence_key"], "source_region_key": item.get("source_region_key"), "method_label": item.get("method_label"), "table_locator": item.get("table_locator"), "paragraph_locator": item.get("paragraph_locator"), "chart_read": item.get("chart_read")})),
                 )
                 numeric = item.get("numeric_value")
                 method = str(item.get("extraction_method") or "text")

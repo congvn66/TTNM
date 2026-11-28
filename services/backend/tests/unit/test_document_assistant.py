@@ -1010,3 +1010,17 @@ def test_a_result_keeps_the_magnitude_unit_of_its_own_rows(code, answer):
     result = _tools_answer(rows, {"action": "python", "code": code},
                            {"action": "answer", "answer": answer, "evidence_keys": ["rev"]})
     assert result["answer"] == answer
+
+
+def test_a_rejected_number_the_user_corrected_comes_back_with_its_current_value():
+    # Fixing "220 tỷ đồng" to 250 left the page text at 220: the model wrote 220 six times and gave up.
+    from report_qa.application.document_assistant import corrected_numbers
+
+    rows = [
+        {"evidence_key": "ev-target", "page_number": 1, "raw_text": "220", "numeric_value": "250"},
+        {"evidence_key": "ev-other", "page_number": 1, "raw_text": "31%", "numeric_value": "31"},
+    ]
+    assert corrected_numbers(["220 tỷ"], rows) == [
+        {"written": "220 tỷ", "evidence_key": "ev-target", "page": 1, "printed": "220", "current_value": "250"}
+    ]
+    assert corrected_numbers(["31%"], rows) == []

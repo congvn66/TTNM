@@ -6,8 +6,9 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 # A number ends at a digit: the "," of "Nhóm 7," and the "." ending a sentence are punctuation.
+# (?![.,]\d) keeps a match from stopping inside a longer number: "1.4ppts" is not "1".
 NUMBER = re.compile(
-    r"(?<![\w/])(?:\(\s*[-+]?\d(?:[\d.,]*\d)?\s*\)|[-+]?\d(?:[\d.,]*\d)?)(?:\s*%)?(?![\w/])"
+    r"(?<![\w/])(?:\(\s*[-+]?\d(?:[\d.,]*\d)?\s*\)|[-+]?\d(?:[\d.,]*\d)?)(?:\s*%)?(?![\w/])(?![.,]\d)"
 )
 
 
@@ -76,6 +77,13 @@ DATE = re.compile(
 )
 # A reference to a figure or table of the document: "Biểu đồ 2", "Bảng 1", "Hình 3".
 REFERENCE = re.compile(r"(?i)\b(?:biểu đồ|bảng|hình|sơ đồ|phụ lục|figure|fig\.?|table|chart)\s*\d+(?!\w)")
+# A phone number, "(+84) 24-7303-5333" or "024-7303-5333": digits to dial, not amounts.
+CONTACT = re.compile(r"\(?\+\d{1,3}\)?(?:[\s.\-]*\d{2,5}){2,}|(?<![\w.,])\d{2,4}(?:-\d{3,4}){2,}(?!\w)")
+# The number of an official paper, "Nghị quyết 68-NQ/TW", "Thông tư 200/2014-TT-BTC".
+CODE = re.compile(r"(?<![\w/])\d+(?:/\d+)*-[A-ZĐ]{1,6}(?:[/\-][A-ZĐ]{1,6})*(?!\w)")
+# A list marker that numbers the points of a text: "1) BHX mở mới…", "(2) Doanh thu…", and
+# "1." only at the start of a text ("tăng 5. Doanh thu…" ends a sentence with an amount).
+_LIST_MARKER = re.compile(r"(?:^|(?<=[\s:;.]))\(?\d{1,2}\)(?=\s+(?P<next>\w))|^\s*\d{1,2}\.(?=\s+(?P<first>\w))")
 # A length of time counted in periods: "4 quý", "3 năm", "6 tháng" (not "6 năm 2026").
 DURATION = re.compile(r"(?i)(?<![\w/.,])\d{1,3}\s*(?:năm|quý|tháng)(?!\w)(?!\s*(?:19|20)\d{2})")
 _DASHES = {"-", "—", "–"}
@@ -220,12 +228,14 @@ def quantities(text: str) -> list[re.Match]:
     Digits glued to letters or slashes ("Q3", "H1", "6T") are never NUMBER
     matches; periods, dates and durations ("quý 2/2026", "31/12/2023",
     "4 quý") are labels of time and "Biểu đồ 2" is the name of a figure, not
-    quantities. Positions are those of text.
+    quantities; nor are phone numbers, the numbers of official papers and
+    list markers ("1) BHX…"). Positions are those of text.
     """
     blanked = list(text)
-    for pattern in (PERIOD, DATE, DURATION, REFERENCE):
-        for match in pattern.finditer(text):
-            blanked[match.start():match.end()] = " " * (match.end() - match.start())
+    spans = [m.span() for pattern in (PERIOD, DATE, DURATION, REFERENCE, CONTACT, CODE) for m in pattern.finditer(text)]
+    spans += [m.span() for m in _LIST_MARKER.finditer(text) if (m["next"] or m["first"])[0].isupper()]
+    for start, end in spans:
+        blanked[start:end] = " " * (end - start)
     return list(NUMBER.finditer("".join(blanked)))
 
 

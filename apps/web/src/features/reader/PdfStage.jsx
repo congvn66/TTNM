@@ -4,8 +4,8 @@ import { API } from "../../shared/api/client.js";
 import { cellBands, clampBox, quoteBoxes, textRunBoxes } from "./pdfHighlight.js";
 import { FormulaLine, InputTag, partColor, partInk, peekProps } from "./Calc.jsx";
 import { readableFormula } from "./formulaView.js";
-import { cellName, cellNumber, cellRange, cellUnsure, isNumberCell, neighbourCell, pageTables, summarizeSelection } from "./cells.js";
-import { formatNumber as formatValue, scrollBehavior } from "./format.js";
+import { cellName, cellNumber, cellRange, cellUnsure, isNumberCell, neighbourCell, pageProse, pageTables, summarizeSelection } from "./cells.js";
+import { formatNumber as formatValue, scrollBehavior, valueWithUnit } from "./format.js";
 
 const SHOW_READ_KEY = "sourcelens-show-read-v1";
 const PAD = 3; // the cell fill reaches a little past the digits so none touch the edge
@@ -180,6 +180,64 @@ function CellLayer({ tables, size, page, openKey, selection, selectMode, picking
   </div>;
 }
 
+/**
+ * The numbers in the page's running text as buttons over their digits: one Tab
+ * stop, arrow keys go to the next or previous number in reading order, Enter
+ * or a tap opens the number's card. Text numbers are not selected or summed.
+ */
+function ProseLayer({ cells, size, page, openKey, picking, pickHover, onPickHover, onPickChoose, onOpen }) {
+  const lastPointer = useRef("mouse");
+  const [roving, setRoving] = useState(null);
+  const tabKey = cells.some((cell) => cell.evidence_key === roving) ? roving : cells[0]?.evidence_key;
+  // On touch a number is at least 24 px tall (WCAG 2.5.8), but never reaches a number on the line above or below.
+  const touch = typeof window !== "undefined" && Boolean(window.matchMedia?.("(pointer: coarse)").matches);
+  const room = useMemo(() => {
+    const out = new Map();
+    if (!touch) return out;
+    const boxes = cells.map((cell) => clampBox(cell.bbox));
+    boxes.forEach(([x0, y0, x1, y1], i) => {
+      const middle = (y0 + y1) / 2 * size.height;
+      const gaps = boxes.filter(([a0, , a1], j) => j !== i && a0 * size.width < x1 * size.width + 24 && a1 * size.width > x0 * size.width - 24)
+        .map(([, b0, , b1]) => Math.abs((b0 + b1) / 2 * size.height - middle)).filter((gap) => gap > 1);
+      out.set(cells[i].evidence_key, Math.min(24, ...gaps.map((gap) => gap - 2)));
+    });
+    return out;
+  }, [cells, size, touch]);
+  const box = (cell) => {
+    const [x0, y0, x1, y1] = clampBox(cell.bbox);
+    const height = Math.max((y1 - y0) * size.height + 6, room.get(cell.evidence_key) ?? 0);
+    const width = Math.max((x1 - x0) * size.width + 8, touch ? 24 : 0);
+    return { left: (x0 + x1) / 2 * size.width - width / 2, top: (y0 + y1) / 2 * size.height - height / 2, width, height };
+  };
+  const focusCell = (key) => { setRoving(key); window.requestAnimationFrame(() => document.querySelector(`[data-cell="${CSS.escape(key)}"]`)?.focus()); };
+  const act = (key) => {
+    setRoving(key);
+    if (!picking) { onOpen(key); return; }
+    // As in a table: on touch the first tap shows the new result, a second tap uses it.
+    if (lastPointer.current === "touch" && pickHover !== key) onPickHover(key);
+    else onPickChoose(key);
+  };
+  const onKeyDown = (event, index) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); act(cells[index].evidence_key); return; }
+    const next = event.key === "Home" ? 0 : event.key === "End" ? cells.length - 1 : step ? index + step : null;
+    if (next == null) return;
+    event.preventDefault();
+    if (cells[next]) focusCell(cells[next].evidence_key);
+  };
+  return <div className={`rd-prose${picking ? " picking" : ""}`} role="group" aria-label={`Số trong đoạn văn, trang ${page}`} aria-describedby="rd-prose-help">
+    <p id="rd-prose-help" className="rd-sr">Mũi tên để đi giữa các số, Enter để xem hoặc sửa số.</p>
+    {cells.map((cell, index) => <button key={cell.evidence_key} type="button" data-cell={cell.evidence_key} tabIndex={cell.evidence_key === tabKey ? 0 : -1}
+      aria-expanded={openKey === cell.evidence_key ? true : undefined}
+      aria-label={`${cellName(cell)}: ${cell.current_numeric_value == null ? cell.raw_text : valueWithUnit(cell)}${cellUnsure(cell) ? ", chưa chắc" : ""}`}
+      className={`rd-hit${openKey === cell.evidence_key ? " open" : ""}`} style={box(cell)}
+      onPointerDown={(event) => { lastPointer.current = event.pointerType || "mouse"; }}
+      onClick={() => act(cell.evidence_key)} onKeyDown={(event) => onKeyDown(event, index)}
+      onFocus={(event) => { setRoving(cell.evidence_key); if (picking && event.currentTarget.matches(":focus-visible")) onPickHover(cell.evidence_key, true); }}
+      onPointerEnter={(event) => { if (picking && event.pointerType !== "touch") onPickHover(cell.evidence_key); }} />)}
+  </div>;
+}
+
 export function PdfStage({ report, focus, onClearFocus, processing, markedPages, evidences = [], openKey = null, onOpenCell, onCloseCard, selection = [], onSelect, renderCard, checks = [], onDismissCheck, onAskSelection, askingSelection = false, onChartSelection = null, peekKey = null, onPeek, pick = null, onPickHover, onPickChoose, onPickCancel }) {
   const scrollRef = useRef(null);
   const canvasRef = useRef(null);
@@ -316,6 +374,7 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
   const bands = size && rects.length === 1 && focus?.key ? cellBands(evidences, focus.key, page, textRunBoxes(items, size)) : null;
 
   const tables = useMemo(() => (size ? pageTables(evidences, page) : []), [evidences, page, size]);
+  const prose = useMemo(() => (size ? pageProse(evidences, page) : []), [evidences, page, size]);
   const byKey = useMemo(() => new Map(evidences.map((cell) => [cell.evidence_key, cell])), [evidences]);
   const picked = selection.map((key) => byKey.get(key)).filter(Boolean);
   const summary = summarizeSelection(picked);
@@ -325,7 +384,10 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
   // The card hangs below the whole row, never over the row name or the column header.
   const cardPlace = (() => {
     if (!cardHere || narrow) return null;
-    const row = tables.flatMap((table) => table.cells).filter((cell) => cell.table_locator?.table_region_key === openCell.table_locator?.table_region_key && cell.table_locator?.row_index === openCell.table_locator?.row_index);
+    // A number in running text has no row: the card hangs below its own line.
+    const row = openCell.table_locator
+      ? tables.flatMap((table) => table.cells).filter((cell) => cell.table_locator?.table_region_key === openCell.table_locator.table_region_key && cell.table_locator?.row_index === openCell.table_locator.row_index)
+      : [openCell];
     const bottom = Math.max(...row.map((cell) => pxBox(cell).y + pxBox(cell).h));
     const own = pxBox(openCell);
     const left = Math.max(8, Math.min(own.x + own.w / 2 - 40, size.width - 340));
@@ -502,6 +564,8 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
         </svg>}
         {size && tables.length > 0 && <CellLayer tables={tables} size={size} page={page} openKey={openKey} selection={selection} selectMode={selectMode}
           picking={Boolean(pick)} pickHover={pick?.preview?.key ?? null} onPickHover={(key, byKeyboard) => { pickByKeys.current = Boolean(byKeyboard); onPickHover?.(key); }} onPickChoose={(key) => onPickChoose?.(key)} onOpen={(key) => onOpenCell?.(key)} onSelect={(keys) => onSelect?.(keys)} onAnnounce={announce} onBlank={() => { onSelect?.([]); onCloseCard?.(); onClearFocus?.(); }} onDenseTap={zoomToCell} />}
+        {size && prose.length > 0 && <ProseLayer cells={prose} size={size} page={page} openKey={openKey} picking={Boolean(pick)} pickHover={pick?.preview?.key ?? null}
+          onPickHover={(key, byKeyboard) => { pickByKeys.current = Boolean(byKeyboard); onPickHover?.(key); }} onPickChoose={(key) => onPickChoose?.(key)} onOpen={(key) => onOpenCell?.(key)} />}
         {cardPlace && renderCard && <div className="rd-cellcard-anchor" style={{ left: cardPlace.left, top: cardPlace.top, "--notch": `${cardPlace.notch}px` }}>{renderCard(openCell, { narrow: false, onClose: closeCard })}</div>}
       </div>
     </div>

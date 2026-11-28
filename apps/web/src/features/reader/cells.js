@@ -260,4 +260,35 @@ export function pickCandidates(cell, evidences, skip = []) {
 }
 
 /** A cell's name for buttons, labels and announcements. */
-export const cellName = (cell) => evidenceLabel(cell) || `Ô ở trang ${cell?.page_number}`;
+export const cellName = (cell) => evidenceLabel(cell) || `${cell?.table_locator ? "Ô" : "Số"} ở trang ${cell?.page_number}`;
+
+/**
+ * The numbers read from the page's running text (not tables or charts), in
+ * reading order: line by line from the top, left to right in a line.
+ */
+export function pageProse(evidences, page) {
+  const line = (cell) => { const box = clampBox(cell.bbox); return Math.round((box[1] + box[3]) / 2 * 150); };
+  return evidences
+    .filter((cell) => cell.source_type === "text" && !cell.table_locator && cell.page_number === page && clampBox(cell.bbox) && isNumberCell(cell))
+    .sort((a, b) => line(a) - line(b) || clampBox(a.bbox)[0] - clampBox(b.bbox)[0]);
+}
+
+const SENTENCE_END = /[.!?;](?=\s)|\n/g;
+/**
+ * The sentence of a paragraph that holds the characters start..end, split
+ * around them: { before, number, after }. Long sides are cut at a word with "…".
+ */
+export function sentenceAround(text, start, end, room = 110) {
+  if (typeof text !== "string" || !(start >= 0) || !(end > start) || end > text.length) return null;
+  let from = 0;
+  let to = text.length;
+  for (const match of text.matchAll(SENTENCE_END)) {
+    if (match.index < start) from = match.index + 1;
+    else if (match.index >= end) { to = match.index + 1; break; }
+  }
+  let before = text.slice(from, start).trimStart();
+  let after = text.slice(end, to).trimEnd();
+  if (before.length > room) before = `…${before.slice(before.length - room).replace(/^\S*\s/, "")}`;
+  if (after.length > room) after = `${after.slice(0, room).replace(/\s\S*$/, "")}…`;
+  return { before, number: text.slice(start, end), after };
+}

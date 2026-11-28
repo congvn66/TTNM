@@ -533,3 +533,46 @@ def test_a_page_without_text_is_reported_in_readable_vietnamese(tmp_path):
     warnings = extract_docling_artifact(path, "version", locale="vi", converter=converter, ocr_engine=ocr)["evidence_batch"]["warnings"]
     # The message was stored double-encoded ("khÃ´ng cÃ³ lá»›p chá»¯").
     assert warnings[0]["message"] == "Trang 1 không có lớp chữ; chưa trích xuất số từ trang này."
+
+
+def _text_reading(tmp_path, items):
+    """The whole artifact of _text_artifact's PDF: its paragraphs and its numbers."""
+    import pymupdf
+
+    path = tmp_path / "prose-full.pdf"
+    with pymupdf.open() as pdf:
+        page = pdf.new_page(width=600, height=400)
+        for i, (_, line) in enumerate(items):
+            page.insert_text((20, 40 + 30 * i), line, fontname="helv", fontsize=9)
+        pdf.save(path)
+    data = {"tables": [], "pictures": [], "texts": [
+        {"label": label, "text": line,
+         "prov": [{"page_no": 1, "bbox": {"l": 15, "t": 28 + 30 * i, "r": 590, "b": 45 + 30 * i, "coord_origin": "TOPLEFT"}}]}
+        for i, (label, line) in enumerate(items)
+    ]}
+    converter = Mock()
+    converter.convert.return_value = SimpleNamespace(status="ConversionStatus.SUCCESS",
+                                                     document=SimpleNamespace(export_to_dict=lambda: data))
+    return extract_docling_artifact(path, "version", locale="vi", converter=converter)
+
+
+def test_phone_numbers_list_markers_and_paper_codes_are_not_values(tmp_path):
+    # R2 gave "(+84)", "24", "7303", "5333" from a phone line, "1", "2", "3" from "1) ... 2) ..." and "68" from "68-NQ/TW".
+    reading = _text_reading(tmp_path, [
+        ("text", "Lien he (+84) 24-7303-5333 de biet them."),
+        ("text", "1) BHX mo moi 1000 cua hang. 2) ICT tang +12% YoY."),
+        ("text", "Nghi quyet 68-NQ/TW ho tro, bien LNG giam 1.4ppts YoY."),
+    ])
+    assert [e["raw_text"] for e in reading["evidence_batch"]["evidences"]] == ["1000", "+12%"]
+
+
+def test_each_text_number_points_at_its_place_in_a_saved_paragraph(tmp_path):
+    reading = _text_reading(tmp_path, [("text", "Muc tieu doanh thu nam 2026 la 220 ty dong, tang 6,5%.")])
+    paragraphs = {p["paragraph_key"]: p for p in reading["paragraphs"]}
+    numbers = reading["evidence_batch"]["evidences"]
+    assert [e["raw_text"] for e in numbers] == ["220", "6,5%"]
+    for number in numbers:
+        where = number["paragraph_locator"]
+        assert paragraphs[where["paragraph_key"]]["text"][where["start"]:where["end"]] == number["raw_text"]
+    assert paragraphs[numbers[0]["paragraph_locator"]["paragraph_key"]]["page_number"] == 1
+    validate_extraction_batch(reading["evidence_batch"])

@@ -202,6 +202,10 @@ body:has(.rd-app) { background: #f6f6f3; }
 /* Cells as controls: an invisible grid over the page image. */
 .rd-cells { position: absolute; inset: 0; }
 .rd-cells.select-mode { cursor: crosshair; touch-action: none; }
+/* Numbers in running text: only the numbers take clicks, the page between them stays the page. */
+.rd-prose { position: absolute; inset: 0; pointer-events: none; }
+.rd-prose .rd-hit { pointer-events: auto; padding: 0; border: 0; background: none; }
+.rd-prose.picking .rd-hit { cursor: crosshair; }
 .rd-hit { position: absolute; border-radius: 3px; cursor: pointer; }
 .rd-hit:hover { box-shadow: inset 0 -2px 0 rgba(0, 114, 178, .6); }
 /* Focus is dark with a white halo: it must stand out from blue selection and candidate outlines. */
@@ -243,6 +247,8 @@ body:has(.rd-app) { background: #f6f6f3; }
 
 /* The card for one cell: below its row on wide screens, a bottom sheet on phones. */
 .rd-cellcard-anchor { position: absolute; z-index: 5; width: 330px; }
+.rd-cellcard-quote { margin: 0; color: var(--rd-ink-soft); }
+.rd-cellcard-quote mark { background: #fff3b0; color: #18202e; border-radius: 2px; padding: 0 2px; font-weight: 600; }
 .rd-cellcard { position: relative; display: grid; gap: 10px; border: 1px solid var(--rd-border); border-radius: 12px; padding: 14px; background: var(--rd-surface); color: var(--rd-ink); box-shadow: 0 12px 32px rgba(0, 0, 0, .2); font-size: 13px; line-height: 1.5; }
 .rd-cellcard-anchor .rd-cellcard::before { content: ""; position: absolute; top: -7px; left: var(--notch, 40px); width: 12px; height: 12px; border-top: 1px solid var(--rd-border); border-left: 1px solid var(--rd-border); background: var(--rd-surface); transform: rotate(45deg); }
 .rd-cellcard-head { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
