@@ -656,11 +656,10 @@ def _row(key, status, source):
     return {**evidences()[0], "evidence_key": key, "data_status": status, "source_type": source, "bbox": [0, 0, 1, 1], "method_label": "bảng"}
 
 
-def test_unverified_warning_names_charts_only_when_every_unverified_value_is_from_a_chart():
+def test_an_unverified_number_adds_no_answer_warning():
+    # The web marks each unverified number itself; an answer-level line only repeated it.
     table = _tools_answer([_row("t", "ambiguous", "table")], {"action": "answer", "answer": "100", "evidence_keys": ["t"]})
-    chart = _tools_answer([_row("c", "ambiguous", "chart")], {"action": "answer", "answer": "100", "evidence_keys": ["c"]})
-    assert table["warnings"] == ["Một số giá trị chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
-    assert chart["warnings"] == ["Một số giá trị biểu đồ chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
+    assert table["warnings"] == []
 
 
 def test_a_dash_cell_is_reported_as_no_data_not_as_unverified():
@@ -668,7 +667,7 @@ def test_a_dash_cell_is_reported_as_no_data_not_as_unverified():
     dash = {**_row("dash", "missing", "table"), "numeric_value": None, "raw_text": "—"}
     answer = _tools_answer([dash], {"action": "answer", "answer": "Báo cáo không có số liệu lợi nhuận gộp miền Trung quý 1.",
                                     "evidence_keys": ["dash"]})
-    assert answer["warnings"] == ["Báo cáo ghi “—” (không có số liệu) ở một số ô được dẫn."]
+    assert answer["warnings"] == ["Báo cáo để trống (—) ở một số ô được dùng."]
 
 
 def test_summary_does_not_claim_data_table_values_when_the_script_typed_numbers():
@@ -824,7 +823,7 @@ def test_an_answer_past_its_budget_fails_with_a_vietnamese_message(monkeypatch):
     with pytest.raises(ProviderError) as error:
         _tools_answer([_row("a", "valid", "table")], {"action": "answer", "answer": "100", "evidence_keys": ["a"]})
     assert error.value.code == "AI_ANSWER_TIMEOUT"
-    assert main.ai_failure("AI_ANSWER_TIMEOUT", "x", "t").detail["message"].startswith("Trợ lý chưa trả lời xong")
+    assert main.ai_failure("AI_ANSWER_TIMEOUT", "x", "t").detail["message"] == "Câu hỏi quá dài. Thử hỏi ngắn hơn."
 
 
 def test_formula_result_rows_take_the_data_label_of_a_value_read_unchanged():

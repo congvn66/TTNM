@@ -20,9 +20,9 @@ export const API = (
 // Text for errors the client creates itself. A server error shows the
 // server's own detail.message, the single source of user text for it.
 export const CLIENT_ERRORS = {
-  network: "Không thể kết nối tới máy chủ. Hãy thử lại sau ít phút.",
-  timeout: "Máy chủ phản hồi quá lâu. Hãy thử lại sau ít phút.",
-  unknown: "Máy chủ không xử lý được yêu cầu. Hãy thử lại.",
+  network: "Không kết nối được. Thử lại.",
+  timeout: "Không nhận được phản hồi. Thử lại.",
+  unknown: "Đã xảy ra lỗi. Thử lại.",
 };
 
 function extractError(body, status) {

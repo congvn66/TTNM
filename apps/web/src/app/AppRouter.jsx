@@ -12,7 +12,7 @@ function currentPath() {
  * workspace deep-linkable without adding a router dependency before the API
  * resources have stable route contracts.
  */
-export default function AppRouter({ user = null, onSignOut = null }) {
+export default function AppRouter({ user = null, onSignOut = null, startGuest = null, openSignIn = null }) {
   const [path, setPath] = useState(currentPath);
 
   useEffect(() => {
@@ -29,14 +29,16 @@ export default function AppRouter({ user = null, onSignOut = null }) {
     window.scrollTo?.({ top: 0, behavior: "auto" });
   }, []);
 
-  if (path.startsWith("/app/settings")) {
+  // Settings and the Library belong to an account; a visitor or guest gets the reader.
+  const hasAccount = Boolean(user && !user.is_guest);
+  if (path.startsWith("/app/settings") && hasAccount) {
     const section = path.split("/").filter(Boolean)[2] || "profile";
     return <SettingsScreen section={section} user={user} onSignOut={onSignOut} onNavigate={navigate} />;
   }
 
-  if (path.startsWith("/app/library")) {
+  if (path.startsWith("/app/library") && hasAccount) {
     return <LibraryScreen onNavigate={navigate} />;
   }
 
-  return <ReaderApp user={user} onSignOut={onSignOut} onNavigate={navigate} />;
+  return <ReaderApp user={user} onSignOut={onSignOut} onNavigate={navigate} startGuest={startGuest} openSignIn={openSignIn} />;
 }

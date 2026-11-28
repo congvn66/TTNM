@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { answerBlocks } from "./AnswerText.jsx";
-import { distinctFormulas, formatNumber as formatDecimal, readableLabel, scriptResultRows, scrollBehavior, withoutDecimalRepr } from "./format.js";
+import { distinctFormulas, formatNumber as formatDecimal, readableLabel, scriptResultRows, scrollBehavior } from "./format.js";
 import { chipFromFormula, formatNumber, linkNumbers, readNumberCandidates, resultNumbers } from "./reportChecks.js";
 import { useElapsed } from "./signals.js";
 import { InputTag, partColor, peekProps } from "./Calc.jsx";
+import { Icon } from "./Icon.jsx";
 
 const ESTIMATED = /biểu đồ|ước lượng|trục|ocr/i;
 
@@ -11,11 +12,11 @@ const ESTIMATED = /biểu đồ|ước lượng|trục|ocr/i;
 export function friendlyError(error) {
   const text = String(error?.message ?? error ?? "");
   const code = error?.code ?? "";
-  if (/số bước|step/i.test(text) || code === "AI_STEP_LIMIT") return "Câu này mình chưa làm xong trong một lượt. Thử hỏi ngắn hơn, ví dụ hỏi từng con số một.";
-  if (error?.detail?.provider_http_status === 429 || /HTTP 429|quota|rate limit/i.test(text)) return "Dịch vụ AI đang hết lượt dùng cho lúc này, không phải do mạng của bạn. Thử lại sau vài phút.";
-  if (/^AI_/.test(code) || /dịch vụ AI|AI/i.test(text) || (error?.status ?? 0) >= 500) return "Dịch vụ AI đang gặp lỗi, không phải do mạng của bạn. Thử lại sau ít phút.";
+  if (/số bước|step/i.test(text) || code === "AI_STEP_LIMIT") return "Câu hỏi quá dài. Thử hỏi ngắn hơn.";
+  if (error?.detail?.provider_http_status === 429 || /HTTP 429|quota|rate limit/i.test(text)) return "Hệ thống đang quá tải. Thử lại sau vài phút.";
+  if (/^AI_/.test(code) || /dịch vụ AI|AI/i.test(text) || (error?.status ?? 0) >= 500) return "Không trả lời được. Thử lại sau.";
   if (/kết nối|mạng/i.test(text)) return "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.";
-  return text || "Chưa gửi được câu hỏi. Thử lại sau ít phút.";
+  return text || "Không gửi được câu hỏi. Thử lại sau.";
 }
 const FALLBACK_QUESTIONS = ["Báo cáo này nói về những chỉ tiêu nào?", "Doanh thu năm nay là bao nhiêu?", "Chỉ tiêu nào tăng mạnh nhất?"];
 
@@ -77,27 +78,20 @@ export function realFormulas(answer) {
   }));
 }
 
-/** One honest sentence about where the numbers came from. */
+/** A short line when the answer's numbers need a second look; null when they come straight from the report. */
 export function confidenceOf(answer) {
   const data = (answer?.evidence ?? []).filter((item) => item.kind === "data");
   const quotes = (answer?.evidence ?? []).filter((item) => item.kind === "text");
   const formulas = realFormulas(answer);
   const typed = formulas.flatMap((formula) => formula.manual_numbers ?? []);
   if (answer?.not_found) return { kind: "warn", text: "Không tìm thấy số này trong báo cáo." };
-  if (typed.length) return { kind: "warn", text: `Phép tính có số không lấy từ báo cáo: ${typed.map(showNumber).join(", ")}. Hãy kiểm tra lại.` };
+  if (typed.length) return { kind: "warn", text: `Có số không có trong báo cáo: ${typed.map(showNumber).join(", ")}` };
   const estimated = data.filter((item) => (item.data_status && item.data_status !== "valid") || ESTIMATED.test(item.method_label ?? ""));
-  if (estimated.length) return { kind: "warn", text: `Mình chưa chắc ${estimated.length} số đọc từ ảnh (biểu đồ hoặc bản scan). Chạm số để so với trang.` };
-  // Where the numbers were read: a table, a chart, the running text, or several of them.
-  const placeOf = (item) => item.method_label === "đọc từ văn bản" ? "đoạn văn"
-    : item.source_type === "chart" || /nhãn|trục/.test(item.method_label ?? "") ? "biểu đồ" : "bảng";
-  const places = ["bảng", "biểu đồ", "đoạn văn"].filter((place) => data.some((item) => placeOf(item) === place));
-  const where = places.length ? places.join(places.length > 2 ? ", " : " và ") : "bảng";
-  if (formulas.length) return { kind: "good", text: `Dựa trên ${formulas.reduce((count, formula) => count + (formula.inputs?.length ?? 0), 0) || data.length} số đọc trong ${where}, phép tính do máy làm. Chạm từng số để xem trên trang.` };
-  if (data.length) return { kind: "good", text: `Đọc thẳng từ ${where} trong báo cáo.` };
-  if (quotes.length) {
-    const pages = [...new Set(quotes.map((item) => item.page).filter(Boolean))];
-    return { kind: "warn", text: `Câu trả lời này không có con số nào để bạn kiểm.${pages.length ? ` Hãy đối chiếu trang ${pages.join(", ")}.` : ""}` };
-  }
+  if (estimated.length) return { kind: "warn", text: `${estimated.length} số đọc từ ảnh, có thể sai` };
+  if (formulas.length || data.length) return null;
+  // Only quotes, no number to check: point at the pages they come from.
+  const pages = [...new Set(quotes.map((item) => item.page).filter(Boolean))];
+  if (pages.length) return { kind: "warn", text: `Xem trang ${pages.join(", ")}` };
   return null;
 }
 
@@ -136,12 +130,6 @@ function ResultValue({ formula }) {
   return <ul className="rd-result">{rows.map((row, index) => { const { name, unit } = resultName(row.name); return <li key={index}><span>{name}</span><b>{row.value}{unit && !String(row.value).includes(unit) ? unit : ""}</b></li>; })}</ul>;
 }
 
-/** The script with each value('ev-…') written as the cell it reads. */
-function readableCode(formula) {
-  const names = new Map((formula.inputs ?? []).map((input) => [input.evidence_key, readableLabel(input.label) || input.evidence_key]));
-  return withoutDecimalRepr(formula.expression).replace(/value\((['"])(ev-[\w-]+)\1\)/g, (match, quote, key) => names.has(key) ? `«${names.get(key)}»` : match);
-}
-
 /** Where an answer's numbers and quotes come from, and how it calculated. */
 function SourcesDetails({ answer, id, activeKey, onFocus, scanned, label = "Nguồn" }) {
   const rows = sourceRows(answer);
@@ -150,10 +138,10 @@ function SourcesDetails({ answer, id, activeKey, onFocus, scanned, label = "Ngu�
   const pages = [...new Set([...rows, ...quotes].map((item) => item.page).filter(Boolean))];
   if (!rows.length && !quotes.length && !formulas.length) return null;
   return <details className="rd-sources" onToggle={(event) => { if (event.currentTarget.open) { const node = event.currentTarget; window.requestAnimationFrame(() => node.scrollIntoView({ block: "nearest", behavior: scrollBehavior() })); } }}>
-    <summary>{label}{pages.length ? ` · trang ${pages.join(", ")}` : ""}{formulas.length ? " · cách tính" : ""}</summary>
+    <summary>{label}{pages.length ? ` · tr. ${pages.join(", ")}` : ""}</summary>
     {rows.length > 0 && <ul className="rd-source-list">{rows.map((row) => <li key={row.key}><button type="button" className={activeKey === row.key ? "active" : ""} onClick={() => onFocus(row)}><span>Trang {row.page} · {row.label || "số trong bảng"}</span><b>{row.value}</b></button></li>)}</ul>}
-    {quotes.map((quote, index) => <button type="button" key={index} className="rd-quote" onClick={() => onFocus({ page: quote.page, boxes: quote.bbox ? [quote.bbox] : [], quote: quote.quote, label: `Đoạn văn ở trang ${quote.page}`, key: `quote-${id}-${index}` })}>“{quote.quote}”<small>Trang {quote.page}{scanned ? " · đọc từ ảnh scan, có thể sai chữ" : ""}</small></button>)}
-    {formulas.map((formula, index) => <div key={index} className="rd-formula"><span>Cách tính</span>{formula.substitution && <p>{formula.substitution}</p>}<ResultValue formula={formula} />{formula.expression && <details><summary>Xem phép tính đầy đủ</summary><pre>{readableCode(formula)}</pre></details>}</div>)}
+    {quotes.map((quote, index) => <button type="button" key={index} className="rd-quote" onClick={() => onFocus({ page: quote.page, boxes: quote.bbox ? [quote.bbox] : [], quote: quote.quote, label: `Đoạn văn ở trang ${quote.page}`, key: `quote-${id}-${index}` })}>“{quote.quote}”<small>Trang {quote.page}{scanned ? " · bản scan" : ""}</small></button>)}
+    {formulas.map((formula, index) => <div key={index} className="rd-formula"><span>Cách tính</span>{formula.substitution && <p>{formula.substitution}</p>}<ResultValue formula={formula} /></div>)}
   </details>;
 }
 
@@ -211,6 +199,14 @@ function resultChip(formula, inputs) {
   return { ...chip, formula, parts: chip.parts.map((part) => ({ ...part, index: indexOf.get(part.key) ?? part.index })) };
 }
 
+/** The choices of a clarifying question: tools-mode `options`, or the older clarification card's points. */
+export function clarifyOptions(answer) {
+  if (!answer) return [];
+  if (Array.isArray(answer.options) && answer.options.length) return answer.options.filter((item) => typeof item === "string" && item.trim());
+  if (answer.presentation === "clarification_v1") return (answer.sections?.[0]?.points ?? []).filter((item) => typeof item === "string" && item.trim());
+  return [];
+}
+
 export function headlineOf(answer) {
   if (!answer || answer.not_found) return null;
   const rows = sourceRows(answer);
@@ -254,7 +250,7 @@ export function swappedHeadline(headline, formula) {
 /**
  * The answer's number, large, and under it each input of its calculation with
  * its numbered tag: tap one to see its cell, hover or focus it to outline the
- * cell, "Đổi ô" when the AI read the wrong cell.
+ * cell, "Chọn ô khác" when the AI read the wrong cell.
  */
 function Headline({ headline, active, activeKey, onFocus, onPeek, onPick, busy, doubtful }) {
   const inputs = headline.inputs ?? [];
@@ -263,7 +259,7 @@ function Headline({ headline, active, activeKey, onFocus, onPeek, onPick, busy, 
     <button type="button" className="rd-headline-value" aria-pressed={active} onClick={() => onFocus(headline.chip)}>
       <b>{doubtful && <i className="rd-mark unsure" aria-hidden="true">?</i>}{headline.value}{doubtful && <span className="rd-sr">, có thể không có nghĩa</span>}</b>
       {/* Words, not only a dashed outline: a swapped result must never read as the AI's answer. */}
-      <span>{headline.original && "Kết quả sau khi bạn đổi ô · "}{headline.label}{headline.label && " · "}{many ? "tính từ các số dưới" : headline.formula ? `tính từ 1 số ở trang ${headline.chip.page}` : `trang ${headline.chip.page}`}<em>Xem trên trang</em></span>
+      <span>{[headline.original && "Đã đổi ô", headline.label, `trang ${headline.chip.page}`].filter(Boolean).join(" · ")}</span>
     </button>
     {many && <ul className="rd-inputs">{inputs.map(({ index, ...input }) => {
       const chip = { page: input.page, boxes: input.bbox ? [input.bbox] : [], label: readableLabel(input.label), value: formatNumber(Number(input.value)), key: input.evidence_key };
@@ -272,22 +268,24 @@ function Headline({ headline, active, activeKey, onFocus, onPeek, onPick, busy, 
         <button type="button" className={`rd-input${activeKey === chip.key ? " active" : ""}`} aria-pressed={activeKey === chip.key} onClick={() => onFocus(chip)} {...peekProps(input.evidence_key, onPeek)}>
           <InputTag index={index} /><b>{chip.value}</b><small>{chip.label || `trang ${input.page}`}</small>
         </button>
-        {onPick && <button type="button" className="rd-button small" aria-disabled={busy || undefined} onClick={() => { if (!busy) onPick(index); }} title={busy ? "Đang tính lại…" : "Lấy nhầm ô? Chọn ô đúng trên trang"} aria-label={`Đổi ô số ${index + 1}`}>Đổi ô</button>}
+        {onPick && <button type="button" className="rd-button small" aria-disabled={busy || undefined} onClick={() => { if (!busy) onPick(index); }} title={busy ? "Đang tính lại…" : undefined} aria-label={`Chọn ô khác cho số ${index + 1}`}>Chọn ô khác</button>}
       </li>;
     })}</ul>}
   </div>;
 }
 
+const LATE_SECONDS = 45;
+
 function WorkingReply({ reply, onStop }) {
   const since = Date.parse(reply.created_at ?? "") || null;
   const seconds = useElapsed(since);
   const [stopping, setStopping] = useState(false);
-  return <div className="rd-waiting"><span className="rd-spinner" aria-hidden="true" /><div><b>Đang trả lời…{since ? ` ${seconds} giây` : ""}</b><small>Câu trả lời sẽ hiện ở đây. Bạn vẫn đọc báo cáo được trong lúc chờ.</small></div>
+  return <div className="rd-waiting"><span className="rd-spinner" aria-hidden="true" /><div><b>Đang trả lời…</b>{since && seconds >= LATE_SECONDS && <small>Lâu hơn bình thường</small>}</div>
     {onStop && <button type="button" className="rd-button" disabled={stopping} onClick={async () => { setStopping(true); try { await onStop(reply); } finally { setStopping(false); } }}>{stopping ? "Đang dừng…" : "Dừng"}</button>}
   </div>;
 }
 
-export function AnswerCard({ note, activeKey, onFocus, onAsk, onEdit, onOpenData, onStop, scanned, onPeek, onPick, pickBusy = false, swap, onUndoSwap }) {
+export function AnswerCard({ note, activeKey, onFocus, onAsk, onEdit, onStop, scanned, onPeek, onPick, pickBusy = false, swap, onUndoSwap }) {
   const { question, reply } = note;
   // Hooks before any early return: a reply goes from "working" to done in the same card.
   const [copied, setCopied] = useState(false);
@@ -313,21 +311,23 @@ export function AnswerCard({ note, activeKey, onFocus, onAsk, onEdit, onOpenData
     {!failed && reply && <>
       {headline && <Headline headline={headline} active={activeKey === headline.chip.key} activeKey={activeKey} onFocus={onFocus} onPeek={onPeek} busy={pickBusy} doubtful={Boolean(swap?.warning)}
         onPick={onPick && formulaIndex >= 0 && !reply.needs_update ? (index) => onPick({ note, base: original, headline, formulaIndex, index }) : null} />}
-      {swap && <p className="rd-fyi changed">Bạn đã đổi ô: {swap.changes.map((change) => `${change.from} thành ${change.to}`).join("; ")}. Câu trả lời gốc ra {original.value}, phần chữ bên dưới vẫn theo số gốc. Đây chỉ là tính thử, không được lưu. {!pickBusy && <button type="button" className="rd-link" onClick={() => onUndoSwap(note.id)}>Hoàn tác</button>}</p>}
-      {swap?.warning && <p className="rd-fyi warn"><i className="rd-mark unsure" aria-hidden="true">?</i><span>{swap.warning} Kết quả có thể không có nghĩa. Nếu không đúng ý, bấm Hoàn tác.</span></p>}
+      {swap && <p className="rd-fyi changed">Đã đổi ô · gốc {original.value} {!pickBusy && <button type="button" className="rd-link" onClick={() => onUndoSwap(note.id)}>Hoàn tác</button>}</p>}
+      {swap?.warning && <p className="rd-fyi warn"><i className="rd-mark unsure" aria-hidden="true">?</i><span>{swap.warning}</span></p>}
       <AnswerSentence text={text} answer={answer} activeKey={activeKey} onFocus={onFocus} />
       {confidence && <p className={`rd-confidence ${confidence.kind}`}><i aria-hidden="true" />{confidence.text}</p>}
-      {reply.needs_update && <p className="rd-confidence neutral"><i aria-hidden="true" />Dữ liệu của báo cáo đã thay đổi sau câu trả lời này. Hỏi lại để có kết quả mới.</p>}
+      {reply.needs_update && <p className="rd-confidence neutral"><i aria-hidden="true" />Số liệu đã thay đổi{question && <> · <button type="button" className="rd-link" onClick={() => onAsk(question.body)}>Hỏi lại</button></>}</p>}
+      {clarifyOptions(answer).length > 0 && <div className="rd-next" role="group" aria-label="Chọn một ý">
+        {clarifyOptions(answer).map((option) => <button key={option} type="button" onClick={() => onAsk(option)}>{option}</button>)}
+      </div>}
+      {(answer?.warnings ?? []).map((warning) => <p key={warning} className="rd-fyi warn"><i className="rd-mark unsure" aria-hidden="true">!</i><span>{warning}</span></p>)}
       {answer?.not_found && <div className="rd-next">
-        <span>Thử tiếp</span>
         {pages.map((page) => <button key={page} type="button" onClick={() => onFocus({ page, boxes: [], label: `Trang ${page}`, key: `page-${note.id}-${page}` })}>Mở trang {page}</button>)}
-        <button type="button" onClick={onOpenData}>Xem các số đã đọc</button>
-        {question && <button type="button" onClick={() => onEdit(question.body)}>Hỏi cách khác</button>}
+        {question && <button type="button" onClick={() => onEdit(question.body)}>Sửa câu hỏi</button>}
       </div>}
       <SourcesDetails answer={answer} id={note.id} activeKey={activeKey} onFocus={onFocus} scanned={scanned} />
       <div className="rd-actions">
-        {question && !answer?.not_found && <button type="button" onClick={() => onEdit(question.body)}>Sửa câu hỏi</button>}
-        <button type="button" onClick={copy}>{copied ? "Đã chép" : "Sao chép"}</button>
+        {question && !answer?.not_found && <button type="button" onClick={() => onEdit(question.body)} aria-label="Sửa câu hỏi" title="Sửa câu hỏi"><Icon name="pencil" size={15} /></button>}
+        <button type="button" onClick={copy} aria-label={copied ? "Đã chép" : "Sao chép"} title={copied ? "Đã chép" : "Sao chép"}><Icon name="copy" size={15} />{copied && <span>Đã chép</span>}</button>
       </div>
     </>}
   </article>;
@@ -337,7 +337,7 @@ export function PendingCard({ item, onRetry, onDismiss }) {
   const seconds = useElapsed(item.status === "asking" ? item.startedAt : null);
   return <article className={`rd-card rd-qa${item.status === "failed" ? " failed" : " waiting"}`} aria-live="polite">
     <p className="rd-question">{item.question}</p>
-    {item.status === "asking" && <div className="rd-waiting"><span className="rd-spinner" aria-hidden="true" /><div><b>Đang trả lời… {seconds} giây</b><small>{seconds < 45 ? "Thường mất 5 đến 40 giây. Bạn vẫn đọc báo cáo được trong lúc chờ." : "Lâu hơn bình thường. Dịch vụ AI có thể đang bận."}</small></div></div>}
+    {item.status === "asking" && <div className="rd-waiting"><span className="rd-spinner" aria-hidden="true" /><div><b>Đang trả lời…</b>{seconds >= LATE_SECONDS && <small>Lâu hơn bình thường</small>}</div></div>}
     {item.status === "failed" && <><p className="rd-error-text">{friendlyError(item.errorObject ?? item.error)}</p><div className="rd-actions"><button type="button" className="rd-button" onClick={() => onRetry(item)}>Thử lại</button><button type="button" onClick={() => onDismiss(item.id)}>Bỏ qua</button></div></>}
   </article>;
 }
@@ -352,22 +352,15 @@ export function ReadingCard({ report, uploading = false }) {
   const percent = uploading ? 5 : Math.min(95, Math.round((seconds / estimate) * 100));
   const late = seconds > estimate * 1.5;
   return <article className="rd-card rd-reading" aria-live="polite">
-    <header><span className="rd-spinner large" aria-hidden="true" /><div><h3>{uploading ? `Đang tải lên ${report.file_name}` : "Đang đọc báo cáo"}</h3><p>{uploading ? `Gửi tệp lên máy chủ · đã ${seconds} giây` : <>{report.page_count ? `${report.page_count} trang · ` : ""}thường dưới {estimate} giây · đã {seconds} giây</>}</p></div></header>
-    <div className="rd-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label="Tiến độ đọc ước tính"><span style={{ width: `${percent}%` }} /></div>
-    <ol className="rd-steps">
-      <li className={uploading ? "active" : "done"}>{uploading ? "Đang tải lên" : "Đã tải lên"}</li>
-      <li className={uploading ? "" : "done"}>Mở được PDF, trang đang hiện bên trái</li>
-      <li className={uploading ? "" : "active"}>Đọc chữ, bảng và số liệu</li>
-      <li>Kiểm tra các dòng tổng</li>
-    </ol>
-    <p className="rd-hint">{uploading ? "Trang báo cáo sẽ hiện ngay khi tải lên xong." : late ? "Lâu hơn dự kiến, thường do trang scan. Vẫn đang đọc." : "Có thể gõ câu hỏi ngay. Đọc xong sẽ có tiếng chuông và thông báo."}</p>
+    <header><span className="rd-spinner large" aria-hidden="true" /><div><h3>{uploading ? `Đang tải lên ${report.file_name}…` : "Đang đọc báo cáo…"}</h3></div></header>
+    <div className="rd-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label="Tiến độ"><span style={{ width: `${percent}%` }} /></div>
+    {late && !uploading && <p className="rd-hint">Lâu hơn bình thường</p>}
   </article>;
 }
 
 export function FailedCard({ report, onRetry, busy }) {
   return <article className="rd-card rd-failed" role="alert">
-    <h3>Chưa đọc được báo cáo này</h3>
-    <p>Thường do PDF bị khoá, bị hỏng, hoặc là ảnh chụp quá mờ.</p>
+    <h3>Không đọc được báo cáo này</h3>
     {onRetry && <button type="button" className="rd-button" onClick={() => onRetry(report)} disabled={busy}>Đọc lại</button>}
   </article>;
 }
@@ -375,11 +368,17 @@ export function FailedCard({ report, onRetry, busy }) {
 function CheckLine({ check, activeKey, onFocus, onDismiss }) {
   const chip = <NumberChip chip={check.chip} text={formatNumber(check.total)} active={activeKey === check.chip.key} onFocus={onFocus} />;
   const rounding = check.ok && Math.abs(check.diff) > 1e-9;
-  if (rounding) return <li className="ok"><span aria-hidden="true">✓</span><p>{check.column}: {check.count} dòng cộng lại {formatNumber(check.sum)}, dòng tổng ghi {chip}. Lệch {formatNumber(Math.abs(check.diff))}, trong mức làm tròn.</p></li>;
+  if (rounding) return <li className="ok"><span aria-hidden="true">✓</span><p>{check.column}: tổng {formatNumber(check.sum)}, ghi {chip}, lệch {formatNumber(Math.abs(check.diff))}</p></li>;
   return check.ok
-    ? <li className="ok"><span aria-hidden="true">✓</span><p>{check.column}: {check.count} dòng cộng lại đúng bằng dòng tổng {chip}</p></li>
-    : <li className="bad"><span aria-hidden="true">!</span><p>{check.column}: các dòng cộng lại {formatNumber(check.sum)}, nhưng dòng tổng ghi {chip}. Lệch {formatNumber(Math.abs(check.diff))}.
-      {onDismiss && <button type="button" className="rd-link rd-dismiss" onClick={() => onDismiss(check)} aria-label={`Không phải lỗi: ${check.column}`}>Không phải lỗi</button>}</p></li>;
+    ? <li className="ok"><span aria-hidden="true">✓</span><p>{check.column}: khớp</p></li>
+    : <li className="bad"><span aria-hidden="true">!</span><p>{check.column}: tổng {formatNumber(check.sum)}, ghi {chip}, lệch {formatNumber(Math.abs(check.diff))}
+      {onDismiss && <button type="button" className="rd-link rd-dismiss" onClick={() => onDismiss(check)} aria-label={`Bỏ qua: ${check.column}`}>Bỏ qua</button>}</p></li>;
+}
+
+/** A failed overview: say so, unless the cause is one the reader can act on (busy service, no network). */
+function briefError(error) {
+  const text = friendlyError(error);
+  return /quá tải|kết nối/.test(text) ? `Chưa tóm tắt được. ${text}` : "Chưa tóm tắt được";
 }
 
 /** The overview's own text: the caution line goes in its own box. */
@@ -399,7 +398,7 @@ function firstSentence(text) {
  * The report overview: what the report is, its key points with numbers you
  * can tap, what it warns about, and what SourceLens checked on its own.
  */
-export function BriefCard({ brief, briefing, dismissed = new Set(), onDismiss, onRestore, activeKey, onFocus, onAsk, onRetry, onOpenData, asked, collapsed, scanned, hint }) {
+export function BriefCard({ brief, briefing, dismissed = new Set(), onDismiss, onRestore, activeKey, onFocus, onAsk, onRetry, onOpenData, asked, collapsed, scanned }) {
   const [open, setOpen] = useState(!collapsed);
   useEffect(() => { if (collapsed) setOpen(false); }, [collapsed]);
   const answer = brief?.status === "ready" ? brief.answer : null;
@@ -408,29 +407,28 @@ export function BriefCard({ brief, briefing, dismissed = new Set(), onDismiss, o
   const skipped = briefing?.checks.filter((check) => !check.ok && dismissed.has(check.chip.key)).length ?? 0;
   const good = briefing?.checks.filter((check) => check.ok) ?? [];
   const questions = (briefing?.suggestions?.length ? briefing.suggestions : FALLBACK_QUESTIONS).filter((question) => !asked?.has(question.trim()));
-  return <article className={`rd-card rd-brief${open ? "" : " folded"}`} data-tour="briefing">
+  return <article className={`rd-card rd-brief${open ? "" : " folded"}`}>
     <button type="button" className="rd-fold" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-      <span className="rd-kicker">Tóm tắt báo cáo</span>
+      <span className="rd-kicker">Tóm tắt</span>
       {!open && bad.length > 0 && <span className="rd-fold-status bad">{bad.length} chỗ không khớp</span>}
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d={open ? "m6 15 6-6 6 6" : "m6 9 6 6 6-6"} /></svg>
     </button>
     {!open && answer && <p className="rd-brief-teaser">{firstSentence(main)}</p>}
     {open && <>
-      {brief?.status === "loading" && <div className="rd-brief-loading" aria-live="polite"><span className="rd-spinner" aria-hidden="true" /><div><b>Đang đọc toàn bộ báo cáo để tóm tắt…</b><small>Thường mất 10 đến 30 giây. Bạn có thể hỏi ngay trong lúc chờ.</small></div></div>}
+      {brief?.status === "loading" && <div className="rd-brief-loading" aria-live="polite"><span className="rd-spinner" aria-hidden="true" /><div><b>Đang tóm tắt…</b></div></div>}
       {brief?.status === "loading" && <div className="rd-skeleton-lines" aria-hidden="true"><i /><i /><i /></div>}
-      {brief?.status === "error" && <div className="rd-brief-error"><p className="rd-error-text">{/số bước|step|ASSISTANT_INCOMPLETE/i.test(`${brief.error?.code ?? ""} ${brief.error?.message ?? ""}`) ? "Báo cáo này dài và nhiều bảng, mình chưa tóm tắt xong trong lần này. Thử lại, hoặc hỏi từng ý bằng các câu gợi ý bên dưới." : `Chưa tóm tắt được. ${friendlyError(brief.error)}`}</p><button type="button" className="rd-button" onClick={onRetry}>Thử lại</button></div>}
+      {brief?.status === "error" && <div className="rd-brief-error"><p className="rd-error-text">{briefError(brief.error)}</p><button type="button" className="rd-button" onClick={onRetry}>Thử lại</button></div>}
       {answer && <>
         <AnswerSentence text={main} answer={answer} activeKey={activeKey} onFocus={onFocus} />
-        {hint && /\d/.test(main) && <p className="rd-tip"><b>Mẹo</b>Chạm vào một số có nền xanh để xem ô gốc của nó trên trang.</p>}
         {caution.length > 0 && <div className="rd-caution"><strong>Cần chú ý</strong>{caution.map((line, index) => <p key={index}><Line text={line} answer={answer} activeKey={activeKey} onFocus={onFocus} /></p>)}</div>}
-        <SourcesDetails answer={answer} id="brief" activeKey={activeKey} onFocus={onFocus} scanned={scanned} label="Nguồn của tóm tắt" />
+        <SourcesDetails answer={answer} id="brief" activeKey={activeKey} onFocus={onFocus} scanned={scanned} />
       </>}
-      {scanned && <p className="rd-banner">Đây là bản scan. Chữ được đọc từ ảnh nên có thể sai, nhất là số trong bảng. Hãy chạm số để tự kiểm trên trang.</p>}
-      {bad.length > 0 && <div className="rd-alert"><strong>Mình thấy số không khớp trong báo cáo</strong><ul className="rd-checks">{bad.map((check) => <CheckLine key={check.chip.key} check={check} activeKey={activeKey} onFocus={onFocus} onDismiss={onDismiss} />)}</ul></div>}
-      {skipped > 0 && <p className="rd-skipped">{skipped} chỗ không khớp bạn đã bỏ qua · <button type="button" className="rd-link" onClick={onRestore}>Hiện lại</button></p>}
-      {!bad.length && !skipped && good.length > 0 && <p className="rd-verified"><span aria-hidden="true">✓</span>Mình đã tự cộng lại {good.length} dòng tổng trong bảng: đều khớp.</p>}
-      {questions.length > 0 && <div className="rd-suggest"><span>Thử hỏi</span>{questions.map((question) => <button type="button" key={question} onClick={() => onAsk(question)}>{question}</button>)}</div>}
-      <button type="button" className="rd-link rd-brief-data" onClick={onOpenData}>Xem tất cả số đã đọc</button>
+      {scanned && <p className="rd-banner">Bản scan, số có thể bị đọc sai</p>}
+      {bad.length > 0 && <div className="rd-alert"><strong>Tổng không khớp</strong><ul className="rd-checks">{bad.map((check) => <CheckLine key={check.chip.key} check={check} activeKey={activeKey} onFocus={onFocus} onDismiss={onDismiss} />)}</ul></div>}
+      {skipped > 0 && <p className="rd-skipped">Đã ẩn {skipped} · <button type="button" className="rd-link" onClick={onRestore}>Hiện lại</button></p>}
+      {!bad.length && !skipped && good.length > 0 && <p className="rd-verified"><span aria-hidden="true">✓</span>{good.length} dòng tổng khớp</p>}
+      {questions.length > 0 && <div className="rd-suggest"><span>Gợi ý</span>{questions.map((question) => <button type="button" key={question} onClick={() => onAsk(question)}>{question}</button>)}</div>}
+      <button type="button" className="rd-link rd-brief-data" onClick={onOpenData}>Số liệu</button>
     </>}
   </article>;
 }

@@ -6,6 +6,7 @@ import { FormulaLine, InputTag, partColor, partInk, peekProps } from "./Calc.jsx
 import { readableFormula } from "./formulaView.js";
 import { cellName, cellNumber, cellRange, cellUnsure, isNumberCell, neighbourCell, pageProse, pageTables, summarizeSelection } from "./cells.js";
 import { formatNumber as formatValue, scrollBehavior, valueWithUnit } from "./format.js";
+import { Icon } from "./Icon.jsx";
 
 const SHOW_READ_KEY = "sourcelens-show-read-v1";
 const PAD = 3; // the cell fill reaches a little past the digits so none touch the edge
@@ -33,7 +34,7 @@ function Thumb({ pdf, number, active, marked, onOpen }) {
   }, [pdf, number]);
   return <button type="button" className={`rd-thumb${active ? " active" : ""}`} onClick={() => onOpen(number)} aria-label={`Trang ${number}`} aria-current={active ? "page" : undefined}>
     <canvas ref={canvasRef} aria-hidden="true" />
-    <span>{number}{marked && <i title="Trang có số được nhắc tới trong ghi chú" aria-label="có số được nhắc tới" />}</span>
+    <span>{number}{marked && <i title="Có số trong câu trả lời" aria-label="có số trong câu trả lời" />}</span>
   </button>;
 }
 
@@ -165,7 +166,7 @@ function CellLayer({ tables, size, page, openKey, selection, selectMode, picking
           const value = cellNumber(cell);
           return <div key={cell.evidence_key} role="gridcell" data-cell={cell.evidence_key} tabIndex={cell.evidence_key === tabKeyOf(table) ? 0 : -1}
             aria-selected={selection.includes(cell.evidence_key)} aria-expanded={openKey === cell.evidence_key ? true : undefined}
-            aria-label={`${cellName(cell)}: ${value == null ? "không có số" : formatValue(cell.current_numeric_value)}${cellUnsure(cell) ? ", chưa chắc" : ""}`}
+            aria-label={`${cellName(cell)}: ${value == null ? "không có số" : formatValue(cell.current_numeric_value)}${cellUnsure(cell) ? ", có thể đọc sai" : ""}`}
             className={`rd-hit${openKey === cell.evidence_key ? " open" : ""}`} style={box(cell)}
             onClick={(event) => onCellClick(event, cell.evidence_key)} onKeyDown={(event) => onKeyDown(event, cell.evidence_key)} onFocus={(event) => {
               setRoving(cell.evidence_key);
@@ -229,7 +230,7 @@ function ProseLayer({ cells, size, page, openKey, picking, pickHover, onPickHove
     <p id="rd-prose-help" className="rd-sr">Mũi tên để đi giữa các số, Enter để xem hoặc sửa số.</p>
     {cells.map((cell, index) => <button key={cell.evidence_key} type="button" data-cell={cell.evidence_key} tabIndex={cell.evidence_key === tabKey ? 0 : -1}
       aria-expanded={openKey === cell.evidence_key ? true : undefined}
-      aria-label={`${cellName(cell)}: ${cell.current_numeric_value == null ? cell.raw_text : valueWithUnit(cell)}${cellUnsure(cell) ? ", chưa chắc" : ""}`}
+      aria-label={`${cellName(cell)}: ${cell.current_numeric_value == null ? cell.raw_text : valueWithUnit(cell)}${cellUnsure(cell) ? ", có thể đọc sai" : ""}`}
       className={`rd-hit${openKey === cell.evidence_key ? " open" : ""}`} style={box(cell)}
       onPointerDown={(event) => { lastPointer.current = event.pointerType || "mouse"; }}
       onClick={() => act(cell.evidence_key)} onKeyDown={(event) => onKeyDown(event, index)}
@@ -262,7 +263,7 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
     try { localStorage.setItem(SHOW_READ_KEY, next ? "yes" : "no"); } catch { /* private mode */ }
     setShowRead(next);
     // The meaning of the shading is said out loud too: a tooltip never reaches touch or keyboard users.
-    if (next) announce(`Đã tô ${evidences.filter((cell) => cell.page_number === page && cell.current_numeric_value != null && clampBox(cell.bbox)).length} số mình đọc được ở trang này. Số không được tô là số mình chưa đọc.`);
+    if (next) announce(`Đang hiện ${evidences.filter((cell) => cell.page_number === page && cell.current_numeric_value != null && clampBox(cell.bbox)).length} số đã đọc`);
   };
   useEffect(() => {
     const node = scrollRef.current;
@@ -472,7 +473,7 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
   // reading every mouse-over aloud would bury everything else.
   const pickByKeys = useRef(false);
   useEffect(() => {
-    if (pick?.key) announce(`Chọn ô thay cho số ${pick.index + 1}, ${pick.value}. Mũi tên để xem kết quả mới, Enter để dùng ô, Esc để huỷ.`);
+    if (pick?.key) announce(`Chọn ô thay cho số ${pick.index + 1}, ${pick.value}. Mũi tên để xem kết quả mới, Enter để dùng ô, Esc để hủy.`);
   }, [pick?.key]);
   useEffect(() => {
     const text = pick?.preview?.text;
@@ -525,15 +526,15 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
     anchor.current = { cx: (box[0] + box[2]) / 2, cy: (box[1] + box[3]) / 2 };
     autoFit.current = false;
     setScale(Math.min(3, scale * 32 / Math.max(rowPitch, 4)));
-    announce("Đã phóng to bảng. Chạm lại vào ô cần xem.");
+    announce("Đã phóng to bảng");
   };
   const numPages = pdf?.numPages ?? report?.page_count ?? 0;
 
   useEffect(() => {
     const onKey = (event) => {
       if (event.target.closest?.("input, textarea, [contenteditable]")) return;
-      // A panel, dialog, menu or tour on top handles its own keys first.
-      if (document.querySelector(".rd-panel, .rd-modal-back, .rd-tour, .rd-popover")) return;
+      // A panel, dialog or menu on top handles its own keys first.
+      if (document.querySelector(".rd-panel, .rd-modal-back, .rd-popover")) return;
       if (event.key === "Escape") {
         if (pick) onPickCancel?.();
         else if (cardHere) closeCard();
@@ -560,31 +561,29 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
       {/* A doubtful cell shows why on the first line, before the reader chooses it. */}
       <p>{pick.preview?.warning
         ? <span className="rd-pick-line rd-pick-warn" title={pick.preview.warning}><i className="rd-mark unsure" aria-hidden="true">?</i>{pick.preview.warning}</span>
-        : <span className="rd-pick-line"><b>Chọn ô đúng</b> thay cho <span className="rd-tok" style={{ "--part": partColor(pick.index) }}><InputTag index={pick.index} />{pick.value}</span><span className="rd-pick-name">{pick.label}.</span></span>}
-        {pick.preview
-          ? <span className="rd-pick-line rd-pick-preview" title={pick.preview.text}>{pick.preview.text}</span>
-          : <span className="rd-pick-line rd-pick-hint">{pick.touch ? "Chạm một ô để xem kết quả mới." : "Rê chuột qua một ô để xem kết quả mới, bấm để dùng."}</span>}</p>
+        : <span className="rd-pick-line"><b>Chọn ô</b> thay cho <span className="rd-tok" style={{ "--part": partColor(pick.index) }}><InputTag index={pick.index} />{pick.value}</span></span>}
+        <span className="rd-pick-line rd-pick-preview" title={pick.preview?.text}>{pick.preview?.text ?? ""}</span></p>
       {pick.touch && pick.preview?.key && !pick.preview.refused && <button type="button" className="rd-button primary" onClick={() => onPickChoose?.(pick.preview.key)}>Dùng ô này</button>}
-      <button type="button" className="rd-button" onClick={onPickCancel}>{pick.touch ? "Huỷ" : "Huỷ (Esc)"}</button>
+      <button type="button" className="rd-button" onClick={onPickCancel}>Hủy</button>
     </div>}
     {!pick && summary && <div className={`rd-focusbar rd-selbar${summary.caveats.length ? " unsure" : ""}`}>
       <button type="button" className="rd-focus-close" onClick={() => onSelect?.([])} aria-label="Bỏ chọn">×</button>
       <p><b>{summary.count} ô</b>{summary.additive && <><small>Tổng</small><b>{formatValue(String(Math.round(summary.sum * 100) / 100))}</b></>}<small>Trung bình</small><b>{formatValue(String(Math.round(summary.average * 10) / 10))}</b>{summary.change != null && <><small>{summary.changeFrom && summary.changeTo ? `Thay đổi từ ${summary.changeFrom} sang ${summary.changeTo}` : "Thay đổi"}</small><b>{summary.change >= 0 ? "+" : ""}{formatValue(String(Math.round(summary.change * 100) / 100))}%</b></>}
         {summary.caveats.map((caveat) => <span key={caveat} className="rd-caveat"><i className="rd-mark unsure" aria-hidden="true">?</i>{caveat}</span>)}</p>
-      {onAskSelection && <button type="button" className="rd-button" aria-expanded={askingSelection} aria-controls="rd-asksugs" onClick={onAskSelection}>Hỏi về các ô này</button>}
+      {onAskSelection && <button type="button" className="rd-button" aria-expanded={askingSelection} aria-controls="rd-asksugs" onClick={onAskSelection}>Hỏi</button>}
       {onChartSelection && <button type="button" className="rd-button" onClick={onChartSelection}>Vẽ biểu đồ</button>}
     </div>}
-    {!pick && !summary && !focus?.page && showRead && <div className="rd-focusbar rd-coverbar"><p><i className="rd-cover-swatch" aria-hidden="true" />Nền xám: số mình đã đọc được ({pageRead.length} số ở trang này). Số không được tô là số mình chưa đọc.</p></div>}
+    {!pick && !summary && !focus?.page && showRead && <div className="rd-focusbar rd-coverbar"><p><i className="rd-cover-swatch" aria-hidden="true" />{pageRead.length} số đã đọc trên trang này</p></div>}
     {!pick && !summary && focus?.page && <div key={focus.nonce} className={`rd-focusbar${focus.unsure ? " unsure" : ""}`}>
       <button type="button" className="rd-focus-close" onClick={onClearFocus} aria-label="Bỏ đánh dấu">×</button>
       {focus.formula && formulaShown
         ? <p className="rd-parts">{focus.value && <b>{focus.value}</b>}<FormulaLine formula={focus.formula} result={focus.result} onPeek={onPeek} /><small>trang {focus.page}</small></p>
         : focus.parts?.length > 1
         ? <p className="rd-parts">{focus.value && <b>{focus.value}</b>}<small>tính từ</small>{focus.parts.map((part, i) => <span key={i} className="rd-tok" style={{ "--part": partColor(part.index ?? i) }} {...peekProps(part.key, onPeek)}><InputTag index={part.index ?? i} />{part.value}{part.label && <em>{part.label}</em>}</span>)}<small>trang {focus.page}</small></p>
-        : <p>{focus.value && <b>{focus.value}</b>}<span>{focus.label || "Vị trí trong báo cáo"} · trang {focus.page}{showRaw(focus) && <> · PDF ghi <q>{focus.raw}</q></>}{focus.unsure ? " · mình chưa chắc số này, bạn so với trang giúp nhé" : ""}</span></p>}
-      {onFocusPage && !rects.length && size && <small>Không có vị trí chính xác cho mục này</small>}
+        : <p>{focus.value && <b>{focus.value}</b>}<span>{focus.label || "Vị trí trong báo cáo"} · trang {focus.page}{showRaw(focus) && <> · PDF ghi <q>{focus.raw}</q></>}{focus.unsure ? " · có thể đọc sai" : ""}</span></p>}
+      {onFocusPage && !rects.length && size && <small>Không rõ vị trí</small>}
       {!onFocusPage && <button type="button" className="rd-button" onClick={() => goToPage(focus.page)}>Về trang {focus.page}</button>}
-      {focusProblem && onDismissCheck && <button type="button" className="rd-button" onClick={() => onDismissCheck(focusProblem)}>Không phải lỗi</button>}
+      {focusProblem && onDismissCheck && <button type="button" className="rd-button" onClick={() => onDismissCheck(focusProblem)}>Bỏ qua</button>}
     </div>}
     <div className="rd-scroll" ref={scrollRef}>
       {!pdf && !error && <div className="rd-page-skeleton" aria-hidden="true" />}
@@ -625,9 +624,9 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
       <span className="rd-zoom" aria-live="polite">{scale ? `${Math.round(scale * 100)}%` : ""}</span>
       <button type="button" onClick={() => zoom(0.15)} aria-label="Phóng to">+</button>
       <div className="rd-stage-modes">
-        <button type="button" onClick={() => { autoFit.current = true; fit(); }} className="rd-fit">Vừa khung</button>
-        {evidences.length > 0 && <button type="button" className="rd-fit" aria-pressed={showRead} onClick={toggleRead} title="Tô các số mình đã đọc được. Số không được tô là số mình chưa đọc.">Tô số đã đọc</button>}
-        {tables.length > 0 && <button type="button" className="rd-fit" aria-pressed={selectMode} onClick={() => setSelectMode((value) => !value)} title="Kéo để chọn nhiều ô">Chọn vùng</button>}
+        <button type="button" onClick={() => { autoFit.current = true; fit(); }} className="rd-tool-icon" aria-label="Vừa trang" title="Vừa trang"><Icon name="fit" size={16} /></button>
+        {evidences.length > 0 && <button type="button" className="rd-tool-icon" aria-pressed={showRead} onClick={toggleRead} aria-label="Hiện số đã đọc" title="Hiện số đã đọc"><Icon name="eye" size={16} /></button>}
+        {tables.length > 0 && <button type="button" className="rd-tool-icon" aria-pressed={selectMode} onClick={() => setSelectMode((value) => !value)} aria-label="Chọn nhiều ô" title="Chọn nhiều ô"><Icon name="select" size={16} /></button>}
       </div>
     </div>
   </section>;

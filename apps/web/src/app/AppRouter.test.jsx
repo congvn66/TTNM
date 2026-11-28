@@ -13,7 +13,7 @@ describe("AppRouter scene transitions", () => {
   it("renders a deep-linked preferences scene and returns to workspace", () => {
     window.scrollTo = vi.fn();
     window.history.pushState({}, "", "/app/settings/preferences");
-    render(<AppRouter />);
+    render(<AppRouter user={{ id: "u", email: "a@b.vn", display_name: "A", is_guest: false }} />);
     expect(screen.getByTestId("settings-scene")).toBeTruthy();
     expect(screen.getByText("preferences")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "workspace" }));
@@ -23,10 +23,19 @@ describe("AppRouter scene transitions", () => {
 
   it("updates the scene after browser back/forward navigation", async () => {
     window.history.pushState({}, "", "/app/settings/profile");
-    render(<AppRouter />);
+    render(<AppRouter user={{ id: "u", email: "a@b.vn", display_name: "A", is_guest: false }} />);
     expect(screen.getByText("profile")).toBeTruthy();
     window.history.pushState({}, "", "/app/settings/security");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await waitFor(() => expect(screen.getByText("security")).toBeTruthy());
+  });
+});
+
+describe("AppRouter without an account", () => {
+  it("opens the reader instead of Settings for a visitor or a guest", async () => {
+    window.history.pushState({}, "", "/app/settings/profile");
+    render(<AppRouter user={{ id: "g", email: "", display_name: "Khách", is_guest: true }} />);
+    expect(screen.getByTestId("workspace-scene")).toBeTruthy();
+    expect(screen.queryByTestId("settings-scene")).toBeNull();
   });
 });

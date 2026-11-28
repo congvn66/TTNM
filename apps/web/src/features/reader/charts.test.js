@@ -24,7 +24,7 @@ describe("chartData", () => {
   it("leaves the total row out when its parts are there too", () => {
     const data = chartData(keys([0, 1, 2, 3], [0]), EVIDENCES);
     expect(data.groups).toHaveLength(3);
-    expect(data.notes[0]).toContain("Tổng");
+    expect(data.notes[0]).toBe("Không vẽ dòng tổng");
   });
   it("turns one row across periods into columns", () => {
     const data = chartData(keys([3], [0, 1]), EVIDENCES);
@@ -140,7 +140,7 @@ describe("audit cases", () => {
     const cells = [at(1, 0, "X", 1, "A"), at(2, 0, "X", 2, "B"), at(3, 0, "X", 3, "C")];
     const data = chartData(cells.map((cell) => cell.evidence_key), cells, { "a-1-0": ["A", "X"], "a-2-0": ["Old", "X"], "a-3-0": ["C", "X"] });
     expect(data.groups.map((group) => group.label)).toEqual(["A", "C"]);
-    expect(data.notes[0]).toBe("1 ô không còn khớp sau lần đọc lại nên không vẽ.");
+    expect(data.notes[0]).toBe("Không vẽ 1 ô đã thay đổi");
   });
   it("compares two negative numbers by size: a cost that grew is not a fall", () => {
     const data = make([at(1, 0, "X · Q3/2024", -330, "Chi phí tài chính"), at(1, 1, "X · Q3/2025", -411, "Chi phí tài chính"), at(2, 0, "X · Q3/2024", 800, "Doanh thu"), at(2, 1, "X · Q3/2025", 900, "Doanh thu"), at(3, 0, "X · Q3/2024", 100, "Khác"), at(3, 1, "X · Q3/2025", 110, "Khác")]);
@@ -155,7 +155,7 @@ describe("audit cases", () => {
   it("leaves margin rows out of a chart of amounts", () => {
     const data = make([at(1, 0, "Q2/2026", 34147, "Doanh thu"), at(2, 0, "Q2/2026", 6892, "Lợi nhuận gộp"), at(3, 0, "Q2/2026", 20.2, "Biên lợi nhuận gộp")]);
     expect(data.groups.map((group) => group.label)).toEqual(["Doanh thu", "Lợi nhuận gộp"]);
-    expect(data.notes[0]).toContain("Biên lợi nhuận gộp");
+    expect(data.notes[0]).toBe("Không vẽ dòng tỷ lệ");
   });
   it("does not rank different measures or a total against its part", () => {
     expect(chartTakeaway(make([at(1, 0, "Doanh thu · Q1", 10, "A"), at(1, 1, "Lợi nhuận · Q2", 3, "A"), at(2, 0, "Doanh thu · Q1", 12, "B"), at(2, 1, "Lợi nhuận · Q2", 4, "B")]))).toBe("");
@@ -176,7 +176,7 @@ describe("broker table quirks", () => {
     const row = ["A", "B", "C", "D", "E", "F"].map((header, c) => at(1, c, header, c + 1, "X")).concat(["A", "B", "C", "D", "E", "F"].map((header, c) => at(2, c, header, c + 2, "Y")));
     const data = chartData(row.map((cell) => cell.evidence_key), row);
     expect(data.series.map((item) => item.label)).toEqual(["A", "B", "C", "D", "E"]);
-    expect(data.notes[0]).toBe("Chỉ vẽ 5 cột đầu (bỏ F). Chọn ít cột hơn để vẽ các cột khác.");
+    expect(data.notes[0]).toBe("Chỉ vẽ 5 cột đầu");
   });
   it("reads 9M2024 as a period and does not rank a quarter against nine months", () => {
     const row = [at(1, 0, "Q3/2024", 8132, "A"), at(1, 1, "Q3/2025", 9535, "A"), at(1, 2, "9M2024", 21649, "A"), at(1, 3, "9M2025", 26130, "A")];

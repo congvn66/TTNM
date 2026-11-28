@@ -43,18 +43,18 @@ export function chartData(keys, evidences, names = null) {
   let cells = picked.filter((cell) => cell.table_locator.table_region_key === tableKey && cell.page_number === page);
   if (cells.filter((cell) => cellNumber(cell) != null).length < 2) return null;
 
-  const notes = moved ? [`${moved} ô không còn khớp sau lần đọc lại nên không vẽ.`] : [];
+  const notes = moved ? [`Không vẽ ${moved} ô đã thay đổi`] : [];
   // A total next to its own parts squeezes every other bar into a sliver.
   const parts = cells.filter((cell) => !isTotal(cell));
   if (new Set(parts.map((cell) => cell.table_locator.row_index)).size >= 2 && parts.length < cells.length) {
-    notes.push(`Không vẽ dòng tổng (${[...new Set(cells.filter(isTotal).map(rowName))].join(", ")}) để các dòng còn lại không bị lấn.`);
+    notes.push("Không vẽ dòng tổng");
     cells = parts;
   }
   // The same for rows of percentages among rows of amounts: a margin of 20 next to revenue of 34.147 is an invisible bar.
   const ratioRows = cells.filter((cell) => isRatio(cell) && !PERCENT.test(cell.table_locator.column_header ?? ""));
   const amountCells = cells.filter((cell) => !isRatio(cell) && cellNumber(cell) != null);
   if (ratioRows.length && amountCells.length) {
-    notes.push(`Không vẽ dòng tỷ lệ (${[...new Set(ratioRows.map(rowName))].join(", ")}) vì khác đơn vị với các dòng còn lại.`);
+    notes.push("Không vẽ dòng tỷ lệ");
     cells = cells.filter((cell) => !ratioRows.includes(cell));
   }
 
@@ -78,7 +78,7 @@ export function chartData(keys, evidences, names = null) {
   if (timeOrdered) series.forEach((item) => { if (item.period) item.label = item.period; });
   // One colour per column and never a repeat: past five the colours run out, so the rest is left out and said so.
   if (series.length > MAX_SERIES) {
-    notes.push(`Chỉ vẽ ${MAX_SERIES} cột đầu (bỏ ${series.slice(MAX_SERIES).map((item) => item.label).join(", ")}). Chọn ít cột hơn để vẽ các cột khác.`);
+    notes.push(`Chỉ vẽ ${MAX_SERIES} cột đầu`);
     const dropped = new Set(series.slice(MAX_SERIES).map((item) => item.id));
     series = series.slice(0, MAX_SERIES);
     cells = cells.filter((cell) => !dropped.has(`${cell.table_locator.column_index}`));

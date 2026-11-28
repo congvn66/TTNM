@@ -881,7 +881,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                 self._execute(
                     """INSERT INTO evidence_revisions (id,chat_id,chat_evidence_id,revision_no,value_kind,numeric_value,semantic,data_status,verification_status,action,reason,created_by)
                        VALUES (%s,%s,%s,%s,'number',%s::numeric,'{}'::jsonb,'valid','edited','edit',%s,%s)""",
-                    (revision_id, chat_id, rows[0]["id"], revision_no, numeric, revision.get("reason") or "Edited in API", self.owner_id),
+                    (revision_id, chat_id, rows[0]["id"], revision_no, numeric, revision.get("reason") or "", self.owner_id),
                 )
                 self._execute("UPDATE chat_evidences SET current_revision_id=%s WHERE id=%s", (revision_id, rows[0]["id"]))
                 current_id = str(revision_id)
