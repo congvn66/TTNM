@@ -1,3 +1,4 @@
+import json
 from uuid import uuid4
 
 from report_qa.infrastructure.postgres.runtime_store import PostgresRuntimeStore
@@ -40,6 +41,22 @@ def test_two_numbers_in_one_text_span_keep_their_own_region(monkeypatch):
     assert [params[2] for _, params in regions] == ["q1", "q2"]
     assert len({params[0] for _, params in regions}) == 2
     assert [params[2] for _, params in execute.statements("INSERT INTO extracted_evidences")] == [params[0] for _, params in regions]
+
+
+def test_paragraphs_are_saved_with_their_text_and_numbers_point_at_them(monkeypatch):
+    store = PostgresRuntimeStore("postgresql://unused", uuid4())
+    execute = _Recorder()
+    monkeypatch.setattr(store, "_execute", execute)
+    locator = {"paragraph_key": "para-1-0-0", "start": 18, "end": 21}
+    artifact = {
+        "paragraphs": [{"paragraph_key": "para-1-0-0", "page_number": 1, "bbox": [0.1, 0.1, 0.9, 0.2], "text": "Mục tiêu năm là 220 tỷ đồng.", "label": "text"}],
+        "evidence_batch": {"evidences": [{"evidence_key": "ev-1", "source_region_key": "ev-1-region", "source_type": "text", "page_number": 1, "bbox": [0.4, 0.1, 0.45, 0.2], "raw_text": "220", "numeric_value": "220", "data_status": "valid", "extraction_method": "text", "paragraph_locator": locator}]},
+    }
+    store._complete_extraction(uuid4(), uuid4(), uuid4(), {"page_count": 1}, artifact)
+    regions = execute.statements("INSERT INTO source_regions")
+    assert [params[2] for _, params in regions] == ["para-1-0-0", "ev-1"]
+    assert "'paragraph'" in regions[0][0] and regions[0][1][5] == "Mục tiêu năm là 220 tỷ đồng."
+    assert json.loads(regions[1][1][7])["paragraph_locator"] == locator
 
 
 def test_saving_an_old_snapshot_cannot_rename_or_restore_a_chat_or_document(monkeypatch):

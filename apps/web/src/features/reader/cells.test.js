@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answersUsingCell, cellRange, explainCell, neighbourCell, pageTables, selectionQuestions, summarizeSelection } from "./cells.js";
+import { answersUsingCell, cellRange, explainCell, neighbourCell, pageProse, pageTables, selectionQuestions, sentenceAround, summarizeSelection } from "./cells.js";
 
 // Table 1 of the sample report: rows are regions, columns are measure · period.
 const ROWS = ["Miền Bắc", "Miền Trung", "Miền Nam", "Xuất khẩu", "Tổng"];
@@ -149,5 +149,36 @@ describe("time order", () => {
     const pct = (r) => ({ ...cell(r, 0), table_locator: { ...cell(r, 0).table_locator, column_header: "Tỷ lệ % · Quý 1/2026" } });
     expect(summarizeSelection([pct(0), pct(1)])).toMatchObject({ additive: false, caveats: ["cột tỷ lệ, cộng lại không có nghĩa"] });
     expect(summarizeSelection([cell(0, 0), cell(0, 2)]).caveats).toContain("gồm nhiều chỉ tiêu khác nhau");
+  });
+});
+
+describe("numbers in running text", () => {
+  const text = (key, page, bbox, raw, value, extra = {}) => ({ evidence_key: key, source_type: "text", page_number: page, bbox, raw_text: raw, current_numeric_value: value, table_locator: null, ...extra });
+
+  it("lists a page's text numbers in reading order, without table cells or other pages", () => {
+    const cells = [
+      text("b", 1, [0.6, 0.30, 0.65, 0.32], "31%", "31"),
+      text("a", 1, [0.1, 0.30, 0.15, 0.32], "8%", "8"),
+      text("c", 1, [0.1, 0.10, 0.15, 0.12], "220", "220"),
+      text("other-page", 2, [0.1, 0.1, 0.2, 0.2], "5", "5"),
+      { ...text("cell", 1, [0.1, 0.5, 0.2, 0.52], "100", "100"), source_type: "table", table_locator: { table_region_key: "t", row_index: 0, column_index: 0 } },
+    ];
+    expect(pageProse(cells, 1).map((cell) => cell.evidence_key)).toEqual(["c", "a", "b"]);
+  });
+
+  it("cuts the sentence that holds the number out of its paragraph", () => {
+    const paragraph = "Chi phí vận chuyển bằng 6,5% doanh thu. Mục tiêu năm 2026 là 220 tỷ đồng. Hết.";
+    const start = paragraph.indexOf("220");
+    expect(sentenceAround(paragraph, start, start + 3)).toEqual({ before: "Mục tiêu năm 2026 là ", number: "220", after: " tỷ đồng." });
+    expect(sentenceAround(paragraph, 0, 999)).toBeNull();
+  });
+
+  it("shortens a long sentence at a word on each side", () => {
+    const long = `${"rất dài ".repeat(30)}đạt 12 tỷ ${"thêm chữ ".repeat(30)}`;
+    const start = long.indexOf("12");
+    const part = sentenceAround(long, start, start + 2, 20);
+    expect(part.before.startsWith("…")).toBe(true);
+    expect(part.after.endsWith("…")).toBe(true);
+    expect(part.number).toBe("12");
   });
 });

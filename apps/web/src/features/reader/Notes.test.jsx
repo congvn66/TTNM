@@ -67,3 +67,9 @@ it("picks the closest result the sentence writes as a percentage", async () => {
     result_rows: [{ name: "count", value: "3", source_keys: ["a"] }, { name: "share", value: "3.2", source_keys: ["a", "b"] }] };
   expect(headlineOf({ answer: "Có 3 chi nhánh, chiếm 3% tổng.", evidence: [], formulas: [formula] })).toMatchObject({ result: "share" });
 });
+
+it("says a number read from a paragraph came from the text, not a table", () => {
+  const prose = { ...cell, method_label: "đọc từ văn bản" };
+  expect(confidenceOf({ answer: "Mục tiêu là 250 tỷ đồng.", evidence: [prose] }).text).toBe("Đọc thẳng từ đoạn văn trong báo cáo.");
+  expect(confidenceOf({ answer: "…", evidence: [prose, { ...cell, evidence_key: "ev-2", method_label: "đọc từ ô bảng" }] }).text).toBe("Đọc thẳng từ bảng và đoạn văn trong báo cáo.");
+});

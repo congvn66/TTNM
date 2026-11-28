@@ -1020,3 +1020,17 @@ def test_payload_puts_the_conversation_right_before_the_question():
     payload = json.loads(_Turn(context, read_chart=None).payload("Tại sao vậy?"))
     assert list(payload) == ["document", "conversation", "question", "tool_results"]
     assert payload["conversation"] == context["history"] and "history" not in payload["document"]
+
+
+def test_a_rejected_number_the_user_corrected_comes_back_with_its_current_value():
+    # Fixing "220 tỷ đồng" to 250 left the page text at 220: the model wrote 220 six times and gave up.
+    from report_qa.application.document_assistant import corrected_numbers
+
+    rows = [
+        {"evidence_key": "ev-target", "page_number": 1, "raw_text": "220", "numeric_value": "250"},
+        {"evidence_key": "ev-other", "page_number": 1, "raw_text": "31%", "numeric_value": "31"},
+    ]
+    assert corrected_numbers(["220 tỷ"], rows) == [
+        {"written": "220 tỷ", "evidence_key": "ev-target", "page": 1, "printed": "220", "current_value": "250"}
+    ]
+    assert corrected_numbers(["31%"], rows) == []

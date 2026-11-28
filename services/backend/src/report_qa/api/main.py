@@ -1338,12 +1338,18 @@ def _evidence_records(document: dict[str, Any], document_id: str, artifact: dict
             "raw_text": evidence.get("raw_text"), "method_label": evidence["method_label"], "semantic": evidence.get("semantic"),
             "source_type": evidence["source_type"], "source_region_key": evidence["source_region_key"],
             "data_status": "valid" if current.get("action") == "edit" else evidence["data_status"], "extraction_method": evidence["extraction_method"],
-            "table_locator": evidence.get("table_locator"), "chart_read": evidence.get("chart_read"),
-            "confidence": evidence["confidence"],
+            "table_locator": evidence.get("table_locator"), "paragraph_locator": evidence.get("paragraph_locator"),
+            "chart_read": evidence.get("chart_read"), "confidence": evidence["confidence"],
             "original_numeric_value": item["original_numeric_value"], "current_numeric_value": current["numeric_value"],
             "current_revision_id": current["id"], "revision_count": len(item["revisions"]),
         })
-    return {"document_id": document_id, "data_revision": state["data_revision"], "evidences": records}
+    # The paragraphs that hold a number, so a number can be shown in its sentence. Older readings have none.
+    used = {r["paragraph_locator"]["paragraph_key"] for r in records if r["paragraph_locator"]}
+    paragraphs = [
+        {key: paragraph[key] for key in ("paragraph_key", "page_number", "bbox", "text")}
+        for paragraph in extraction.get("paragraphs") or [] if paragraph["paragraph_key"] in used
+    ]
+    return {"document_id": document_id, "data_revision": state["data_revision"], "evidences": records, "paragraphs": paragraphs}
 
 
 @app.get(
