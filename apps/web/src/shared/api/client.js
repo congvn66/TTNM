@@ -11,10 +11,25 @@ function emitRequestMetric(metric) {
 // the Vite dev server (which produces the misleading "backend unavailable"
 // screen). Production deployments can still provide VITE_API_URL or use the
 // same-origin fallback.
-export const API = (
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+// The browser treats localhost and 127.0.0.1 as different sites, so the
+// session cookie set by an API on one is not sent from a page on the other.
+// When both are this computer, call the API by the name the page uses.
+export function sameLoopbackName(base, pageHost = window.location.hostname) {
+  try {
+    const url = new URL(base);
+    if (LOOPBACK_HOSTS.has(url.hostname) && LOOPBACK_HOSTS.has(pageHost) && url.hostname !== pageHost) url.hostname = pageHost;
+    return url.toString();
+  } catch {
+    return base;
+  }
+}
+
+export const API = sameLoopbackName(
   window.SOURCELENS_API
   ?? import.meta.env.VITE_API_URL
-  ?? (import.meta.env.DEV ? "http://127.0.0.1:8000" : window.location.origin)
+  ?? (import.meta.env.DEV ? "http://127.0.0.1:8000" : window.location.origin),
 ).replace(/\/$/, "");
 
 // Text for errors the client creates itself. A server error shows the

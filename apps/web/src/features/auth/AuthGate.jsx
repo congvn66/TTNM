@@ -122,6 +122,18 @@ export default function AuthGate({ children }) {
     return () => { active = false; };
   }, [checkSession]);
 
+  // A 401 on any other call means the session ended (expired, signed out in
+  // another tab, cookie not sent): ask again so the app drops to signed out.
+  useEffect(() => {
+    if (state.status !== "authenticated") return undefined;
+    const onRequest = (event) => {
+      const { status, path: requestPath = "" } = event.detail ?? {};
+      if (status === 401 && !requestPath.startsWith("/api/v1/auth/")) checkSession();
+    };
+    window.addEventListener("sourcelens:request", onRequest);
+    return () => window.removeEventListener("sourcelens:request", onRequest);
+  }, [state.status, checkSession]);
+
   useEffect(() => {
     const follow = () => { setPath(window.location.pathname); setMode(modeOf(window.location.pathname)); };
     window.addEventListener("popstate", follow);

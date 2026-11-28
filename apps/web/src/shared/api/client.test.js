@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
-import { afterEach, expect, it, vi } from "vitest";
-import { CLIENT_ERRORS, request } from "./client.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { CLIENT_ERRORS, request, sameLoopbackName } from "./client.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -30,4 +30,16 @@ it.each([
 it("uses the client's own text when the network fails", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
   await expect(request("/x")).rejects.toMatchObject({ message: CLIENT_ERRORS.network });
+});
+
+describe("sameLoopbackName", () => {
+  it("calls a loopback API by the name the page uses", () => {
+    expect(sameLoopbackName("http://127.0.0.1:8010", "localhost")).toBe("http://localhost:8010/");
+    expect(sameLoopbackName("http://localhost:8010", "127.0.0.1")).toBe("http://127.0.0.1:8010/");
+  });
+
+  it("leaves other hosts alone", () => {
+    expect(sameLoopbackName("https://api.example.com", "localhost")).toBe("https://api.example.com/");
+    expect(sameLoopbackName("http://127.0.0.1:8010", "app.example.com")).toBe("http://127.0.0.1:8010/");
+  });
 });
