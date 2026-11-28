@@ -109,9 +109,11 @@ def test_health_docs_and_openapi_expose_only_the_main_flow() -> None:
         "/api/v1/projects/{project_id}/library",
         "/api/v1/sessions/{session_id}/project",
         "/api/v1/projects/{project_id}/documents/{document_id}",
+        "/api/v1/projects/{project_id}/documents",
         "/api/v1/auth/sessions",
         "/api/v1/auth/sessions/{session_id}",
         "/api/v1/auth/sessions/revoke-others",
+        "/api/v1/auth/guest",
         "/api/v1/auth/register",
         "/api/v1/auth/login",
         "/api/v1/auth/logout",
@@ -1031,7 +1033,7 @@ def test_extraction_failure_logs_the_traceback_and_stores_a_stable_code(monkeypa
 
 def test_object_storage_errors_are_readable_vietnamese() -> None:
     response = api_main.object_storage_error_handler(None, api_main.ObjectStorageError("down"))
-    assert json.loads(response.body)["detail"]["message"] == "Cloudflare R2 tạm thời không sẵn sàng; hãy thử lại sau."
+    assert json.loads(response.body)["detail"]["message"] == "Không lưu được tệp. Thử lại sau."
 
 
 def test_every_error_response_carries_the_vietnamese_message_of_its_code(monkeypatch) -> None:
@@ -1196,7 +1198,7 @@ def test_a_chart_read_made_on_an_earlier_reading_is_dropped(monkeypatch) -> None
         document_id = _upload(created["id"], "Doanh thu.")
         document = api_main.catalog["sessions"][created["id"]]["documents"][0]
         value = {**_reading(("chart-1", "5", "5", 1))("x", "v")["evidence_batch"]["evidences"][0], "source_type": "chart"}
-        chart = {"chart_region_key": "r", "created_at": api_main.utc_now(), "evidence_batch": {"evidences": [value]}}
+        chart = {"chart_region_key": "r", "created_at": api_main.utc_now(), "evidence_batch": {"evidences": [value]}, "reader_version": api_main.CHART_READER_VERSION}
         document["chart_extractions"] = [{**chart, "document_run_id": "an-earlier-reading"}, {**chart, "document_run_id": document["extraction_run_id"]}]
         api_main.save_catalog(api_main.catalog)
         assert [record["document_run_id"] for record in document["chart_extractions"]] == [document["extraction_run_id"]]
@@ -1420,14 +1422,27 @@ def test_typed_number_must_be_well_formed_in_the_documents_format(monkeypatch) -
     session_id, base, rows = _document_with_numbers(monkeypatch, ("total", "1,234,567", "1234567", 1), ("target", "21.5", "21.5", 1))
     try:
         body = {"reason": "Đối chiếu PDF", "expected_revision_id": rows["target"]["current_revision_id"]}
-        for typed in ("1.234.567,89", "18,2.40", "21,500,", "1e5", "5%", "1" * 19, "１２", "1,23"):
+        for typed in ("18,2.40", "21,500,", "1e5", "5%", "1" * 19, "１２"):
             refused = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": typed})
             assert refused.status_code == 422, typed
             assert refused.json()["detail"]["code"] == "INVALID_DECIMAL"
         too_long = client.post(f"{base}/evidences/target/revisions", json={**body, "numeric_value": "1" * 80})
         assert (too_long.status_code, too_long.json()["detail"]["code"]) == (422, "INVALID_DECIMAL")
+        other_format = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": "1,23"})
+        assert other_format.json()["parsed_value"] == "1.23"
         preview = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": "1,234,567.89"})
         assert preview.json() == {"parsed_value": "1234567.89", "plain_value": "1234567.89", "display": "1,234,567.89", "decimal_separator": ".", "locale": "en"}
+    finally:
+        cleanup_session(session_id)
+
+
+def test_a_number_is_saved_without_a_note(monkeypatch) -> None:
+    session_id, base, rows = _document_with_numbers(monkeypatch, ("target", "21.5", "21.5", 1))
+    try:
+        saved = client.post(f"{base}/evidences/target/revisions", json={"input_text": "22", "expected_revision_id": rows["target"]["current_revision_id"]})
+        assert saved.status_code == 200 and saved.json()["revision"]["reason"] == ""
+        history = client.get(f"{base}/evidences/target/revisions").json()["revisions"]
+        assert [revision["reason"] for revision in history] == ["", ""]
     finally:
         cleanup_session(session_id)
 

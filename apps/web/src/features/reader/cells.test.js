@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answersUsingCell, cellRange, explainCell, neighbourCell, pageTables, selectionQuestions, summarizeSelection } from "./cells.js";
+import { answersUsingCell, cellRange, explainCell, neighbourCell, pageProse, pageTables, selectionQuestions, sentenceAround, summarizeSelection } from "./cells.js";
 
 // Table 1 of the sample report: rows are regions, columns are measure · period.
 const ROWS = ["Miền Bắc", "Miền Trung", "Miền Nam", "Xuất khẩu", "Tổng"];
@@ -34,7 +34,7 @@ describe("explainCell", () => {
   it("compares a region with the other quarter and with the whole table", () => {
     const lines = explainCell(cell(2, 1), EVIDENCES).map((line) => line.text);
     expect(lines[0]).toBe("Quý 1/2026 → Quý 2/2026 tăng 9,35%, thấp hơn cả bảng (17,95%).");
-    expect(lines[1]).toBe("Chiếm 34,92% dòng tổng, lớn thứ 2/4.");
+    expect(lines[1]).toBe("Chiếm 34,92% · thứ 2/4");
   });
   it("says a value that starts from zero is new instead of dividing by zero", () => {
     const [first] = explainCell(cell(3, 1), EVIDENCES);
@@ -44,7 +44,7 @@ describe("explainCell", () => {
   it("checks a total against the rows above it", () => {
     const [line] = explainCell(cell(4, 3), EVIDENCES);
     expect(line).toMatchObject({ bad: true });
-    expect(line.text).toContain("cộng lại ra 14.525, lệch 100");
+    expect(line.text).toBe("Tổng 4 dòng · lệch 100");
   });
 });
 
@@ -53,8 +53,8 @@ describe("selections", () => {
     const unsure = cell(1, 3, { data_status: "ambiguous" });
     const summary = summarizeSelection([cell(0, 3), unsure, cell(4, 3)]);
     expect(summary).toMatchObject({ count: 3, sum: 6405 + 2760 + 14625 });
-    expect(summary.caveats).toEqual(["gồm 1 số mình chưa chắc", "có cả dòng tổng nên bị cộng trùng"]);
-    expect(summarizeSelection([cell(1, 2), cell(0, 2)]).caveats).toEqual(["1 ô không có số nên không cộng"]);
+    expect(summary.caveats).toEqual(["1 số có thể sai", "gồm dòng tổng, bị cộng trùng"]);
+    expect(summarizeSelection([cell(1, 2), cell(0, 2)]).caveats).toEqual(["1 ô trống"]);
   });
   it("writes full questions, and asks for the change instead of a percentage when a value starts at zero", () => {
     const picked = [cell(2, 0), cell(2, 1), cell(3, 0), cell(3, 1)];
@@ -78,8 +78,8 @@ describe("edge cases from review", () => {
 
   it("checks each subtotal against its own rows, and ranks a row inside its own group", () => {
     const list = [one("a", "A", 1, 10), one("b", "B", 2, 20), one("ta", "Tổng A", 3, 30), one("c", "C", 4, 5), one("d", "D", 5, 7), one("tb", "Tổng B", 6, 12)];
-    expect(explainCell(list[5], list)[0]).toEqual({ text: "Là tổng 2 dòng trên, cộng lại khớp (12)." });
-    expect(explainCell(list[3], list).at(-1).text).toBe("Chiếm 41,67% dòng tổng, lớn thứ 2/2.");
+    expect(explainCell(list[5], list)[0]).toEqual({ text: "Tổng 2 dòng · khớp" });
+    expect(explainCell(list[3], list).at(-1).text).toBe("Chiếm 41,67% · thứ 2/2");
   });
   it("agrees with the summary check on rounding, % columns and missing rows", () => {
     const rounded = [one("a", "A", 1, 1.25, { raw_text: "1,25" }), one("b", "B", 2, 2.25, { raw_text: "2,25" }), one("t", "Tổng", 3, 3.49, { raw_text: "3,49" })];
@@ -149,5 +149,89 @@ describe("time order", () => {
     const pct = (r) => ({ ...cell(r, 0), table_locator: { ...cell(r, 0).table_locator, column_header: "Tỷ lệ % · Quý 1/2026" } });
     expect(summarizeSelection([pct(0), pct(1)])).toMatchObject({ additive: false, caveats: ["cột tỷ lệ, cộng lại không có nghĩa"] });
     expect(summarizeSelection([cell(0, 0), cell(0, 2)]).caveats).toContain("gồm nhiều chỉ tiêu khác nhau");
+  });
+});
+
+describe("numbers in running text", () => {
+  const text = (key, page, bbox, raw, value, extra = {}) => ({ evidence_key: key, source_type: "text", page_number: page, bbox, raw_text: raw, current_numeric_value: value, table_locator: null, ...extra });
+
+  it("lists a page's text numbers in reading order, without table cells or other pages", () => {
+    const cells = [
+      text("b", 1, [0.6, 0.30, 0.65, 0.32], "31%", "31"),
+      text("a", 1, [0.1, 0.30, 0.15, 0.32], "8%", "8"),
+      text("c", 1, [0.1, 0.10, 0.15, 0.12], "220", "220"),
+      text("other-page", 2, [0.1, 0.1, 0.2, 0.2], "5", "5"),
+      { ...text("cell", 1, [0.1, 0.5, 0.2, 0.52], "100", "100"), source_type: "table", table_locator: { table_region_key: "t", row_index: 0, column_index: 0 } },
+    ];
+    expect(pageProse(cells, 1).map((cell) => cell.evidence_key)).toEqual(["c", "a", "b"]);
+  });
+
+  it("cuts the sentence that holds the number out of its paragraph", () => {
+    const paragraph = "Chi phí vận chuyển bằng 6,5% doanh thu. Mục tiêu năm 2026 là 220 tỷ đồng. Hết.";
+    const start = paragraph.indexOf("220");
+    expect(sentenceAround(paragraph, start, start + 3)).toEqual({ before: "Mục tiêu năm 2026 là ", number: "220", after: " tỷ đồng." });
+    expect(sentenceAround(paragraph, 0, 999)).toBeNull();
+  });
+
+  it("shortens a long sentence at a word on each side", () => {
+    const long = `${"rất dài ".repeat(30)}đạt 12 tỷ ${"thêm chữ ".repeat(30)}`;
+    const start = long.indexOf("12");
+    const part = sentenceAround(long, start, start + 2, 20);
+    expect(part.before.startsWith("…")).toBe(true);
+    expect(part.after.endsWith("…")).toBe(true);
+    expect(part.number).toBe("12");
+  });
+});
+
+it("warns that a selection of percentage cells cannot be added up", async () => {
+  const { summarizeSelection } = await import("./cells.js");
+  const cell = (key, raw, value) => ({ evidence_key: key, raw_text: raw, current_numeric_value: value, data_status: "valid", page_number: 1, table_locator: { table_region_key: "t", row_index: Number(key.slice(-1)), column_index: 6, row_header: `Mảng ${key}`, column_header: "Thay đổi" } });
+  const summary = summarizeSelection([cell("c1", "+12,1%", "12.1"), cell("c2", "+9,5%", "9.5")]);
+  expect(summary.caveats.join(" ")).toMatch(/tỷ lệ/);
+});
+
+describe("selections over nested rows and period-only columns", () => {
+  const row = (key, name, rowIndex, column, columnIndex, value) => ({
+    evidence_key: key, page_number: 1, bbox: [0.5 + columnIndex * 0.1, 0.1 + rowIndex * 0.02, 0.58 + columnIndex * 0.1, 0.115 + rowIndex * 0.02],
+    raw_text: String(value), current_numeric_value: String(value), original_numeric_value: String(value), data_status: "valid",
+    table_locator: { table_region_key: "page-1-table-0", row_index: rowIndex, column_index: columnIndex, row_header: name, column_header: column },
+  });
+  const sheet = [
+    row("a1", "I. Tiền", 1, "Số cuối kỳ", 1, 100), row("a2", "I. Tiền", 1, "Số đầu năm", 2, 50),
+    row("b1", "Mã số 111", 2, "Số cuối kỳ", 1, 60), row("b2", "Mã số 111", 2, "Số đầu năm", 2, 20),
+    row("c1", "Mã số 112", 3, "Số cuối kỳ", 1, 40), row("c2", "Mã số 112", 3, "Số đầu năm", 2, 30),
+  ];
+  it("warns when a heading is added with its own rows, and not for two periods of one measure", () => {
+    const summary = summarizeSelection(sheet, sheet);
+    expect(summary.caveats).toEqual(["gồm dòng tổng, bị cộng trùng"]);
+    expect(summarizeSelection([sheet[2], sheet[4]], sheet).caveats).toEqual([]);
+    const pair = summarizeSelection([sheet[2], sheet[3]], sheet);
+    expect(pair).toMatchObject({ changeFrom: "Số đầu năm", changeTo: "Số cuối kỳ", change: 200 });
+  });
+  it("writes questions for period-only columns, earliest period first", () => {
+    expect(selectionQuestions([sheet[2], sheet[3], sheet[4], sheet[5]], sheet)).toEqual(["Mã số 111 và Mã số 112 tăng bao nhiêu phần trăm từ đầu năm đến cuối kỳ?"]);
+    expect(selectionQuestions([sheet[2], sheet[4]], sheet)).toEqual(["Mục nào cao nhất cuối kỳ giữa Mã số 111 và Mã số 112?"]);
+  });
+  it("still offers a question when the rows have no names", () => {
+    const unnamed = [row("x", null, 1, "Số cuối kỳ", 1, 7), row("y", null, 2, "Số cuối kỳ", 1, 9)];
+    expect(selectionQuestions(unnamed, unnamed)).toEqual(["Các số 7 và 9 ở trang 1 là của mục nào?"]);
+  });
+  it("measures a row against the heading it sits under", () => {
+    const lines = explainCell(sheet[2], sheet).map((line) => line.text);
+    expect(lines).toContain("Chiếm 60% của Tiền · thứ 1/2");
+  });
+});
+
+describe("chart labels on the page", () => {
+  it("keeps chart values with their own box, in reading order", async () => {
+    const { pageChartLabels } = await import("./cells.js");
+    const bar = (key, x, y, tag) => ({ evidence_key: key, page_number: 2, source_type: "chart", bbox: [x, y, x + 0.02, y + 0.01], current_numeric_value: "38", chart_read: { assumptions: [tag] } });
+    const list = [bar("b", 0.5, 0.2, "box_bar"), bar("a", 0.1, 0.2, "box_printed_label"), bar("whole", 0.1, 0.1, "box_whole_chart")];
+    expect(pageChartLabels(list, 2).map((item) => item.evidence_key)).toEqual(["a", "b"]);
+  });
+  it("counts a long bracketed reading as a number cell", async () => {
+    const { isNumberCell } = await import("./cells.js");
+    expect(isNumberCell({ raw_text: "(487,478,693)", current_numeric_value: null })).toBe(true);
+    expect(isNumberCell({ raw_text: "Ghi chú dài về khoản mục", current_numeric_value: null })).toBe(false);
   });
 });

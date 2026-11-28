@@ -87,7 +87,7 @@ const DATA_STATUS_LABELS = {
 /** What the status of a number says, or "" when it is a verified number. */
 export function dataStatusLabel(status) {
   if (!status || status === "valid") return "";
-  return DATA_STATUS_LABELS[status] ?? "Cần kiểm tra";
+  return DATA_STATUS_LABELS[status] ?? "Có thể đọc sai";
 }
 
 /** True when the number was not verified and the user should check it. */
@@ -163,4 +163,17 @@ export function formatDateTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+// The unit the extractor read next to a number, in words people say: "220 tỷ đồng", "8%".
+const UNIT_WORDS = {
+  PERCENT: "%", VND: "đồng", VND_THOUSAND: "nghìn đồng", VND_MILLION: "triệu đồng", VND_BILLION: "tỷ đồng",
+  THOUSAND: "nghìn", MILLION: "triệu", BILLION: "tỷ", USD: "USD",
+  TIMES: "lần", TONNE: "tấn", THOUSAND_TONNE: "nghìn tấn",
+};
+export function valueWithUnit(evidence) {
+  const value = evidence?.current_numeric_value;
+  if (isEmpty(value)) return "";
+  const unit = UNIT_WORDS[evidence?.semantic?.unit] ?? "";
+  return unit === "%" ? `${formatNumber(value)}%` : unit ? `${formatNumber(value)} ${unit}` : formatNumber(value);
 }

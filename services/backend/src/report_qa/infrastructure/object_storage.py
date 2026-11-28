@@ -31,6 +31,8 @@ class ObjectStorage(Protocol):
 
     def upload_file(self, key: str, source: Path, *, content_type: str) -> None: ...
     def download_file(self, key: str, destination: Path) -> None: ...
+    def delete_file(self, key: str) -> None: ...
+    def list_keys(self, prefix: str) -> list[str]: ...
     def health(self) -> dict[str, object]: ...
 
 
@@ -45,6 +47,13 @@ class LocalObjectStorage:
 
     def download_file(self, key: str, destination: Path) -> None:
         del key, destination
+
+    def delete_file(self, key: str) -> None:
+        del key  # local files belong to the application's runtime folder (guest_cleanup.LocalCopies deletes them)
+
+    def list_keys(self, prefix: str) -> list[str]:
+        del prefix
+        return []
 
     def health(self) -> dict[str, object]:
         return {"backend": self.backend, "configured": True, "status": "ok", "durability": "local_disk"}
@@ -97,6 +106,21 @@ class CloudflareR2ObjectStorage:
         except Exception as exc:
             temporary.unlink(missing_ok=True)
             raise ObjectStorageError("Cloudflare R2 download failed") from exc
+
+    def delete_file(self, key: str) -> None:
+        key = validate_object_key(key)
+        try:
+            self._client.delete_object(Bucket=self.bucket, Key=key)  # no error when the key is already gone
+        except Exception as exc:
+            raise ObjectStorageError("Cloudflare R2 delete failed") from exc
+
+    def list_keys(self, prefix: str) -> list[str]:
+        validate_object_key(prefix)
+        try:
+            pages = self._client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix)
+            return [item["Key"] for page in pages for item in page.get("Contents", [])]
+        except Exception as exc:
+            raise ObjectStorageError("Cloudflare R2 list failed") from exc
 
     def health(self) -> dict[str, object]:
         try:

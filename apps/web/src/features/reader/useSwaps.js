@@ -75,7 +75,7 @@ export function useSwaps({ basePath, evidences, dataKey, focusOn, toast }) {
     const cell = byKey.get(key);
     if (!cell || cellNumber(cell) == null) return "Ô này không có số, chọn ô khác.";
     // The calculation only reads numbers it can vouch for: an unclear reading must be fixed first.
-    if (cell.data_status !== "valid") return "Số ở ô này chưa chắc đọc đúng. Sửa số trước rồi chọn lại.";
+    if (cell.data_status !== "valid") return "Ô này có thể đọc sai. Sửa số trước.";
     if (key !== current.original && current.used.includes(key)) return "Ô này đã có trong phép tính, chọn ô khác.";
     return "";
   };
@@ -111,7 +111,7 @@ export function useSwaps({ basePath, evidences, dataKey, focusOn, toast }) {
         .catch((error) => {
           if (controller.signal.aborted || gen !== generation.current) return;
           // A busy server or a dropped connection is not a refusal: the reader can still choose the cell.
-          const text = error.refused ? error.message : "Chưa xem trước được kết quả. Vẫn có thể bấm để chọn ô này.";
+          const text = error.refused ? error.message : "Không xem trước được";
           setPick((p) => (same(p) ? { ...p, preview: { key, text, warning, refused: Boolean(error.refused) } } : p));
         });
     }, HOVER_DELAY_MS);
@@ -136,12 +136,13 @@ export function useSwaps({ basePath, evidences, dataKey, focusOn, toast }) {
       const warning = Object.entries(swap).map(([from, to]) => pickWarning(byKey.get(from), byKey.get(to))).find(Boolean) ?? "";
       setSwaps((all) => {
         const next = { ...all };
-        if (changes.length) next[current.noteId] = { formulaIndex: current.formulaIndex, swap, formula, warning, changes };
+        // The original result's chip: undo shows it on the page again.
+        if (changes.length) next[current.noteId] = { formulaIndex: current.formulaIndex, swap, formula, warning, changes, baseChip: current.base.chip };
         else delete next[current.noteId];
         return next;
       });
       focusOn(headline.chip);
-      toast({ text: changes.length ? `Đã đổi ô. Kết quả mới ${headline.value}.` : `Đã trả lại ô gốc. Kết quả ${headline.value}.` });
+      toast({ text: changes.length ? `Đã đổi ô. Kết quả mới ${headline.value}.` : "Đã hoàn tác" });
     } catch (error) {
       if (gen === generation.current) toast({ kind: "error", text: error.refused ? error.message : `Không tính lại được. ${error.message}` });
     } finally {
@@ -152,9 +153,12 @@ export function useSwaps({ basePath, evidences, dataKey, focusOn, toast }) {
   const cancel = useCallback(() => { stopHover(); setPick(null); restoreFocus(); }, []);
 
   const undo = useCallback((noteId) => {
+    const base = swapsRef.current[noteId]?.baseChip;
     setSwaps((all) => { const next = { ...all }; delete next[noteId]; return next; });
-    toast({ text: "Đã trả lại kết quả gốc." });
-  }, [toast]);
+    // The page showed the swapped calculation: it goes back to the answer's own cells.
+    if (base) focusOn(base);
+    toast({ text: "Đã hoàn tác" });
+  }, [focusOn, toast]);
 
   // What the page shows while choosing.
   const view = pick && {

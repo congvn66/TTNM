@@ -27,12 +27,13 @@ it("hides a dismissed problem in the summary and offers to show it again, withou
   const onRestore = vi.fn();
   const props = { brief: { status: "ready", answer: { answer: "Báo cáo quý 2.", evidence: [], formulas: [] } }, briefing, onDismiss, onRestore, onFocus: () => {}, onAsk: () => {}, onOpenData: () => {} };
   const { rerender } = render(<BriefCard {...props} />);
-  fireEvent.click(screen.getByRole("button", { name: /Không phải lỗi/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Bỏ qua/ }));
   expect(onDismiss).toHaveBeenCalledWith(problem);
 
   rerender(<BriefCard {...props} dismissed={new Set([problem.chip.key])} />);
-  expect(screen.queryByText("Mình thấy số không khớp trong báo cáo")).toBeNull();
-  expect(screen.queryByText(/đều khớp/)).toBeNull();
+  expect(screen.queryByText("Tổng không khớp")).toBeNull();
+  expect(screen.queryByText(/dòng tổng khớp/)).toBeNull();
+  expect(screen.getByText(/Đã ẩn 1/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Hiện lại" }));
   expect(onRestore).toHaveBeenCalled();
 });

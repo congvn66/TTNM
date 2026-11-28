@@ -4,15 +4,34 @@ import { API } from "../../shared/api/client.js";
 import { cellBands, clampBox, quoteBoxes, textRunBoxes } from "./pdfHighlight.js";
 import { FormulaLine, InputTag, partColor, partInk, peekProps } from "./Calc.jsx";
 import { readableFormula } from "./formulaView.js";
-import { cellName, cellNumber, cellRange, cellUnsure, isNumberCell, neighbourCell, pageTables, summarizeSelection } from "./cells.js";
-import { formatNumber as formatValue, scrollBehavior } from "./format.js";
+import { cellName, cellNumber, cellRange, cellUnsure, isNumberCell, neighbourCell, pageChartLabels, pageProse, pageTables, summarizeSelection } from "./cells.js";
+import { differsFromReading, formatNumber as formatValue, scrollBehavior, valueWithUnit } from "./format.js";
+import { Icon } from "./Icon.jsx";
 
 const SHOW_READ_KEY = "sourcelens-show-read-v1";
 const PAD = 3; // the cell fill reaches a little past the digits so none touch the edge
+// Zoom limits. A two-page spread on a phone needs less than 40% to fit the width.
+const MIN_SCALE = 0.25;
+const MAX_SCALE = 3;
+const BADGE = 7;
+
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+/**
+ * Where a "?" or "!" badge goes beside a number: left of it, else right, else above a corner,
+ * at the first spot that covers no other number or printed text. Above the right corner when all are taken.
+ */
+function badgeSpot(r, obstacles) {
+  const mid = r.y + r.h / 2;
+  const spots = [[r.x - BADGE - 2, mid], [r.x + r.w + BADGE + 2, mid], [r.x + r.w + 1, r.y - BADGE + 2], [r.x - 1, r.y - BADGE + 2]];
+  const others = obstacles.filter((box) => !overlaps(box, r));
+  const free = spots.find(([cx, cy]) => !others.some((box) => overlaps(box, { x: cx - BADGE, y: cy - BADGE, w: BADGE * 2, h: BADGE * 2 })));
+  return free ?? spots[2];
+}
 
 /** Show the PDF's own text only when it is written differently from the value, e.g. "(1.234)" read as -1.234. */
 function showRaw(focus) {
-  const plain = (text) => String(text ?? "").replace(/[\s.,]/g, "");
+  // Units are words ("470 đồng"): only digits, signs and brackets are compared.
+  const plain = (text) => String(text ?? "").replace(/[\s.,\p{L}]/gu, "");
   return Boolean(focus.raw && focus.value && plain(focus.raw) !== plain(focus.value));
 }
 
@@ -33,7 +52,7 @@ function Thumb({ pdf, number, active, marked, onOpen }) {
   }, [pdf, number]);
   return <button type="button" className={`rd-thumb${active ? " active" : ""}`} onClick={() => onOpen(number)} aria-label={`Trang ${number}`} aria-current={active ? "page" : undefined}>
     <canvas ref={canvasRef} aria-hidden="true" />
-    <span>{number}{marked && <i title="Trang có số được nhắc tới trong ghi chú" aria-label="có số được nhắc tới" />}</span>
+    <span>{number}{marked && <i title="Có số trong câu trả lời" aria-label="có số trong câu trả lời" />}</span>
   </button>;
 }
 
@@ -91,7 +110,7 @@ function CellLayer({ tables, size, page, openKey, selection, selectMode, picking
     // Choosing a cell for a calculation is a tap, never a drag.
     if (picking || event.button !== 0 || (event.pointerType === "touch" && !selectMode)) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    drag.current = { x0: event.clientX - rect.left, y0: event.clientY - rect.top, rect, moved: false, id: event.pointerId, start: event.target.closest?.("[data-cell]")?.dataset.cell ?? null };
+    drag.current = { x0: event.clientX - rect.left, y0: event.clientY - rect.top, rect, moved: false, id: event.pointerId, start: event.target.closest?.("[data-cell]")?.dataset.cell ?? null, stage: event.currentTarget.closest(".rd-stage") };
   };
   useEffect(() => {
     const move = (event) => {
@@ -99,11 +118,13 @@ function CellLayer({ tables, size, page, openKey, selection, selectMode, picking
       if (!state || event.pointerId !== state.id) return;
       const x = event.clientX - state.rect.left; const y = event.clientY - state.rect.top;
       if (!state.moved && Math.hypot(x - state.x0, y - state.y0) < 6) return;
+      if (!state.moved) state.stage?.classList.add("dragging");
       state.moved = true;
       const area = { left: Math.min(x, state.x0), top: Math.min(y, state.y0), width: Math.abs(x - state.x0), height: Math.abs(y - state.y0) };
       setBand(area);
       // As in a spreadsheet: the start cell and the cell under the pointer span the selection.
-      const here = document.elementFromPoint(event.clientX, event.clientY)?.closest?.("[data-cell]")?.dataset.cell;
+      // The cell under the pointer, looking through the bar over the top of the page.
+      const here = document.elementsFromPoint(event.clientX, event.clientY).find((node) => node.matches?.(".rd-cells [data-cell]"))?.dataset.cell;
       let keys;
       if (state.start) {
         if (!here || tableOf(here) !== tableOf(state.start)) return;
@@ -120,6 +141,7 @@ function CellLayer({ tables, size, page, openKey, selection, selectMode, picking
       const state = drag.current;
       if (!state || event.pointerId !== state.id) return;
       drag.current = null;
+      state.stage?.classList.remove("dragging");
       // The click that ends a drag must not open a card; clear the flag once that click has passed.
       if (state.moved) { suppress.current = true; window.setTimeout(() => { suppress.current = false; }, 0); setBand(null); announce(state.keys ?? []); }
     };
@@ -133,7 +155,8 @@ function CellLayer({ tables, size, page, openKey, selection, selectMode, picking
   const onCellClick = (event, key) => {
     if (suppress.current) { suppress.current = false; return; }
     // A finger cannot pick one of rows this close: the first tap zooms in, the next one acts on the cell.
-    if (lastPointer.current === "touch" && (pitch.current.get(key) ?? Infinity) < 24) { onDenseTap?.(key, pitch.current.get(key)); return; }
+    // Once the page is as large as it gets, the tap acts on the cell.
+    if (lastPointer.current === "touch" && (pitch.current.get(key) ?? Infinity) < 24 && onDenseTap?.(key, pitch.current.get(key))) return;
     if (picking) {
       // On touch the first tap shows the new result, a second tap on the same cell uses it.
       if (lastPointer.current === "touch" && pickHover !== key) onPickHover(key);
@@ -165,7 +188,7 @@ function CellLayer({ tables, size, page, openKey, selection, selectMode, picking
           const value = cellNumber(cell);
           return <div key={cell.evidence_key} role="gridcell" data-cell={cell.evidence_key} tabIndex={cell.evidence_key === tabKeyOf(table) ? 0 : -1}
             aria-selected={selection.includes(cell.evidence_key)} aria-expanded={openKey === cell.evidence_key ? true : undefined}
-            aria-label={`${cellName(cell)}: ${value == null ? "không có số" : formatValue(cell.current_numeric_value)}${cellUnsure(cell) ? ", chưa chắc" : ""}`}
+            aria-label={`${cellName(cell)}: ${value == null ? (cell.raw_text ? `chưa rõ, PDF ghi ${cell.raw_text}` : "không có số") : valueWithUnit(cell)}${cellUnsure(cell) ? ", có thể đọc sai" : ""}${differsFromReading(cell.current_numeric_value, cell.original_numeric_value) ? ", đã sửa" : ""}`}
             className={`rd-hit${openKey === cell.evidence_key ? " open" : ""}`} style={box(cell)}
             onClick={(event) => onCellClick(event, cell.evidence_key)} onKeyDown={(event) => onKeyDown(event, cell.evidence_key)} onFocus={(event) => {
               setRoving(cell.evidence_key);
@@ -177,6 +200,64 @@ function CellLayer({ tables, size, page, openKey, selection, selectMode, picking
       </div>)}
     </div>)}
     {band && <div className="rd-band" style={band} aria-hidden="true" />}
+  </div>;
+}
+
+/**
+ * The numbers in the page's running text as buttons over their digits: one Tab
+ * stop, arrow keys go to the next or previous number in reading order, Enter
+ * or a tap opens the number's card. Text numbers are not selected or summed.
+ */
+function ProseLayer({ cells, size, page, openKey, picking, pickHover, onPickHover, onPickChoose, onOpen, label = "Số trong đoạn văn", helpId = "rd-prose-help" }) {
+  const lastPointer = useRef("mouse");
+  const [roving, setRoving] = useState(null);
+  const tabKey = cells.some((cell) => cell.evidence_key === roving) ? roving : cells[0]?.evidence_key;
+  // On touch a number is at least 24 px tall (WCAG 2.5.8), but never reaches a number on the line above or below.
+  const touch = typeof window !== "undefined" && Boolean(window.matchMedia?.("(pointer: coarse)").matches);
+  const room = useMemo(() => {
+    const out = new Map();
+    if (!touch) return out;
+    const boxes = cells.map((cell) => clampBox(cell.bbox));
+    boxes.forEach(([x0, y0, x1, y1], i) => {
+      const middle = (y0 + y1) / 2 * size.height;
+      const gaps = boxes.filter(([a0, , a1], j) => j !== i && a0 * size.width < x1 * size.width + 24 && a1 * size.width > x0 * size.width - 24)
+        .map(([, b0, , b1]) => Math.abs((b0 + b1) / 2 * size.height - middle)).filter((gap) => gap > 1);
+      out.set(cells[i].evidence_key, Math.min(24, ...gaps.map((gap) => gap - 2)));
+    });
+    return out;
+  }, [cells, size, touch]);
+  const box = (cell) => {
+    const [x0, y0, x1, y1] = clampBox(cell.bbox);
+    const height = Math.max((y1 - y0) * size.height + 6, room.get(cell.evidence_key) ?? 0);
+    const width = Math.max((x1 - x0) * size.width + 8, touch ? 24 : 0);
+    return { left: (x0 + x1) / 2 * size.width - width / 2, top: (y0 + y1) / 2 * size.height - height / 2, width, height };
+  };
+  const focusCell = (key) => { setRoving(key); window.requestAnimationFrame(() => document.querySelector(`[data-cell="${CSS.escape(key)}"]`)?.focus()); };
+  const act = (key) => {
+    setRoving(key);
+    if (!picking) { onOpen(key); return; }
+    // As in a table: on touch the first tap shows the new result, a second tap uses it.
+    if (lastPointer.current === "touch" && pickHover !== key) onPickHover(key);
+    else onPickChoose(key);
+  };
+  const onKeyDown = (event, index) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); act(cells[index].evidence_key); return; }
+    const next = event.key === "Home" ? 0 : event.key === "End" ? cells.length - 1 : step ? index + step : null;
+    if (next == null) return;
+    event.preventDefault();
+    if (cells[next]) focusCell(cells[next].evidence_key);
+  };
+  return <div className={`rd-prose${picking ? " picking" : ""}`} role="group" aria-label={`${label}, trang ${page}`} aria-describedby={helpId}>
+    <p id={helpId} className="rd-sr">Mũi tên để đi giữa các số, Enter để xem hoặc sửa số.</p>
+    {cells.map((cell, index) => <button key={cell.evidence_key} type="button" data-cell={cell.evidence_key} tabIndex={cell.evidence_key === tabKey ? 0 : -1}
+      aria-expanded={openKey === cell.evidence_key ? true : undefined}
+      aria-label={`${cellName(cell)}: ${cell.current_numeric_value == null ? cell.raw_text : valueWithUnit(cell)}${cellUnsure(cell) ? ", có thể đọc sai" : ""}${differsFromReading(cell.current_numeric_value, cell.original_numeric_value) ? ", đã sửa" : ""}`}
+      className={`rd-hit${openKey === cell.evidence_key ? " open" : ""}`} style={box(cell)}
+      onPointerDown={(event) => { lastPointer.current = event.pointerType || "mouse"; }}
+      onClick={() => act(cell.evidence_key)} onKeyDown={(event) => onKeyDown(event, index)}
+      onFocus={(event) => { setRoving(cell.evidence_key); if (picking && event.currentTarget.matches(":focus-visible")) onPickHover(cell.evidence_key, true); }}
+      onPointerEnter={(event) => { if (picking && event.pointerType !== "touch") onPickHover(cell.evidence_key); }} />)}
   </div>;
 }
 
@@ -199,12 +280,19 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
   const [narrow, setNarrow] = useState(false);
   // "Số đã đọc": shade every number the app read, so a number left unshaded is one it missed.
   const [showRead, setShowRead] = useState(() => { try { return localStorage.getItem(SHOW_READ_KEY) === "yes"; } catch { return false; } });
+  // A short note over the page after a dense tap zoomed in, so the zoom is seen and not only heard.
+  const [hint, setHint] = useState(null);
+  useEffect(() => {
+    if (!hint) return undefined;
+    const timer = window.setTimeout(() => setHint(null), 2600);
+    return () => window.clearTimeout(timer);
+  }, [hint]);
   const toggleRead = () => {
     const next = !showRead;
     try { localStorage.setItem(SHOW_READ_KEY, next ? "yes" : "no"); } catch { /* private mode */ }
     setShowRead(next);
     // The meaning of the shading is said out loud too: a tooltip never reaches touch or keyboard users.
-    if (next) announce(`Đã tô ${evidences.filter((cell) => cell.page_number === page && cell.current_numeric_value != null && clampBox(cell.bbox)).length} số mình đọc được ở trang này. Số không được tô là số mình chưa đọc.`);
+    if (next) announce(`Đang hiện ${evidences.filter((cell) => cell.page_number === page && cell.current_numeric_value != null && clampBox(cell.bbox)).length} số đã đọc`);
   };
   useEffect(() => {
     const node = scrollRef.current;
@@ -236,7 +324,7 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
     if (!pdf || !scrollRef.current) return;
     const first = await pdf.getPage(page);
     const base = first.getViewport({ scale: 1 });
-    const next = Math.max(0.4, Math.min(1.6, (scrollRef.current.clientWidth - 48) / base.width));
+    const next = Math.max(MIN_SCALE, Math.min(1.6, (scrollRef.current.clientWidth - 48) / base.width));
     setScale((current) => Math.abs(current - next) < 0.01 ? current : next);
   }, [pdf, page]);
 
@@ -282,9 +370,20 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
     if (!box || !size) return;
     const pageHeight = size.height / size.scale;
     const textPx = (box[3] - box[1]) * pageHeight * size.scale;
-    if (textPx >= 13) return;
+    // Digit boxes are tighter than the font, so 9 px of box is already readable text. A box under
+    // 3 px is a dash or a rule, with nothing to read. One tap zooms at most 1.6x so the row name stays in view.
+    const phone = window.matchMedia?.("(max-width: 700px)").matches;
+    if (textPx < 3 || (textPx >= 9 && !phone)) return;
+    if (phone && textPx >= 11) return;
+    // Never so far that the row name leaves the view: the zoom stops where the row from its name to the cell still fits.
+    const node = scrollRef.current;
+    const band = focus.key && focus.page === page ? cellBands(evidences, focus.key, page, textRunBoxes(items, size)) : null;
+    const rowLeft = Math.min(box[0], band?.row[0] ?? box[0]);
+    const rowFits = node ? (node.clientWidth - (phone ? 24 : 48) - 32) / Math.max(0.02, (box[2] - rowLeft) * (size.width / size.scale)) : Infinity;
+    const next = Math.min(2.2, rowFits, Math.max(size.scale * Math.min(1.6, 13 / textPx), phone ? 1.4 : 0));
+    if (next <= size.scale * 1.05) return;
     autoFit.current = false;
-    setScale(Math.min(3, Math.max(size.scale * (15 / Math.max(textPx, 4)), window.matchMedia?.("(max-width: 700px)").matches ? 1.4 : 0)));
+    setScale(next);
   }, [focus?.nonce, pdf]);
 
   // Keep the middle of the view in place when zooming with the buttons.
@@ -292,10 +391,59 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
   useEffect(() => {
     const node = scrollRef.current;
     if (!node || !anchor.current || !size) return;
-    const { cx, cy } = anchor.current;
+    // vx, vy: where that point sits in the view (the middle for buttons, the fingers for a pinch).
+    const { cx, cy, vx = node.clientWidth / 2, vy = node.clientHeight / 2 } = anchor.current;
     anchor.current = null;
-    node.scrollTo({ left: Math.max(0, cx * node.scrollWidth - node.clientWidth / 2), top: Math.max(0, cy * node.scrollHeight - node.clientHeight / 2) });
+    node.scrollTo({ left: Math.max(0, cx * node.scrollWidth - vx), top: Math.max(0, cy * node.scrollHeight - vy) });
   }, [size?.width]);
+  // Trackpad pinch (a wheel event with ctrlKey in Chrome, Edge and Firefox; gesture events in Safari)
+  // and Ctrl+wheel zoom the page, at most once per frame, around the point under the fingers.
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return undefined;
+    let factor = 1;
+    let frame = 0;
+    let point = null;
+    let gestureScale = 1;
+    const queue = (multiplier, clientX, clientY) => {
+      factor *= multiplier;
+      const rect = node.getBoundingClientRect();
+      point = { vx: clientX - rect.left, vy: clientY - rect.top };
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        const step = factor;
+        factor = 1;
+        if (node.scrollWidth) anchor.current = { cx: (node.scrollLeft + point.vx) / node.scrollWidth, cy: (node.scrollTop + point.vy) / node.scrollHeight, vx: point.vx, vy: point.vy };
+        autoFit.current = false;
+        setScale((value) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, (value ?? 1) * step)));
+      });
+    };
+    const onWheel = (event) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      // A mouse wheel notch sends 100 or 120 (or one line): it becomes ~25%, not 2.7x. A trackpad pinch
+      // sends small deltas that the browser may merge into one larger event, so those are used as they are.
+      const notch = event.deltaMode !== 0 || (Math.abs(event.deltaY) >= 100 && Number.isInteger(event.deltaY));
+      const delta = notch ? Math.sign(event.deltaY) * 25 : Math.max(-80, Math.min(80, event.deltaY));
+      queue(Math.exp(-delta * 0.01), event.clientX, event.clientY);
+    };
+    const onGestureStart = (event) => { event.preventDefault(); gestureScale = 1; };
+    const onGestureChange = (event) => {
+      event.preventDefault();
+      queue(event.scale / gestureScale, event.clientX, event.clientY);
+      gestureScale = event.scale;
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    node.addEventListener("gesturestart", onGestureStart);
+    node.addEventListener("gesturechange", onGestureChange);
+    return () => {
+      node.removeEventListener("wheel", onWheel);
+      node.removeEventListener("gesturestart", onGestureStart);
+      node.removeEventListener("gesturechange", onGestureChange);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [pdf]);
   // After a zoom the open card may sit past the edge of the view; bring it back in.
   useEffect(() => {
     if (!openKey || narrow) return undefined;
@@ -316,16 +464,21 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
   const bands = size && rects.length === 1 && focus?.key ? cellBands(evidences, focus.key, page, textRunBoxes(items, size)) : null;
 
   const tables = useMemo(() => (size ? pageTables(evidences, page) : []), [evidences, page, size]);
+  const prose = useMemo(() => (size ? pageProse(evidences, page) : []), [evidences, page, size]);
+  const chartLabels = useMemo(() => (size ? pageChartLabels(evidences, page) : []), [evidences, page, size]);
   const byKey = useMemo(() => new Map(evidences.map((cell) => [cell.evidence_key, cell])), [evidences]);
   const picked = selection.map((key) => byKey.get(key)).filter(Boolean);
-  const summary = summarizeSelection(picked);
+  const summary = summarizeSelection(picked, evidences.filter((cell) => cell.page_number === page));
   const openCell = openKey ? byKey.get(openKey) : null;
   const cardHere = Boolean(openCell && size && openCell.page_number === page && clampBox(openCell.bbox));
   const pxBox = (cell, pad = 0) => toRect(clampBox(cell.bbox), pad);
   // The card hangs below the whole row, never over the row name or the column header.
   const cardPlace = (() => {
     if (!cardHere || narrow) return null;
-    const row = tables.flatMap((table) => table.cells).filter((cell) => cell.table_locator?.table_region_key === openCell.table_locator?.table_region_key && cell.table_locator?.row_index === openCell.table_locator?.row_index);
+    // A number in running text has no row: the card hangs below its own line.
+    const row = openCell.table_locator
+      ? tables.flatMap((table) => table.cells).filter((cell) => cell.table_locator?.table_region_key === openCell.table_locator.table_region_key && cell.table_locator?.row_index === openCell.table_locator.row_index)
+      : [openCell];
     const bottom = Math.max(...row.map((cell) => pxBox(cell).y + pxBox(cell).h));
     const own = pxBox(openCell);
     const left = Math.max(8, Math.min(own.x + own.w / 2 - 40, size.width - 340));
@@ -333,11 +486,15 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
   })();
   const pageUnsure = size ? evidences.filter((cell) => cell.page_number === page && clampBox(cell.bbox) && cell.table_locator && isNumberCell(cell) && cellUnsure(cell)) : [];
   const pageRead = size && showRead ? evidences.filter((cell) => cell.page_number === page && cell.current_numeric_value != null && clampBox(cell.bbox)) : [];
+  const pageEdited = size ? evidences.filter((cell) => cell.page_number === page && clampBox(cell.bbox) && differsFromReading(cell.current_numeric_value, cell.original_numeric_value)) : [];
+  // What a badge must not cover: the other numbers and the printed words of the page.
+  const obstacles = useMemo(() => (size ? [...evidences.filter((cell) => cell.page_number === page && clampBox(cell.bbox)).map((cell) => toRect(clampBox(cell.bbox), 0)), ...textRunBoxes(items, size).map((box) => toRect(box, 0))] : []), [evidences, page, size, items]);
   const formulaShown = Boolean(focus?.formula && readableFormula(focus.formula.expression, focus.result));
   const pickCells = pick ? (pick.candidates ?? []).map((key) => byKey.get(key)).filter((cell) => cell && cell.page_number === page && clampBox(cell.bbox)) : [];
   // One outlined cell: the one a pick would use, else the input under the pointer or keyboard focus.
   const outline = [pick?.preview?.key, peekKey].map((key) => key && byKey.get(key)).find((cell) => cell && cell.page_number === page && clampBox(cell.bbox)) ?? null;
-  const focusProblem = focus?.key ? checks.find((check) => !check.ok && check.chip.key === focus.key) : null;
+  // The problem of the focused check, or of the total cell whose card is open: "Bỏ qua" stays in reach either way.
+  const focusProblem = focus?.key ? checks.find((check) => !check.ok && (check.chip.key === focus.key || check.keys?.[0] === focus.key)) : null;
   const pageProblems = size ? checks.filter((check) => !check.ok).map((check) => byKey.get(check.keys?.[0])).filter((cell) => cell && cell.page_number === page && clampBox(cell.bbox)) : [];
   const closeCard = useCallback(() => { const key = openKey; onCloseCard?.({ byUser: true }); if (key) window.requestAnimationFrame(() => document.querySelector(`[data-cell="${CSS.escape(key)}"]`)?.focus({ preventScroll: true })); }, [openKey, onCloseCard]);
 
@@ -351,11 +508,17 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
     const x1 = Math.max(...rects.map((r) => r.x + r.w)) + 24;
     const y0 = Math.min(...rects.map((r) => r.y)) + 24;
     const y1 = Math.max(...rects.map((r) => r.y + r.h)) + 24;
+    // The row name, left of a table cell: kept in view too whenever the row fits the width.
+    const rowLeft = bands ? toRect(bands.row, 0).x + 24 : x0;
+    const from = x1 - rowLeft + margin * 2 <= node.clientWidth ? rowLeft : x0;
     let left = node.scrollLeft;
     if (x1 > left + node.clientWidth - margin) left = x1 - node.clientWidth + margin;
-    if (x0 < left + margin) left = x0 - margin;
+    if (from < left + margin) left = from - margin;
+    // The bar floats over the top of the page: a cell under it is moved just below it, not a third of the screen.
+    const inset = Math.max(margin, (node.parentElement?.querySelector(".rd-focusbar")?.offsetHeight ?? 0) + 16);
     let top = node.scrollTop;
-    if (y0 < top + margin || y1 > top + node.clientHeight - margin) top = y0 - node.clientHeight / 3;
+    if (y0 < top + inset) top = y0 - inset;
+    else if (y1 > top + node.clientHeight - margin) top = Math.min(y1 - node.clientHeight + margin, y0 - inset);
     top = Math.max(0, top); left = Math.max(0, left);
     // No call when nothing moves: a no-op smooth scroll would cancel the card's own scroll into view.
     if (Math.abs(top - node.scrollTop) > 1 || Math.abs(left - node.scrollLeft) > 1) node.scrollTo({ top, left, behavior: scrollBehavior() });
@@ -365,7 +528,7 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
   // reading every mouse-over aloud would bury everything else.
   const pickByKeys = useRef(false);
   useEffect(() => {
-    if (pick?.key) announce(`Chọn ô thay cho số ${pick.index + 1}, ${pick.value}. Mũi tên để xem kết quả mới, Enter để dùng ô, Esc để huỷ.`);
+    if (pick?.key) announce(`Chọn ô thay cho số ${pick.index + 1}, ${pick.value}. Mũi tên để xem kết quả mới, Enter để dùng ô, Esc để hủy.`);
   }, [pick?.key]);
   useEffect(() => {
     const text = pick?.preview?.text;
@@ -409,24 +572,46 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
     const node = scrollRef.current;
     if (node && node.scrollWidth) anchor.current = { cx: (node.scrollLeft + node.clientWidth / 2) / node.scrollWidth, cy: (node.scrollTop + node.clientHeight / 2) / node.scrollHeight };
     autoFit.current = false;
-    setScale((value) => Math.max(0.4, Math.min(3, (value ?? 1) + step)));
+    setScale((value) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, (value ?? 1) + step)));
   };
-  // Zoom so rows are about 32 px apart, keeping the tapped cell in the middle of the view.
+  const fitPage = () => { autoFit.current = true; fit(); };
+  /**
+   * A tap among rows too close for a finger: zoom so rows are about 32 px apart. When the row,
+   * from its name to the cell, can still fit the width with rows a finger can tell apart, the
+   * zoom stops there and the row name stays in view; else the cell goes to the right edge, as
+   * much of its row as fits shows on the left, and the note over the page names the row.
+   * Returns false when the page cannot grow, so the tap acts on the cell instead.
+   */
   const zoomToCell = (key, rowPitch) => {
-    const box = clampBox(byKey.get(key)?.bbox);
-    if (!box || !scale) return;
-    anchor.current = { cx: (box[0] + box[2]) / 2, cy: (box[1] + box[3]) / 2 };
+    const cell = byKey.get(key);
+    const box = clampBox(cell?.bbox);
+    const node = scrollRef.current;
+    if (!box || !scale || !size || !node) return false;
+    const target = Math.min(MAX_SCALE, scale * 32 / Math.max(rowPitch, 4));
+    const band = cellBands(evidences, key, page, textRunBoxes(items, size));
+    const rowLeft = Math.min(box[0], band?.row[0] ?? box[0]);
+    const rowFits = (node.clientWidth - 40) / Math.max(0.02, (box[2] - rowLeft) * (size.width / size.scale));
+    const wholeRow = rowFits >= target || rowPitch * rowFits / scale >= 22;
+    const next = wholeRow ? Math.min(target, rowFits) : target;
+    if (next <= scale * 1.05) return false;
+    anchor.current = wholeRow
+      ? { cx: rowLeft, cy: (box[1] + box[3]) / 2, vx: 16, vy: node.clientHeight / 2 }
+      : { cx: box[2], cy: (box[1] + box[3]) / 2, vx: node.clientWidth - 16, vy: node.clientHeight / 2 };
     autoFit.current = false;
-    setScale(Math.min(3, scale * 32 / Math.max(rowPitch, 4)));
-    announce("Đã phóng to bảng. Chạm lại vào ô cần xem.");
+    setScale(next);
+    const name = cell.table_locator?.row_header?.trim();
+    const text = `Đã phóng to${name ? ` · ${name}` : ""}. Chạm lại vào số để xem.`;
+    setHint({ text, nonce: Date.now() });
+    announce(text);
+    return true;
   };
   const numPages = pdf?.numPages ?? report?.page_count ?? 0;
 
   useEffect(() => {
     const onKey = (event) => {
       if (event.target.closest?.("input, textarea, [contenteditable]")) return;
-      // A panel, dialog, menu or tour on top handles its own keys first.
-      if (document.querySelector(".rd-panel, .rd-modal-back, .rd-tour, .rd-popover")) return;
+      // A panel, dialog or menu on top handles its own keys first.
+      if (document.querySelector(".rd-panel, .rd-modal-back, .rd-popover")) return;
       if (event.key === "Escape") {
         if (pick) onPickCancel?.();
         else if (cardHere) closeCard();
@@ -453,38 +638,38 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
       {/* A doubtful cell shows why on the first line, before the reader chooses it. */}
       <p>{pick.preview?.warning
         ? <span className="rd-pick-line rd-pick-warn" title={pick.preview.warning}><i className="rd-mark unsure" aria-hidden="true">?</i>{pick.preview.warning}</span>
-        : <span className="rd-pick-line"><b>Chọn ô đúng</b> thay cho <span className="rd-tok" style={{ "--part": partColor(pick.index) }}><InputTag index={pick.index} />{pick.value}</span><span className="rd-pick-name">{pick.label}.</span></span>}
-        {pick.preview
-          ? <span className="rd-pick-line rd-pick-preview" title={pick.preview.text}>{pick.preview.text}</span>
-          : <span className="rd-pick-line rd-pick-hint">{pick.touch ? "Chạm một ô để xem kết quả mới." : "Rê chuột qua một ô để xem kết quả mới, bấm để dùng."}</span>}</p>
+        : <span className="rd-pick-line"><b>Chọn ô</b> thay cho <span className="rd-tok" style={{ "--part": partColor(pick.index) }}><InputTag index={pick.index} />{pick.value}</span></span>}
+        <span className="rd-pick-line rd-pick-preview" title={pick.preview?.text}>{pick.preview?.text ?? ""}</span></p>
       {pick.touch && pick.preview?.key && !pick.preview.refused && <button type="button" className="rd-button primary" onClick={() => onPickChoose?.(pick.preview.key)}>Dùng ô này</button>}
-      <button type="button" className="rd-button" onClick={onPickCancel}>{pick.touch ? "Huỷ" : "Huỷ (Esc)"}</button>
+      <button type="button" className="rd-button" onClick={onPickCancel}>Hủy</button>
     </div>}
     {!pick && summary && <div className={`rd-focusbar rd-selbar${summary.caveats.length ? " unsure" : ""}`}>
       <button type="button" className="rd-focus-close" onClick={() => onSelect?.([])} aria-label="Bỏ chọn">×</button>
       <p><b>{summary.count} ô</b>{summary.additive && <><small>Tổng</small><b>{formatValue(String(Math.round(summary.sum * 100) / 100))}</b></>}<small>Trung bình</small><b>{formatValue(String(Math.round(summary.average * 10) / 10))}</b>{summary.change != null && <><small>{summary.changeFrom && summary.changeTo ? `Thay đổi từ ${summary.changeFrom} sang ${summary.changeTo}` : "Thay đổi"}</small><b>{summary.change >= 0 ? "+" : ""}{formatValue(String(Math.round(summary.change * 100) / 100))}%</b></>}
         {summary.caveats.map((caveat) => <span key={caveat} className="rd-caveat"><i className="rd-mark unsure" aria-hidden="true">?</i>{caveat}</span>)}</p>
-      {onAskSelection && <button type="button" className="rd-button" aria-expanded={askingSelection} aria-controls="rd-asksugs" onClick={onAskSelection}>Hỏi về các ô này</button>}
+      {onAskSelection && <button type="button" className="rd-button" aria-expanded={askingSelection} aria-controls="rd-asksugs" onClick={onAskSelection}>Hỏi</button>}
       {onChartSelection && <button type="button" className="rd-button" onClick={onChartSelection}>Vẽ biểu đồ</button>}
     </div>}
-    {!pick && !summary && !focus?.page && showRead && <div className="rd-focusbar rd-coverbar"><p><i className="rd-cover-swatch" aria-hidden="true" />Nền xám: số mình đã đọc được ({pageRead.length} số ở trang này). Số không được tô là số mình chưa đọc.</p></div>}
-    {!pick && !summary && focus?.page && <div key={focus.nonce} className={`rd-focusbar${focus.unsure ? " unsure" : ""}`}>
+    {!pick && !summary && !focus?.page && showRead && <div className="rd-focusbar rd-coverbar"><p><i className="rd-cover-swatch" aria-hidden="true" />{processing ? (report?.extraction_status === "queued" ? "Đang chờ đọc…" : "Đang đọc trang này…") : `${pageRead.length} số đã đọc trên trang này`}</p></div>}
+    {/* On a phone the open card's sheet says all the bar says: the bar steps aside for the page. */}
+    {!pick && !summary && focus?.page && !(cardHere && narrow) && <div key={focus.nonce} className={`rd-focusbar${focus.unsure ? " unsure" : ""}`}>
       <button type="button" className="rd-focus-close" onClick={onClearFocus} aria-label="Bỏ đánh dấu">×</button>
       {focus.formula && formulaShown
         ? <p className="rd-parts">{focus.value && <b>{focus.value}</b>}<FormulaLine formula={focus.formula} result={focus.result} onPeek={onPeek} /><small>trang {focus.page}</small></p>
         : focus.parts?.length > 1
         ? <p className="rd-parts">{focus.value && <b>{focus.value}</b>}<small>tính từ</small>{focus.parts.map((part, i) => <span key={i} className="rd-tok" style={{ "--part": partColor(part.index ?? i) }} {...peekProps(part.key, onPeek)}><InputTag index={part.index ?? i} />{part.value}{part.label && <em>{part.label}</em>}</span>)}<small>trang {focus.page}</small></p>
-        : <p>{focus.value && <b>{focus.value}</b>}<span>{focus.label || "Vị trí trong báo cáo"} · trang {focus.page}{showRaw(focus) && <> · PDF ghi <q>{focus.raw}</q></>}{focus.unsure ? " · mình chưa chắc số này, bạn so với trang giúp nhé" : ""}</span></p>}
-      {onFocusPage && !rects.length && size && <small>Không có vị trí chính xác cho mục này</small>}
+        : <p>{focus.value && <b>{focus.value}</b>}<span>{focus.label || "Vị trí trong báo cáo"}{showRaw(focus) && <> · PDF ghi <q>{focus.raw}</q></>}{focus.unsure ? " · có thể đọc sai" : ""}</span><small className="rd-focus-page">trang {focus.page}</small></p>}
+      {onFocusPage && !rects.length && size && <small>Không rõ vị trí</small>}
       {!onFocusPage && <button type="button" className="rd-button" onClick={() => goToPage(focus.page)}>Về trang {focus.page}</button>}
-      {focusProblem && onDismissCheck && <button type="button" className="rd-button" onClick={() => onDismissCheck(focusProblem)}>Không phải lỗi</button>}
+      {focusProblem && onDismissCheck && <button type="button" className="rd-button" onClick={() => onDismissCheck(focusProblem)}>Bỏ qua</button>}
     </div>}
+    {hint && <p key={hint.nonce} className="rd-zoomhint" aria-hidden="true">{hint.text}</p>}
     <div className="rd-scroll" ref={scrollRef}>
       {!pdf && !error && <div className="rd-page-skeleton" aria-hidden="true" />}
       {error && <p className="rd-stage-error" role="alert">Không mở được PDF này. {error}</p>}
       <div className="rd-page" style={size ? { width: size.width, height: size.height } : undefined}>
         <canvas ref={canvasRef} />
-        {processing && pdf && <div className="rd-scan" aria-hidden="true"><span /><em><i className="rd-spinner small" />Đang đọc trang này…</em></div>}
+        {processing && pdf && <div className="rd-scan" aria-hidden="true"><span /><em><i className="rd-spinner small" />{report?.extraction_status === "queued" ? "Đang chờ đọc…" : "Đang đọc trang này…"}</em></div>}
         {rects.length > 0 && <svg className={`rd-spotlight${focus?.unsure ? " unsure" : ""}`} width={size.width} height={size.height} onClick={onClearFocus} role="presentation">
           {bands && <g className="rd-bands">{[bands.row, bands.column].map((band, i) => { const r = toRect(band, 2); return <rect key={i} x={r.x} y={r.y} width={r.w} height={r.h} rx="3" />; })}</g>}
           {rects.map((r, i) => <rect key={`${focus.nonce}-${i}`} className="rd-cell" x={r.x} y={r.y} width={r.w} height={r.h} rx="3" style={multi ? { "--part": partColor(focus.parts[i].index ?? i) } : undefined} data-part={multi ? i : undefined} />)}
@@ -495,13 +680,19 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
           {pageRead.map((cell) => { const r = pxBox(cell, 1); return <rect key={`r-${cell.evidence_key}`} className="rd-mark-read" x={r.x} y={r.y} width={r.w} height={r.h} rx="2" />; })}
           {picked.filter((cell) => cell.page_number === page && clampBox(cell.bbox)).map((cell) => { const r = pxBox(cell, 1); return <rect key={`s-${cell.evidence_key}`} className="rd-mark-selected" x={r.x} y={r.y} width={r.w} height={r.h} rx="2" />; })}
           {/* Badges sit left of the number, never over its digits. */}
-          {pageProblems.map((cell) => { const r = pxBox(cell, 2); return <g key={`p-${cell.evidence_key}`} className="rd-mark-problem"><rect x={r.x} y={r.y} width={r.w} height={r.h} rx="2" /><circle cx={r.x - 10} cy={r.y + r.h / 2} r="8" /><text x={r.x - 10} y={r.y + r.h / 2 + 3.5}>!</text></g>; })}
+          {/* A changed number keeps a mark under it, so an edit is never mistaken for what the PDF says. */}
+          {pageEdited.map((cell) => { const r = pxBox(cell, 1); return <g key={`e-${cell.evidence_key}`} className="rd-mark-edited"><rect x={r.x} y={r.y} width={r.w} height={r.h} rx="2" /><line x1={r.x} x2={r.x + r.w} y1={r.y + r.h + 1} y2={r.y + r.h + 1} /></g>; })}
+          {pageProblems.map((cell) => { const r = pxBox(cell, 2); const [cx, cy] = badgeSpot(r, obstacles); return <g key={`p-${cell.evidence_key}`} className="rd-mark-problem"><rect x={r.x} y={r.y} width={r.w} height={r.h} rx="2" /><circle cx={cx} cy={cy} r={BADGE} /><text x={cx} y={cy + 3.5}>!</text></g>; })}
           {pick && pickCells.map((cell) => { const r = pxBox(cell, 2); return <rect key={`c-${cell.evidence_key}`} className="rd-mark-cand" x={r.x} y={r.y} width={r.w} height={r.h} rx="2" />; })}
           {outline && (() => { const r = pxBox(outline, 3); return <rect className="rd-mark-peek" x={r.x} y={r.y} width={r.w} height={r.h} rx="3" />; })()}
-          {pageUnsure.map((cell) => { const r = pxBox(cell, 0); return <g key={`u-${cell.evidence_key}`} className="rd-mark-unsure"><rect x={r.x} y={r.y} width={r.w} height={r.h} rx="2" /><circle cx={r.x - 10} cy={r.y + r.h / 2} r="7.5" /><text x={r.x - 10} y={r.y + r.h / 2 + 3.5}>?</text></g>; })}
+          {pageUnsure.map((cell) => { const r = pxBox(cell, 0); const [cx, cy] = badgeSpot(r, obstacles); return <g key={`u-${cell.evidence_key}`} className="rd-mark-unsure"><rect x={r.x} y={r.y} width={r.w} height={r.h} rx="2" /><circle cx={cx} cy={cy} r={BADGE} /><text x={cx} y={cy + 3.5}>?</text></g>; })}
         </svg>}
         {size && tables.length > 0 && <CellLayer tables={tables} size={size} page={page} openKey={openKey} selection={selection} selectMode={selectMode}
           picking={Boolean(pick)} pickHover={pick?.preview?.key ?? null} onPickHover={(key, byKeyboard) => { pickByKeys.current = Boolean(byKeyboard); onPickHover?.(key); }} onPickChoose={(key) => onPickChoose?.(key)} onOpen={(key) => onOpenCell?.(key)} onSelect={(keys) => onSelect?.(keys)} onAnnounce={announce} onBlank={() => { onSelect?.([]); onCloseCard?.(); onClearFocus?.(); }} onDenseTap={zoomToCell} />}
+        {size && prose.length > 0 && <ProseLayer cells={prose} size={size} page={page} openKey={openKey} picking={Boolean(pick)} pickHover={pick?.preview?.key ?? null}
+          onPickHover={(key, byKeyboard) => { pickByKeys.current = Boolean(byKeyboard); onPickHover?.(key); }} onPickChoose={(key) => onPickChoose?.(key)} onOpen={(key) => onOpenCell?.(key)} />}
+        {size && chartLabels.length > 0 && <ProseLayer cells={chartLabels} size={size} page={page} openKey={openKey} picking={Boolean(pick)} pickHover={pick?.preview?.key ?? null} label="Số trên biểu đồ" helpId="rd-chartnum-help"
+          onPickHover={(key, byKeyboard) => { pickByKeys.current = Boolean(byKeyboard); onPickHover?.(key); }} onPickChoose={(key) => onPickChoose?.(key)} onOpen={(key) => onOpenCell?.(key)} />}
         {cardPlace && renderCard && <div className="rd-cellcard-anchor" style={{ left: cardPlace.left, top: cardPlace.top, "--notch": `${cardPlace.notch}px` }}>{renderCard(openCell, { narrow: false, onClose: closeCard })}</div>}
       </div>
     </div>
@@ -512,13 +703,13 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
       <span><span className="rd-page-word">Trang </span>{page} / {numPages || "…"}</span>
       <button type="button" onClick={() => pdf && goToPage(Math.min(pdf.numPages, page + 1))} disabled={!pdf || page >= pdf.numPages} aria-label="Trang sau">›</button>
       <i aria-hidden="true" />
-      <button type="button" onClick={() => zoom(-0.15)} aria-label="Thu nhỏ">−</button>
-      <span className="rd-zoom" aria-live="polite">{scale ? `${Math.round(scale * 100)}%` : ""}</span>
-      <button type="button" onClick={() => zoom(0.15)} aria-label="Phóng to">+</button>
+      <button type="button" onClick={() => zoom(-0.15)} disabled={!scale || scale <= MIN_SCALE + 0.001} aria-label="Thu nhỏ">−</button>
+      {/* The zoom level is also the "fit page" button: one control less, so the bar stays one row on a phone. */}
+      <button type="button" className="rd-zoom" onClick={fitPage} aria-label={`Vừa trang${scale ? `, đang ${Math.round(scale * 100)}%` : ""}`} title="Vừa trang">{scale ? `${Math.round(scale * 100)}%` : "…"}</button>
+      <button type="button" onClick={() => zoom(0.15)} disabled={!scale || scale >= MAX_SCALE - 0.001} aria-label="Phóng to">+</button>
       <div className="rd-stage-modes">
-        <button type="button" onClick={() => { autoFit.current = true; fit(); }} className="rd-fit">Vừa khung</button>
-        {evidences.length > 0 && <button type="button" className="rd-fit" aria-pressed={showRead} onClick={toggleRead} title="Tô các số mình đã đọc được. Số không được tô là số mình chưa đọc.">Tô số đã đọc</button>}
-        {tables.length > 0 && <button type="button" className="rd-fit" aria-pressed={selectMode} onClick={() => setSelectMode((value) => !value)} title="Kéo để chọn nhiều ô">Chọn vùng</button>}
+        {evidences.length > 0 && <button type="button" className="rd-tool-icon" aria-pressed={showRead} onClick={toggleRead} aria-label="Hiện số đã đọc" title="Hiện số đã đọc"><Icon name="eye" size={16} /></button>}
+        {tables.length > 0 && <button type="button" className="rd-tool-icon" aria-pressed={selectMode} onClick={() => setSelectMode((value) => !value)} aria-label="Chọn nhiều ô" title="Chọn nhiều ô"><Icon name="select" size={16} /></button>}
       </div>
     </div>
   </section>;

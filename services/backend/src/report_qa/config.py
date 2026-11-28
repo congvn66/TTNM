@@ -12,6 +12,21 @@ import os
 from dataclasses import dataclass
 
 
+# The project every account starts with. The first name is used for new ones; the older
+# names (one misspelt by migration 0006) still find projects made before 0009 renamed them.
+DEFAULT_PROJECT_NAMES = ("Báo cáo của tôi", "Workspace cá nhân", "Workspace \u00e1 nh\u00e2n")
+
+
+def psycopg_url(url: str) -> str:
+    """The URL psycopg connects with. DATABASE_URL may be written either way:
+    "postgresql://" (Supabase's form) or SQLAlchemy's "postgresql+psycopg://"."""
+    url = url.strip()
+    for prefix in ("postgresql+psycopg://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql://" + url[len(prefix):]
+    return url
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     persistence_backend: str
@@ -41,7 +56,7 @@ class Settings:
             raise RuntimeError("REPORT_QA_MAX_PARALLEL_EXTRACTIONS must be a whole number of at least 1")
         return cls(
             persistence_backend=backend,
-            database_url=os.getenv("DATABASE_URL", "postgresql+psycopg://sourcelens:sourcelens-dev-only@127.0.0.1:5432/sourcelens"),
+            database_url=psycopg_url(os.getenv("DATABASE_URL", "postgresql://sourcelens:sourcelens-dev-only@127.0.0.1:5432/sourcelens")),
             storage_backend=storage_backend,
             r2_endpoint=os.getenv("R2_ENDPOINT", "").strip(),
             r2_bucket=os.getenv("R2_BUCKET", "").strip(),

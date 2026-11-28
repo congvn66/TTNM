@@ -43,21 +43,24 @@ export function playChime() {
 }
 
 /**
- * Fires once when a report goes from "being read" to "ready" (or "failed"):
+ * Fires once when a watched report goes from "being read" to "ready" (or "failed"):
  * chime, tab title, and an event the screen turns into a toast.
  */
-export function useReadySignal(reports, onSignal) {
+export function useReadySignal(reports, onSignal, watched = () => true) {
   const previous = useRef(new Map());
   const first = useRef(true);
   const callback = useRef(onSignal);
   callback.current = onSignal;
+  const watch = useRef(watched);
+  watch.current = watched;
   useEffect(() => {
     const before = previous.current;
     const next = new Map(reports.map((report) => [report.id, report.extraction_status]));
     if (!first.current) {
       for (const report of reports) {
         const was = before.get(report.id);
-        if (!["queued", "processing"].includes(was)) continue;
+        // Only reports the person is waiting for: on a shared account other people's uploads stay quiet.
+        if (!["queued", "processing"].includes(was) || !watch.current(report)) continue;
         if (report.extraction_status === "ready") {
           playChime();
           flashTitle(`✓ Đã đọc xong · ${report.file_name}`);

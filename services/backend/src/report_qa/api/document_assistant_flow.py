@@ -14,7 +14,7 @@ from report_qa.api.session_storage import (
     save_catalog,
     utc_now,
 )
-from report_qa.application.chart_tool import read_chart_region
+from report_qa.application.chart_tool import CHART_READER_VERSION, current_chart_reads, read_chart_region
 from report_qa.application.document_assistant import (
     answer_timeout_seconds,
     data_rows,
@@ -95,7 +95,7 @@ def with_chart_batches(document, extraction):
     """
     evidences = list(extraction["evidence_batch"]["evidences"])
     seen = {e["evidence_key"] for e in evidences}
-    for record in reversed(document.get("chart_extractions", [])):
+    for record in reversed(current_chart_reads(document)):
         for e in record["evidence_batch"]["evidences"]:
             if e["evidence_key"] not in seen:
                 evidences.append(e)
@@ -234,15 +234,7 @@ def _calculation_summary(calculations):
     return "Phép tính được chạy bằng script Python trên giá trị hiện tại của bảng Dữ liệu."
 
 
-NO_DATA_WARNING = "Báo cáo ghi “—” (không có số liệu) ở một số ô được dẫn."
-
-
-def _unverified_warning(evidences):
-    if not evidences:
-        return []
-    if all(e.get("source_type") == "chart" for e in evidences):
-        return ["Một số giá trị biểu đồ chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
-    return ["Một số giá trị chưa được xác minh; xem bảng Dữ liệu để kiểm tra."]
+NO_DATA_WARNING = "Báo cáo để trống (—) ở một số ô được dùng."
 
 
 def _history(session, document_id):
@@ -266,7 +258,7 @@ def _history(session, document_id):
 def answer_document(
     session, document, question, trace_id, trace, catalog, *,
     overlay, snapshot, complete=None, load_extraction=None, resolve_pdf=None, save=None, persist_chart=None,
-    record=True, max_steps=7,
+    record=True, max_steps=7, drop_untraced_on_last_step=True,
 ):
     """Answer with the tools assistant and persist the exchange.
 
@@ -289,7 +281,7 @@ def answer_document(
     unstored_keys = set()
     current = overlay(document, with_chart_batches(document, extraction))
     # A read whose visual check failed does not count: the AI may read it again.
-    read_regions = {r.get("chart_region_key") for r in document.get("chart_extractions", []) if not r.get("visual_check_error")}
+    read_regions = {r.get("chart_region_key") for r in current_chart_reads(document) if not r.get("visual_check_error")}
     # Full text, current numeric values and readable chart regions.
     context = {
         "pages": current["pages"],
@@ -321,7 +313,7 @@ def answer_document(
         # retry only repeats the visual check.
         cached = next(
             (
-                r for r in reversed(document.get("chart_extractions", []))
+                r for r in reversed(current_chart_reads(document))
                 if r.get("chart_region_key") == key and not r.get("visual_check_error")
             ),
             None,
@@ -342,7 +334,7 @@ def answer_document(
                 # is used for this answer only and read again next time.
                 unstored_keys.update(e["evidence_key"] for e in result["evidence_batch"]["evidences"])
             with catalog_lock:
-                document.setdefault("chart_extractions", []).append({**result, "chart_region_key": key, "created_at": utc_now(), "document_run_id": extraction["evidence_batch"].get("extraction_run_id")})
+                document.setdefault("chart_extractions", []).append({**result, "reader_version": CHART_READER_VERSION, "chart_region_key": key, "created_at": utc_now(), "document_run_id": extraction["evidence_batch"].get("extraction_run_id")})
             if persist_chart is None:
                 save(catalog)
         else:
@@ -357,7 +349,8 @@ def answer_document(
             "all_evidences": [e for e in refreshed["evidence_batch"]["evidences"] if e["page_number"] in sent_pages],
         }
 
-    result = run_assistant(question, context, complete=complete, read_chart=chart_tool, max_steps=max_steps)
+    result = run_assistant(question, context, complete=complete, read_chart=chart_tool, max_steps=max_steps,
+                           drop_untraced_on_last_step=drop_untraced_on_last_step)
     by_key = {e["evidence_key"]: e for e in context["evidences"]}
     used = [by_key[k] for k in result["evidence_keys"]]
     pdf_path = resolve_pdf(document["storage_name"])
@@ -376,8 +369,9 @@ def answer_document(
         "formulas": [_formula(record, by_key) for record in result["calculations"]],
         "tables": [],
         "claims": [],
-        "warnings": _unverified_warning([by_key[k] for k in result["unverified_keys"]])
-        + ([NO_DATA_WARNING] if result["no_data_keys"] else []),
+        # Numbers that may be misread are flagged per number on the page and in the answer;
+        # the one answer-level warning is a cited cell the report leaves empty.
+        "warnings": [NO_DATA_WARNING] if result["no_data_keys"] else [],
         "cited_pages": sorted({c["page"] for c in citations}),
         "evidence": citations,
         "not_found": result["not_found"],

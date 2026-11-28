@@ -49,6 +49,11 @@ logger = logging.getLogger(__name__)
 MAX_ANSWER_CHARS = 12000
 
 
+def _unavailable_code(http_status: int) -> str:
+    """HTTP 429 is the provider's rate limit or quota: it clears in about a minute, unlike an outage."""
+    return "AI_RATE_LIMITED" if http_status == 429 else "AI_PROVIDER_UNAVAILABLE"
+
+
 class ProviderError(RuntimeError):
     """Safe, stable error raised at the provider boundary.
 
@@ -337,7 +342,7 @@ class GeminiProvider:
                     if exc.code == 404:
                         raise ProviderError("AI_MODEL_UNAVAILABLE", f"Gemini model {self.model} is unavailable (HTTP 404)", exc.code) from exc
                     if exc.code in {408, 429, 500, 502, 503, 504}:
-                        raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"Gemini provider is unavailable (HTTP {exc.code})", exc.code) from exc
+                        raise ProviderError(_unavailable_code(exc.code), f"Gemini provider is unavailable (HTTP {exc.code})", exc.code) from exc
                     raise ProviderError("AI_PROVIDER_HTTP_ERROR", f"Gemini provider rejected the request (HTTP {exc.code})", exc.code) from exc
             except (URLError, TimeoutError, OSError) as exc:
                 if attempt >= self.max_retries:
@@ -409,7 +414,7 @@ class OpenRouterProvider:
             except HTTPError as exc:
                 if attempt >= self.max_retries:
                     if exc.code in {408, 429, 500, 502, 503, 504}:
-                        raise ProviderError("AI_PROVIDER_UNAVAILABLE", f"OpenRouter provider is unavailable (HTTP {exc.code})", exc.code) from exc
+                        raise ProviderError(_unavailable_code(exc.code), f"OpenRouter provider is unavailable (HTTP {exc.code})", exc.code) from exc
                     if exc.code == 404:
                         raise ProviderError("AI_MODEL_UNAVAILABLE", f"OpenRouter model {self.model} is unavailable (HTTP 404)", exc.code) from exc
                     raise ProviderError("AI_PROVIDER_HTTP_ERROR", f"OpenRouter rejected the request (HTTP {exc.code})", exc.code) from exc
@@ -531,7 +536,7 @@ class PlannerChatClient:
             except HTTPError as exc:
                 retryable = exc.code in {408, 429, 500, 502, 503, 504}
                 if attempt >= self.max_retries or not retryable:
-                    code = "AI_PROVIDER_UNAVAILABLE" if retryable else ("AI_MODEL_UNAVAILABLE" if exc.code == 404 else "AI_PROVIDER_HTTP_ERROR")
+                    code = _unavailable_code(exc.code) if retryable else ("AI_MODEL_UNAVAILABLE" if exc.code == 404 else "AI_PROVIDER_HTTP_ERROR")
                     logger.warning("%s planner request failed (HTTP %s): %s", self.mode, exc.code, _provider_error_message(exc, self.api_key) or "no error text")
                     raise ProviderError(code, f"{self.mode} planner request failed (HTTP {exc.code})", exc.code) from exc
                 time.sleep(max(0.0, min(8.0, 2.0 * (attempt + 1), deadline - time.monotonic())))

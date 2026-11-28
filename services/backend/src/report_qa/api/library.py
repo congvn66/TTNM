@@ -9,7 +9,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field, field_validator
 from psycopg.rows import dict_row
 
-from report_qa.config import settings
+from report_qa.config import DEFAULT_PROJECT_NAMES, settings
 from .auth import owner_id_for_request
 from .user_messages import user_error
 
@@ -100,26 +100,20 @@ def _project(connection, project_id: UUID, owner_id: UUID):
 
 
 def _ensure_default_project(connection, owner_id: UUID):
-    # Build the canonical label from code points so this path remains correct
-    # even when a Windows shell decodes source files with a legacy code page.
-    canonical_name = "Workspace " + chr(0x00E1) + " nh" + chr(0x00E2) + "n"
-    canonical = connection.execute(
-        "SELECT id,owner_id,name,created_at,updated_at FROM projects WHERE owner_id=%s AND name=%s AND deleted_at IS NULL ORDER BY created_at LIMIT 1",
-        (owner_id, canonical_name),
+    """The account's default project: found under any of its names (see config.DEFAULT_PROJECT_NAMES), else created."""
+    row = connection.execute(
+        "SELECT id,owner_id,name,created_at,updated_at FROM projects WHERE owner_id=%s AND name = ANY(%s) AND deleted_at IS NULL ORDER BY created_at LIMIT 1",
+        (owner_id, list(DEFAULT_PROJECT_NAMES)),
     ).fetchone()
-    if canonical:
-        return canonical
+    if row:
+        return row
     return connection.execute(
         """INSERT INTO projects (owner_id,name) VALUES (%s,%s)
            ON CONFLICT (owner_id,name) WHERE deleted_at IS NULL
            DO UPDATE SET updated_at=projects.updated_at
            RETURNING id,owner_id,name,created_at,updated_at""",
-        (owner_id, canonical_name),
+        (owner_id, DEFAULT_PROJECT_NAMES[0]),
     ).fetchone()
-    row = connection.execute("SELECT id,owner_id,name,created_at,updated_at FROM projects WHERE owner_id=%s AND name='Workspace cá nhân' AND deleted_at IS NULL ORDER BY created_at LIMIT 1", (owner_id,)).fetchone()
-    if row:
-        return row
-    return connection.execute("INSERT INTO projects (owner_id,name) VALUES (%s,%s) RETURNING id,owner_id,name,created_at,updated_at", (owner_id, "Workspace cá nhân")).fetchone()
 
 
 @router.get("/projects")
@@ -134,6 +128,7 @@ def list_projects(request: Request):
                  FROM projects p
                  LEFT JOIN chats c ON c.project_id=p.id AND c.deleted_at IS NULL
                  LEFT JOIN project_documents pd ON pd.project_id=p.id
+                       AND EXISTS (SELECT 1 FROM documents d WHERE d.id=pd.document_id AND d.deleted_at IS NULL)
                 WHERE p.owner_id=%s AND p.deleted_at IS NULL
                 GROUP BY p.id ORDER BY p.updated_at DESC,p.name""",
             (owner_id,),
@@ -168,14 +163,22 @@ def archive_project(project_id: UUID, request: Request):
     owner_id = owner_id_for_request(request)
     with _connection() as connection:
         _project(connection, project_id, owner_id)
-        counts = connection.execute(
+        # Only live reports keep a project: a chat whose reports were all deleted is empty and
+        # goes with the project, or a project could never be deleted after its last report.
+        live = connection.execute(
             """SELECT
-                     (SELECT count(*) FROM chats WHERE project_id=%s AND owner_id=%s AND deleted_at IS NULL) AS session_count,
-                     (SELECT count(*) FROM project_documents WHERE project_id=%s AND owner_id=%s) AS document_count""",
+                     (SELECT count(*) FROM project_documents pd JOIN documents d ON d.id=pd.document_id AND d.deleted_at IS NULL
+                       WHERE pd.project_id=%s AND pd.owner_id=%s)
+                   + (SELECT count(*) FROM chats c
+                       JOIN chat_documents cd ON cd.chat_id=c.id
+                       JOIN document_versions dv ON dv.id=cd.document_version_id
+                       JOIN documents d ON d.id=dv.document_id AND d.deleted_at IS NULL
+                      WHERE c.project_id=%s AND c.owner_id=%s AND c.deleted_at IS NULL) AS reports""",
             (project_id, owner_id, project_id, owner_id),
         ).fetchone()
-        if counts["session_count"] or counts["document_count"]:
+        if live["reports"]:
             raise user_error(409, "PROJECT_NOT_EMPTY")
+        connection.execute("UPDATE chats SET deleted_at=now(),updated_at=now() WHERE project_id=%s AND owner_id=%s AND deleted_at IS NULL", (project_id, owner_id))
         connection.execute("UPDATE projects SET deleted_at=now(),updated_at=now() WHERE id=%s AND owner_id=%s", (project_id, owner_id))
     return {"project_id": str(project_id), "status": "archived"}
 
@@ -190,11 +193,17 @@ def project_library(project_id: UUID, request: Request):
         documents = connection.execute(
             """SELECT pd.document_id,pd.folder_id,pd.display_name,pd.sort_order,pd.version,
                       d.title,d.created_at,dv.file_name,dv.byte_size,dv.page_count,dv.status AS version_status,
-                      COALESCE(er.status,'queued') AS extraction_status,c.id AS session_id,c.title AS session_title
+                      -- A reading with no live job never finishes: failed, as in the reader (PostgresRuntimeStore._extraction_state).
+                      CASE WHEN er.status = 'completed' THEN 'completed'
+                           WHEN NOT EXISTS (SELECT 1 FROM jobs j WHERE j.kind='extract_document' AND j.status IN ('queued','running') AND j.payload->>'document_id' = d.id::text)
+                           THEN 'failed'
+                           WHEN er.status = 'running' THEN 'processing'
+                           ELSE 'queued' END AS extraction_status,
+                      c.id AS session_id,c.title AS session_title
                  FROM project_documents pd
                  JOIN documents d ON d.id=pd.document_id AND d.owner_id=pd.owner_id AND d.deleted_at IS NULL
                  LEFT JOIN LATERAL (SELECT * FROM document_versions WHERE document_id=d.id ORDER BY version_no DESC LIMIT 1) dv ON TRUE
-                 LEFT JOIN LATERAL (SELECT status FROM extraction_runs WHERE document_version_id=dv.id ORDER BY run_no DESC LIMIT 1) er ON TRUE
+                 LEFT JOIN LATERAL (SELECT status FROM extraction_runs WHERE document_version_id=dv.id AND scope='base_document' ORDER BY run_no DESC LIMIT 1) er ON TRUE
                  LEFT JOIN LATERAL (SELECT c.id,c.title FROM chats c JOIN chat_documents cd ON cd.chat_id=c.id JOIN document_versions linked ON linked.id=cd.document_version_id WHERE c.project_id=pd.project_id AND c.owner_id=pd.owner_id AND linked.document_id=d.id AND c.deleted_at IS NULL ORDER BY c.updated_at DESC LIMIT 1) c ON TRUE
                 WHERE pd.project_id=%s AND pd.owner_id=%s ORDER BY d.updated_at DESC""",
             (project_id, owner_id),
@@ -210,13 +219,26 @@ def move_session_to_project(session_id: UUID, payload: SessionProjectUpdateReque
         result = connection.execute("UPDATE chats SET project_id=%s,updated_at=now() WHERE id=%s AND owner_id=%s AND deleted_at IS NULL", (payload.project_id, session_id, owner_id))
         if result.rowcount != 1:
             raise user_error(404, "SESSION_NOT_FOUND")
+        # The chat's reports move with it: listed in the new project under the name they had, and gone from the
+        # old one, unless another chat there still holds them.
         connection.execute("""INSERT INTO project_documents (owner_id,project_id,document_id,display_name)
-            SELECT %s,%s,dv.document_id,COALESCE(NULLIF(btrim(d.title), ''), 'Tài liệu chưa đặt tên')
+            SELECT %s,%s,dv.document_id,COALESCE(
+                       (SELECT old.display_name FROM project_documents old WHERE old.document_id=dv.document_id AND old.owner_id=%s
+                         ORDER BY old.added_at DESC LIMIT 1),
+                       NULLIF(btrim(d.title), ''), 'Tài liệu chưa đặt tên')
               FROM chat_documents cd
               JOIN document_versions dv ON dv.id=cd.document_version_id
               JOIN documents d ON d.id=dv.document_id AND d.owner_id=%s
              WHERE cd.chat_id=%s
-            ON CONFLICT (project_id,document_id) DO NOTHING""", (owner_id, payload.project_id, owner_id, session_id))
+            ON CONFLICT (project_id,document_id) DO NOTHING""", (owner_id, payload.project_id, owner_id, owner_id, session_id))
+        connection.execute("""DELETE FROM project_documents pd
+             WHERE pd.owner_id=%s AND pd.project_id<>%s
+               AND pd.document_id IN (SELECT dv.document_id FROM chat_documents cd JOIN document_versions dv ON dv.id=cd.document_version_id
+                                       WHERE cd.chat_id=%s)
+               AND NOT EXISTS (SELECT 1 FROM chats c JOIN chat_documents cd ON cd.chat_id=c.id
+                                 JOIN document_versions dv ON dv.id=cd.document_version_id
+                                WHERE c.project_id=pd.project_id AND c.deleted_at IS NULL AND dv.document_id=pd.document_id)""",
+                           (owner_id, payload.project_id, session_id))
     return {"session_id": str(session_id), "project_id": str(payload.project_id)}
 
 
@@ -299,4 +321,7 @@ def archive_folder(folder_id: UUID, request: Request):
         result = connection.execute("UPDATE folders SET deleted_at=now(),version=version+1,updated_at=now() WHERE id=%s AND owner_id=%s AND deleted_at IS NULL", (folder_id, owner_id))
         if result.rowcount != 1:
             raise user_error(404, "FOLDER_NOT_FOUND")
+        # The dialog promises its reports go back to "Chưa phân loại": a report left pointing at a
+        # deleted folder showed under "Tất cả" but under no folder at all.
+        connection.execute("UPDATE project_documents SET folder_id=NULL,version=version+1 WHERE folder_id=%s AND owner_id=%s", (folder_id, owner_id))
     return {"folder_id": str(folder_id), "status": "archived"}

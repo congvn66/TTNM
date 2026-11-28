@@ -116,14 +116,17 @@ def cell_semantics(headers: list[str | None], context: str, raw: str, page_year:
 _SENTENCE_END = re.compile(r"[.!?;](?=\s)|\n")
 _CLAUSE_END = re.compile(r"[,:;–—()]")
 # What is written right after a number: "6,5%", "220 tỷ đồng", "33 nghìn đơn", "26.900 VND".
-_UNIT_AFTER = re.compile(r"\s*(?:(?P<scale>nghìn|ngàn|triệu|tỷ|tỉ|thousand|million|billion)\b\s*(?P<money>đồng|vnd)?|(?P<plain>đồng|vnd|usd)\b)", re.IGNORECASE)
+_UNIT_AFTER = re.compile(r"\s*(?:(?P<scale>nghìn|ngàn|triệu|tỷ|tỉ|thousand|million|billion)\b\s*(?:(?P<money>đồng|vnd)|(?P<ton>tấn)\b)?"
+                         r"|(?P<plain>đồng|vnd|usd)\b)", re.IGNORECASE)
 _SCALE_UNITS = {"nghìn": "THOUSAND", "ngàn": "THOUSAND", "triệu": "MILLION", "tỷ": "BILLION", "tỉ": "BILLION",
                 "thousand": "THOUSAND", "million": "MILLION", "billion": "BILLION"}
 # A unit note, read without diacritics because chart titles come from DePlot's OCR ("Don vì: nghin đồn").
 _UNIT_NOTE = re.compile(
     r"don vi(?: tinh)?\s*:?\s*(?:(?P<percent>%|phan tram)|(?P<scale>nghin|ngan|trieu|ty|ti|thousand|million|billion)\b"
-    r"\s*(?P<money>dong|vnd)?|(?P<plain>dong|vnd|usd)\b)"
+    r"\s*(?:(?P<money>dong|vnd)|(?P<ton>tan)\b)?|(?P<plain>dong|vnd|usd)\b)"
 )
+# A unit a row or column label states in brackets: "Biên lợi nhuận gộp (%)", "Hệ số nợ/VCSH (lần)".
+_LABEL_UNIT = re.compile(r"\(\s*(?:(?P<percent>%)|(?P<times>lan|x))\s*\)")
 _FOLDED_SCALES = {"nghin": "THOUSAND", "ngan": "THOUSAND", "trieu": "MILLION", "ty": "BILLION", "ti": "BILLION",
                   "thousand": "THOUSAND", "million": "MILLION", "billion": "BILLION"}
 SUBJECT_WORDS = 12  # a label, not the sentence
@@ -136,10 +139,15 @@ def unit_after(text: str, end: int, raw: str) -> str | None:
     match = _UNIT_AFTER.match(text, end)
     if not match:
         return None
+    # "470 Đồng Văn Cống": a capitalised word followed by another is a street name, not "đồng".
+    word = match["plain"] or match["money"]
+    after = re.match(r"\s+(\w)", text[match.end():])
+    if word and word[:1].isupper() and not word.isupper() and after and after[1].isupper():
+        return None
     if match["plain"]:
         return "USD" if match["plain"].casefold() == "usd" else "VND"
     scale = _SCALE_UNITS[match["scale"].casefold()]
-    return f"VND_{scale}" if match["money"] else scale
+    return f"VND_{scale}" if match["money"] else f"{scale}_TONNE" if match["ton"] else scale
 
 
 def _folded(text: str) -> str:
@@ -157,7 +165,15 @@ def unit_note(text: str) -> str | None:
     if match["plain"]:
         return "USD" if match["plain"] == "usd" else "VND"
     scale = _FOLDED_SCALES[match["scale"]]
-    return f"VND_{scale}" if match["money"] else scale
+    return f"VND_{scale}" if match["money"] else f"{scale}_TONNE" if match["ton"] else scale
+
+
+def label_unit(text: str) -> str | None:
+    """Unit a table label states in brackets: "(%)" is PERCENT, "(lần)" or "(x)" is TIMES."""
+    match = _LABEL_UNIT.search(_folded(text))
+    if not match:
+        return None
+    return "PERCENT" if match["percent"] else "TIMES"
 
 
 def sentence_semantics(text: str, position: int, raw: str, page_year: str | None) -> dict[str, Any]:

@@ -39,6 +39,11 @@ class PostgresRevisionStore:
             finally:
                 self._connection = None
 
+    @property
+    def connection(self) -> Any:
+        """The connection of the open transaction(), so another store can join it; None outside one."""
+        return self._connection
+
     def _execute(self, statement: str, values: Sequence[Any] = ()) -> Any:
         if self._connection is None:
             with self.transaction():

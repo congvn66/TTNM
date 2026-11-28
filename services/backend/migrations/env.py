@@ -15,8 +15,11 @@ BASELINE = ROOT / "docs" / "initial-schema.sql"
 
 
 def database_url() -> str:
-    """Prefer the injected runtime URL over the local-dev ini default."""
-    return os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
+    """Prefer the injected runtime URL over the local-dev ini default, in either URL form."""
+    url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+    if url.startswith(("postgresql://", "postgres://", "postgresql+psycopg://")):
+        return "postgresql+psycopg://" + url.split("://", 1)[1]
+    return url
 
 
 def run_migrations_offline() -> None:

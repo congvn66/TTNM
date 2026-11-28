@@ -61,9 +61,9 @@ def test_display_follows_the_document_format():
 
 
 @pytest.mark.parametrize("typed, locale", [
-    ("18,2.40", "vi"), ("1.234.567,89", "en"), ("21.500,", "vi"), ("21,500,", "en"), ("1e5", "vi"), ("1E5", None),
+    ("18,2.40", "vi"), ("21.500,", "vi"), ("21,500,", "en"), ("1e5", "vi"), ("1E5", None),
     ("5%", "vi"), ("1.5.5", "en"), ("1,5,5", "vi"), (".5", "vi"), ("12abc", None), ("１２", None), ("1 234", "vi"),
-    ("", None), ("Infinity", None), ("1" * 19, None), ("1.23", "vi"), ("12,5,6", None),
+    ("", None), ("Infinity", None), ("1" * 19, None), ("12,5,6", None),
 ])
 def test_a_typed_number_must_be_well_formed_in_the_document_format(typed, locale):
     with pytest.raises(TypedNumberError):
@@ -86,3 +86,15 @@ def test_an_exact_decimal_is_held_to_the_same_digit_limit():
     for value in ("1" * 19, "1e5", "1,5"):
         with pytest.raises(TypedNumberError):
             exact_number(value)
+
+
+def test_a_number_in_the_other_format_is_read_when_it_has_one_meaning() -> None:
+    assert read_typed_number("30.42", "vi") == "30.42"
+    assert read_typed_number("30,42", "en") == "30.42"
+    assert read_typed_number("1,234,567", "vi") == "1234567"
+    assert read_typed_number("1.234.567,89", "en") == "1234567.89"
+
+
+def test_the_document_format_wins_when_both_formats_read_the_text() -> None:
+    assert read_typed_number("21.500", "vi") == "21500"
+    assert read_typed_number("21.500", "en") == "21.500"

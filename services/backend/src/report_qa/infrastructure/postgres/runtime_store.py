@@ -19,6 +19,7 @@ from typing import Any, Callable
 from uuid import UUID, uuid4, uuid5
 
 from .revision_store import PostgresRevisionStore
+from report_qa.config import DEFAULT_PROJECT_NAMES
 
 
 RUNTIME_NAMESPACE = UUID("00000000-0000-0000-0000-000000000001")
@@ -26,6 +27,11 @@ RUNTIME_NAMESPACE = UUID("00000000-0000-0000-0000-000000000001")
 
 class PostgresRuntimeStore(PostgresRevisionStore):
     """Bridge the legacy dictionary API to the normalized revision graph."""
+
+    # How long a save may wait, e.g. for another worker saving the same chat.
+    # Workers set it longer than the database default (2 min on Supabase): a
+    # finished reading must wait its turn, not fail and be read again.
+    save_statement_timeout: str | None = None
 
     def __init__(self, database_url: str, owner_id: str | UUID, *, extraction_root: Path | None = None) -> None:
         super().__init__(database_url)
@@ -64,7 +70,30 @@ class PostgresRuntimeStore(PostgresRevisionStore):
     def _run_id(version_id: UUID) -> UUID:
         return uuid5(version_id, "extraction-run-1")
 
+    @staticmethod
+    def _extraction_state(item: dict[str, Any]) -> tuple[str, str | None]:
+        """The document's reading status and error code as the API shows them.
+
+        A reading still queued or running with no live job will never finish:
+        its job failed, its lease ran out with no tries left, or it was lost
+        in a crash. It is shown as failed, so the reader can offer "Thử lại".
+        A failed attempt whose job is queued for another try is shown queued.
+        """
+        run_status = item.get("extraction_status")
+        status = "ready" if run_status == "completed" else "processing" if run_status == "running" else run_status or ("ready" if item.get("version_status") == "ready" else "queued")
+        live = item.get("extraction_job_live", True)
+        if status in {"queued", "processing"} and not live:
+            return "failed", item.get("extraction_error") or "EXTRACTION_STOPPED"
+        if status == "failed" and item.get("extraction_job_live") is True:
+            return "queued", None
+        return status, item.get("extraction_error")
+
     def load_catalog(self) -> dict[str, Any]:
+        # One connection for both queries: each new one costs ~0.4 s to Supabase, and the list is polled.
+        with self.transaction():
+            return self._load_catalog()
+
+    def _load_catalog(self) -> dict[str, Any]:
         rows = self._execute(
             """SELECT id,project_id,title,created_at,updated_at,data_revision
                  FROM chats
@@ -96,7 +125,8 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                       dv.page_count, dv.status AS version_status,
                       er.status AS extraction_status, er.error_code AS extraction_error,
                       (SELECT count(*) FROM extracted_evidences ee
-                        WHERE ee.extraction_run_id=er.id) AS evidence_count
+                        WHERE ee.extraction_run_id=er.id) AS evidence_count,
+                      EXISTS (SELECT 1 FROM jobs j WHERE j.kind='extract_document' AND j.status IN ('queued','running') AND j.payload->>'document_id' = d.id::text) AS extraction_job_live
                  FROM chat_documents cd
                  JOIN document_versions dv ON dv.id=cd.document_version_id
                  JOIN documents d ON d.id=dv.document_id
@@ -124,15 +154,19 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                     "created_at": self._iso(item["document_created_at"]),
                     "storage_name": item["storage_key"],
                     "extraction_name": f"{item['version_id']}.json",
-                    "extraction_status": "ready" if item["extraction_status"] == "completed" else "processing" if item["extraction_status"] == "running" else item["extraction_status"] or ("ready" if item["version_status"] == "ready" else "queued"),
                     "page_count": item["page_count"],
                     "numeric_evidence_count": int(item["evidence_count"] or 0),
-                    "extraction_error": item["extraction_error"],
                 }
             )
+            session["documents"][-1]["extraction_status"], session["documents"][-1]["extraction_error"] = self._extraction_state(item)
         return {"sessions": sessions}
 
     def load_session(self, chat_id: UUID | str, *, row: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        # One connection for all of its queries: a new one per query costs ~0.4 s each to Supabase.
+        with self.transaction():
+            return self._load_session(chat_id, row=row)
+
+    def _load_session(self, chat_id: UUID | str, *, row: dict[str, Any] | None = None) -> dict[str, Any] | None:
         chat_uuid = self._uuid(chat_id)
         if row is None:
             rows = self._execute(
@@ -162,7 +196,8 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                         dv.file_hash, dv.byte_size, dv.status AS version_status,
                         dv.page_count, er.id AS extraction_run_id,
                         er.status AS extraction_status, er.error_code AS extraction_error,
-                        (SELECT count(*) FROM extracted_evidences ee WHERE ee.extraction_run_id=er.id) AS evidence_count
+                        (SELECT count(*) FROM extracted_evidences ee WHERE ee.extraction_run_id=er.id) AS evidence_count,
+                        EXISTS (SELECT 1 FROM jobs j WHERE j.kind='extract_document' AND j.status IN ('queued','running') AND j.payload->>'document_id' = d.id::text) AS extraction_job_live
                    FROM chat_documents cd
                    JOIN document_versions dv ON dv.id=cd.document_version_id
                    JOIN documents d ON d.id=dv.document_id
@@ -178,7 +213,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         for item in document_rows:
             version_id = item["version_id"]
             document_id = item["document_id"]
-            extraction_status = "ready" if item["extraction_status"] == "completed" else "processing" if item["extraction_status"] == "running" else item["extraction_status"] or ("ready" if item["version_status"] == "ready" else "queued")
+            extraction_status, extraction_error = self._extraction_state(item)
             extraction_name = f"{version_id}.json"
             if self.extraction_root:
                 target_path = self.extraction_root / extraction_name
@@ -198,7 +233,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                 "extraction_status": extraction_status,
                 "page_count": item["page_count"],
                 "numeric_evidence_count": int(item["evidence_count"] or 0),
-                "extraction_error": item["extraction_error"],
+                "extraction_error": extraction_error,
             }
             document["evidence_state"] = self._load_evidence_state(chat_uuid, document_id)
             document["chart_extractions"] = self._load_chart_extractions(chat_uuid, version_id)
@@ -323,7 +358,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                   ORDER BY sr.meta->>'evidence_key', rev.revision_no""",
             (chat_id, document_id),
         )
-        state = {"data_revision": 0, "items": {}}
+        state = {"data_revision": 0, "items": {}, "event_count": 0}
         grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
         metadata: dict[str, dict[str, Any]] = {}
         for row in rows:
@@ -368,11 +403,15 @@ class PostgresRuntimeStore(PostgresRevisionStore):
     ) -> None:
         """Persist the current API projection in one DB transaction."""
         with self.transaction():
+            if self.save_statement_timeout:
+                self._execute(f"SET LOCAL statement_timeout = '{self.save_statement_timeout}'")
             self.ensure_owner(self.owner_id, email="local-runtime@sourcelens.invalid", display_name="Local runtime")
             # The API process cache can contain sessions for more than one
             # authenticated owner.  Never replay another owner's snapshot
             # through this owner-scoped store during a save.
-            for session in (catalog.get("sessions") or {}).values():
+            # Copy first: other requests add sessions to the shared catalog while this save runs, and
+            # iterating the live dict raised "dictionary changed size during iteration" (500s under load).
+            for session in list((catalog.get("sessions") or {}).values()):
                 # Runtime snapshots store owner_id as a string while the
                 # store is initialized with a UUID.  Comparing the two
                 # directly made every session get skipped during catalog
@@ -433,12 +472,67 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                      )""",
                 (file_name, document_uuid, chat_uuid, document_uuid),
             )
+            # The Library shows and searches this name; a sync never overwrites it (see _sync_session).
+            self._execute(
+                """UPDATE project_documents SET display_name=%s,version=version+1
+                     WHERE document_id=%s AND owner_id=%s AND display_name IS DISTINCT FROM %s AND EXISTS (
+                       SELECT 1 FROM chat_documents cd JOIN document_versions dv ON dv.id=cd.document_version_id
+                        WHERE cd.chat_id=%s AND dv.document_id=project_documents.document_id
+                     )""",
+                (file_name, document_uuid, self.owner_id, file_name, chat_uuid),
+            )
             rows = self._execute(
                 """SELECT 1 FROM documents d WHERE d.id=%s AND d.owner_id=%s
                    AND d.deleted_at IS NULL""",
                 (document_uuid, self.owner_id),
             )
         return bool(rows)
+
+    def requeue_failed_extraction(self, chat_id: UUID | str, document_id: UUID | str) -> str:
+        """Put a document's failed (or stopped) reading back in the queue state. Call inside transaction().
+
+        The reading keeps its run: a failed run has no stored values. The caller
+        queues the job in the same transaction, so the document never waits
+        without one. Returns "requeued", "missing" (not in this chat) or "busy"
+        (a reading job is already live: a second "Thử lại" in parallel).
+        """
+        chat_uuid, document_uuid = self._uuid(chat_id), self._uuid(document_id)
+        rows = self._execute(
+            """SELECT dv.id AS version_id FROM chat_documents cd
+                 JOIN document_versions dv ON dv.id=cd.document_version_id
+                 JOIN documents d ON d.id=dv.document_id
+                WHERE cd.chat_id=%s AND d.id=%s AND d.owner_id=%s AND d.deleted_at IS NULL
+                ORDER BY dv.version_no DESC LIMIT 1 FOR UPDATE OF dv""",
+            (chat_uuid, document_uuid, self.owner_id),
+        )
+        if not rows:
+            return "missing"
+        # The row lock above makes a parallel retry wait here, then see the first one's job.
+        if self._execute(
+            "SELECT 1 FROM jobs WHERE kind='extract_document' AND status IN ('queued','running') AND payload->>'document_id'=%s LIMIT 1",
+            (str(document_uuid),),
+        ):
+            return "busy"
+        version_id = rows[0]["version_id"]
+        self._execute(
+            """UPDATE extraction_runs SET status='queued',completed_at=NULL,error_code=NULL
+                WHERE document_version_id=%s AND scope='base_document' AND status IN ('queued','running','failed')""",
+            (version_id,),
+        )
+        self._execute("UPDATE document_versions SET status='uploaded' WHERE id=%s AND status<>'ready'", (version_id,))
+        self._execute("UPDATE chat_documents SET status='queued',error_code=NULL,updated_at=now() WHERE chat_id=%s AND document_version_id=%s", (chat_uuid, version_id))
+        return "requeued"
+
+    def project_chat(self, project_id: UUID | str) -> dict[str, Any] | None:
+        """The newest live chat of this owner's project, as {"id": ...}; {} for a project with no chat; None for no such project."""
+        project_uuid = self._uuid(project_id)
+        if not self._execute("SELECT 1 FROM projects WHERE id=%s AND owner_id=%s AND deleted_at IS NULL", (project_uuid, self.owner_id)):
+            return None
+        rows = self._execute(
+            "SELECT id FROM chats WHERE project_id=%s AND owner_id=%s AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1",
+            (project_uuid, self.owner_id),
+        )
+        return {"id": str(rows[0]["id"])} if rows else {}
 
     def archive_document(self, chat_id: UUID | str, document_id: UUID | str) -> bool:
         """Soft-delete a document after proving its chat ownership relation."""
@@ -468,22 +562,18 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         chat_id = self._uuid(session["id"])
         project_id = self._uuid(session["project_id"]) if session.get("project_id") else None
         if project_id is None:
-            canonical_name = "Workspace " + chr(0x00E1) + " nh" + chr(0x00E2) + "n"
-            canonical = self._execute(
-                "SELECT id FROM projects WHERE owner_id=%s AND name=%s AND deleted_at IS NULL ORDER BY created_at LIMIT 1",
-                (self.owner_id, canonical_name),
+            # The owner's default project under any name it has had; a new one gets the current name.
+            default = self._execute(
+                "SELECT id FROM projects WHERE owner_id=%s AND name = ANY(%s) AND deleted_at IS NULL ORDER BY created_at LIMIT 1",
+                (self.owner_id, list(DEFAULT_PROJECT_NAMES)),
             )
-            project_id = canonical[0]["id"] if canonical else self._execute(
+            project_id = default[0]["id"] if default else self._execute(
                 """INSERT INTO projects (owner_id,name) VALUES (%s,%s)
                    ON CONFLICT (owner_id,name) WHERE deleted_at IS NULL
                    DO UPDATE SET updated_at=projects.updated_at
                    RETURNING id""",
-                (self.owner_id, canonical_name),
+                (self.owner_id, DEFAULT_PROJECT_NAMES[0]),
             )[0]["id"]
-            session["project_id"] = str(project_id)
-        if project_id is None:
-            default = self._execute("SELECT id FROM projects WHERE owner_id=%s AND name='Workspace cá nhân' AND deleted_at IS NULL ORDER BY created_at LIMIT 1", (self.owner_id,))
-            project_id = default[0]["id"] if default else self._execute("INSERT INTO projects (owner_id,name) VALUES (%s,%s) RETURNING id", (self.owner_id, "Workspace cá nhân"))[0]["id"]
             session["project_id"] = str(project_id)
         self._execute(
             """INSERT INTO chats (id,owner_id,project_id,title,data_revision,created_at,updated_at)
@@ -563,8 +653,11 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                ON CONFLICT (id) DO NOTHING""",
             (run_id, version_id, "queued"),
         )
+        # Only a running reading can fail: a snapshot loaded before "Thử lại" (a long answer or brief) must
+        # not fail the reading queued again since. A run left "running" by an old snapshot is harmless: with no
+        # live job it shows as failed (_extraction_state).
         if version_status == "failed":
-            self._execute("UPDATE extraction_runs SET status='failed',completed_at=now(),error_code=%s WHERE id=%s", (document.get("extraction_error") or "EXTRACTION_FAILED", run_id))
+            self._execute("UPDATE extraction_runs SET status='failed',completed_at=now(),error_code=%s WHERE id=%s AND status='running'", (document.get("extraction_error") or "EXTRACTION_FAILED", run_id))
         elif version_status == "processing":
             self._execute("UPDATE extraction_runs SET status='running',started_at=now(),completed_at=NULL,error_code=NULL WHERE id=%s AND status <> 'completed'", (run_id,))
         chat_status = "queued" if version_status == "uploaded" else version_status
@@ -592,6 +685,15 @@ class PostgresRuntimeStore(PostgresRevisionStore):
     def _complete_extraction(self, chat_id: UUID, version_id: UUID, run_id: UUID, document: dict[str, Any], artifact: dict[str, Any]) -> None:
         existing = self._execute("SELECT 1 FROM extracted_evidences WHERE extraction_run_id=%s LIMIT 1", (run_id,))
         if not existing:
+            # The text of each paragraph, so a number read from it can be shown and checked in its sentence.
+            for paragraph in artifact.get("paragraphs") or []:
+                self._execute(
+                    """INSERT INTO source_regions (id,extraction_run_id,region_key,page_number,bbox,region_type,extracted_text,meta)
+                       VALUES (%s,%s,%s,%s,%s::jsonb,'paragraph',%s,%s::jsonb)
+                       ON CONFLICT (extraction_run_id,region_key) DO NOTHING""",
+                    (uuid5(run_id, f"region:{paragraph['paragraph_key']}"), run_id, paragraph["paragraph_key"], int(paragraph["page_number"]),
+                     self._json(paragraph["bbox"]), paragraph["text"], self._json({"label": paragraph.get("label")})),
+                )
             for item in (artifact.get("evidence_batch") or {}).get("evidences", []):
                 # One region per value. Two numbers in one text span used to
                 # share a region, which names a single evidence_key: the second
@@ -603,7 +705,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                     """INSERT INTO source_regions (id,extraction_run_id,region_key,page_number,bbox,region_type,extracted_text,meta)
                        VALUES (%s,%s,%s,%s,%s::jsonb,%s,%s,%s::jsonb)
                        ON CONFLICT (extraction_run_id,region_key) DO NOTHING""",
-                    (region_id, run_id, region_key, int(item["page_number"]), self._json(item.get("bbox")), region_type, item.get("raw_text"), self._json({"evidence_key": item["evidence_key"], "source_region_key": item.get("source_region_key"), "method_label": item.get("method_label"), "table_locator": item.get("table_locator"), "chart_read": item.get("chart_read")})),
+                    (region_id, run_id, region_key, int(item["page_number"]), self._json(item.get("bbox")), region_type, item.get("raw_text"), self._json({"evidence_key": item["evidence_key"], "source_region_key": item.get("source_region_key"), "method_label": item.get("method_label"), "table_locator": item.get("table_locator"), "paragraph_locator": item.get("paragraph_locator"), "chart_read": item.get("chart_read")})),
                 )
                 numeric = item.get("numeric_value")
                 method = str(item.get("extraction_method") or "text")
@@ -866,7 +968,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                 self._execute(
                     """INSERT INTO evidence_revisions (id,chat_id,chat_evidence_id,revision_no,value_kind,numeric_value,semantic,data_status,verification_status,action,reason,created_by)
                        VALUES (%s,%s,%s,%s,'number',%s::numeric,'{}'::jsonb,'valid','edited','edit',%s,%s)""",
-                    (revision_id, chat_id, rows[0]["id"], revision_no, numeric, revision.get("reason") or "Edited in API", self.owner_id),
+                    (revision_id, chat_id, rows[0]["id"], revision_no, numeric, revision.get("reason") or "", self.owner_id),
                 )
                 self._execute("UPDATE chat_evidences SET current_revision_id=%s WHERE id=%s", (revision_id, rows[0]["id"]))
                 current_id = str(revision_id)
@@ -886,7 +988,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                 user_id = self._uuid(user["id"])
             except (ValueError, TypeError):
                 continue
-            exists = self._execute("SELECT id,status,current_answer_revision_id FROM messages WHERE id=%s AND chat_id=%s", (assistant_id, chat_id))
+            exists = self._execute("SELECT id,status,current_answer_revision_id,needs_update,content FROM messages WHERE id=%s AND chat_id=%s", (assistant_id, chat_id))
             is_processing = assistant.get("status") == "processing" or (not assistant.get("status") and assistant.get("mode") == "answer_question_job")
             revision = (assistant.get("answer_revisions") or [{}])[0]
             try:
@@ -913,6 +1015,11 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                     self._execute("UPDATE messages SET content=%s,status='processing',needs_update=%s,updated_at=now() WHERE id=%s AND status='processing'", (assistant.get("body", ""), bool(assistant.get("needs_update")), assistant_id))
                     continue
                 current_revision = exists[0].get("current_answer_revision_id")
+                stored = exists[0]
+                if (revision_id == current_revision and stored.get("status") == ("failed" if status == "processing_error" else "completed")
+                        and bool(stored.get("needs_update")) == bool(assistant.get("needs_update")) and stored.get("content") == assistant.get("body", "")):
+                    # Unchanged: every save of a session used to rewrite every finished answer of its chat.
+                    continue
                 incoming_id = revision_id
                 incoming_exists = self._execute("SELECT 1 FROM answer_revisions WHERE id=%s", (incoming_id,))
                 if not incoming_exists:
