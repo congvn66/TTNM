@@ -26,6 +26,7 @@ from report_qa.api.main import SessionQuestionRequest, ask_session_document, com
 from report_qa.api.user_messages import MESSAGES
 from report_qa.config import settings
 from report_qa.infrastructure.postgres.job_queue import PostgresJobQueue
+from report_qa.infrastructure.postgres.runtime_store import PostgresRuntimeStore
 
 
 logger = logging.getLogger("report_qa.worker")
@@ -156,17 +157,30 @@ def complete_answer_job(payload: dict[str, object], *, publish_guard=None, last_
     save_session(session, owner_id)
 
 
+# A reading is one long library call that cannot be stopped from inside, so a
+# worker whose job is cancelled exits with this code and start_worker.sh starts
+# it again: the cancelled job stops holding a worker within HEARTBEAT_SECONDS.
+CANCELLED_EXIT_CODE = 75
+HEARTBEAT_SECONDS = 10
+
+
 def _heartbeat_loop(queue: PostgresJobQueue, job_id: UUID, lease_token: UUID, stop: threading.Event) -> None:
-    while not stop.wait(20):
-        if not queue.heartbeat(job_id=job_id, lease_token=lease_token, lease_seconds=60, progress={"stage": "running"}):
-            logger.warning("job lease lost during heartbeat job_id=%s", job_id)
-            return
+    while not stop.wait(HEARTBEAT_SECONDS):
+        if queue.heartbeat(job_id=job_id, lease_token=lease_token, lease_seconds=60, progress={"stage": "running"}):
+            continue
+        if queue.status(job_id) == "cancelled":
+            logger.warning("job cancelled while running; restarting the worker job_id=%s", job_id)
+            os._exit(CANCELLED_EXIT_CODE)
+        logger.warning("job lease lost during heartbeat job_id=%s", job_id)
+        return
 
 
 def run(*, poll_seconds: float = 1.0, worker_id: str | None = None, once: bool = False) -> None:
     if settings.persistence_backend != "postgres":
         raise RuntimeError("worker requires PERSISTENCE_BACKEND=postgres")
     queue = PostgresJobQueue(settings.database_url)
+    # Two workers that finish readings of one chat save it one after the other.
+    PostgresRuntimeStore.save_statement_timeout = "10min"
     # The launcher passes a stable identity through the environment so that
     # ``job_events`` can distinguish a deployed worker from a one-off smoke
     # process.  Fall back to the PID for local/manual runs.

@@ -197,6 +197,11 @@ class PostgresJobQueue:
             connection.execute("INSERT INTO job_events (job_id,event_no,event_type,payload) VALUES (%s,%s,'progress',%s::jsonb)", (job_id, event_no, Jsonb(progress or {})))
             return True
 
+    def status(self, job_id: UUID) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute("SELECT status FROM jobs WHERE id=%s", (job_id,)).fetchone()
+            return row["status"] if row else None
+
     def can_publish(self, *, job_id: UUID, lease_token: UUID, input_data_revision: int | None = None) -> bool:
         """Return whether this worker still owns a live, non-stale lease.
 

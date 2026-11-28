@@ -93,3 +93,34 @@ def test_answer_job_marks_its_request_as_the_worker(monkeypatch):
     runner.complete_answer_job({"session_id": "s", "assistant_message_id": "placeholder", "owner_id": "o", "document_id": "d", "question": "q"})
 
     assert seen == [True]
+
+
+class _LostLease:
+    def __init__(self, status):
+        self._status = status
+
+    def heartbeat(self, **_kwargs):
+        return False
+
+    def status(self, _job_id):
+        return self._status
+
+
+def test_a_worker_whose_running_job_is_cancelled_exits_to_stop_the_work(monkeypatch) -> None:
+    import threading
+    from uuid import uuid4
+
+    from report_qa.worker import runner as worker_runner
+
+    exits = []
+    monkeypatch.setattr(worker_runner, "HEARTBEAT_SECONDS", 0)
+    monkeypatch.setattr(worker_runner.os, "_exit", lambda code: exits.append(code) or (_ for _ in ()).throw(SystemExit(code)))
+    try:
+        worker_runner._heartbeat_loop(_LostLease("cancelled"), uuid4(), uuid4(), threading.Event())
+    except SystemExit:
+        pass
+    assert exits == [worker_runner.CANCELLED_EXIT_CODE]
+
+    exits.clear()
+    worker_runner._heartbeat_loop(_LostLease("running"), uuid4(), uuid4(), threading.Event())
+    assert exits == []

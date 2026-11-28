@@ -28,6 +28,11 @@ RUNTIME_NAMESPACE = UUID("00000000-0000-0000-0000-000000000001")
 class PostgresRuntimeStore(PostgresRevisionStore):
     """Bridge the legacy dictionary API to the normalized revision graph."""
 
+    # How long a save may wait, e.g. for another worker saving the same chat.
+    # Workers set it longer than the database default (2 min on Supabase): a
+    # finished reading must wait its turn, not fail and be read again.
+    save_statement_timeout: str | None = None
+
     def __init__(self, database_url: str, owner_id: str | UUID, *, extraction_root: Path | None = None) -> None:
         super().__init__(database_url)
         self.owner_id = UUID(str(owner_id))
@@ -398,6 +403,8 @@ class PostgresRuntimeStore(PostgresRevisionStore):
     ) -> None:
         """Persist the current API projection in one DB transaction."""
         with self.transaction():
+            if self.save_statement_timeout:
+                self._execute(f"SET LOCAL statement_timeout = '{self.save_statement_timeout}'")
             self.ensure_owner(self.owner_id, email="local-runtime@sourcelens.invalid", display_name="Local runtime")
             # The API process cache can contain sessions for more than one
             # authenticated owner.  Never replay another owner's snapshot
