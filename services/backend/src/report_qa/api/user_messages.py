@@ -95,6 +95,7 @@ MESSAGES = {
     "AUTH_REQUIRED": "Đăng nhập để tiếp tục.",
     "GUEST_LIMIT": "Có quá nhiều lượt dùng thử từ mạng này. Thử lại sau một giờ.",
     "GUEST_UPLOAD_LIMIT": "Khách tải lên tối đa 3 báo cáo mỗi ngày. Đăng nhập để tải thêm.",
+    "GUEST_EXPIRED": "Phiên dùng thử đã hết hạn. Tải lại trang rồi tạo tài khoản.",
     "EMAIL_ALREADY_REGISTERED": "Không tạo được tài khoản với thông tin này.",
     "INVALID_CREDENTIALS": "Email hoặc mật khẩu không đúng.",
     "RESET_TOKEN_INVALID": "Liên kết đặt lại không hợp lệ hoặc đã hết hạn.",

@@ -42,7 +42,7 @@ from report_qa.domain.contracts import validate_calculation_result_v1, validate_
 from .ai_provider import ProviderError, _load_local_env, assistant_mode, live_provider, planner_client, provider_mode
 from .jobs import router as jobs_router
 from .library import router as library_router
-from .auth import DEMO_OWNER_ID, guest_uploads_left, owner_id_for_request, router as auth_router, settings_router as auth_settings_router, web_origins
+from .auth import DEMO_OWNER_ID, guest_upload_slot, owner_id_for_request, router as auth_router, settings_router as auth_settings_router, web_origins
 from .devices import router as auth_sessions_router
 from .extraction_slots import ExtractionSlots
 from .user_messages import MESSAGES, error_detail, user_error
@@ -72,6 +72,7 @@ from .number_state import ReadingNotCurrent, apply_event, edit_event, replay, ru
 from .object_storage_runtime import (
     ObjectStorageError,
     cache_pdf,
+    object_storage,
     pdf_storage_key,
     read_extraction,
     persist_extraction_cache,
@@ -335,6 +336,62 @@ def save_catalog(value: dict[str, Any], owner_id: str | UUID | None = None) -> N
         disk_save_catalog(value)
 
 
+class ScratchSession(dict):
+    """A copy of a session that a request may change but must not save (the worker's answer run)."""
+
+
+def save_session(session: dict[str, Any], owner_id: str | UUID | None = None) -> None:
+    """Persist this request's own session object.
+
+    With PostgreSQL, get_session gives every request a fresh copy and puts it
+    in the shared cache, replacing the copy of a request still running.
+    Saving the shared cache then wrote the newer copy and lost the older
+    request's change (parallel uploads kept one document row of eight).
+    Saving the object the request changed has no such race: a save only adds
+    or updates rows, it does not remove what another copy lacks.
+    """
+    if isinstance(session, ScratchSession):
+        return
+    owner = owner_id if owner_id is not None else session.get("owner_id", LOCAL_OWNER_ID)
+    if not postgres_runtime:
+        save_catalog(catalog, owner)
+        return
+    try:
+        save_catalog({"sessions": {session["id"]: session}}, owner)
+    except Exception:
+        # The next request reloads this session from the database instead of reusing a refused copy.
+        with catalog_lock:
+            if catalog["sessions"].get(session["id"]) is session:
+                catalog["sessions"].pop(session["id"], None)
+        raise
+
+
+def _store_upload(session: dict[str, Any], record: dict[str, Any], trace_id: str | None) -> dict[str, Any] | None:
+    """Save the session with its new document and queue the document's extraction in one transaction.
+
+    So a document row never exists without its job, nor a job without its
+    row. Returns the job, or None without a durable queue.
+    """
+    owner = str(session.get("owner_id", LOCAL_OWNER_ID))
+    if not durable_job_queue:
+        save_session(session, owner)
+        return None
+    store = _runtime_for_owner(owner)
+    try:
+        with store.transaction():
+            store.sync_catalog({"sessions": {session["id"]: session}}, extraction_loader=_load_extraction_for_persistence)
+            return durable_job_queue.enqueue(
+                owner_id=UUID(owner), chat_id=UUID(session["id"]), kind="extract_document", dedup_key=f"extract:{record['id']}",
+                payload={"session_id": session["id"], "document_id": record["id"], "trace_id": trace_id, "owner_id": owner},
+                connection=store.connection,
+            )
+    except Exception:
+        with catalog_lock:
+            if catalog["sessions"].get(session["id"]) is session:
+                catalog["sessions"].pop(session["id"], None)
+        raise
+
+
 class StorableRequest(BaseModel):
     """A request whose text is saved as it is, so it must hold no unstorable character."""
 
@@ -592,8 +649,13 @@ def extract_pdf_pages(path: Any, document_id: str, document_version_id: str) -> 
         return {"status": "failed", "page_count": None, "numeric_evidence_count": 0, "error": type(exc).__name__}
 
 
-def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str | None = None) -> dict[str, Any]:
-    """Store an uploaded PDF. Blocking (disk, pypdf, R2, database): call it from a sync endpoint, which runs in the thread pool."""
+def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str | None = None, *, store=None) -> dict[str, Any]:
+    """Store an uploaded PDF. Blocking (disk, pypdf, R2, database): call it from a sync endpoint, which runs in the thread pool.
+
+    ``store(record)`` saves the session with the new document (default:
+    save_session). When it fails the document is taken out of the session
+    and its stored PDF is deleted, so no PDF is left without its row.
+    """
     # Browsers may send a client path; only its last part is the name.
     name = clean_file_name(re.split(r"[\\/]", file.filename or "unnamed.pdf")[-1])
     if not name.lower().endswith(".pdf"):
@@ -656,7 +718,18 @@ def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str | None 
     with catalog_lock:
         session["documents"].append(record)
         session["updated_at"] = now
-    save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+    try:
+        (store or (lambda _record: save_session(session)))(record)
+    except Exception:
+        with catalog_lock:
+            session["documents"] = [item for item in session["documents"] if item is not record]
+        final_path.unlink(missing_ok=True)
+        if uses_remote_object_storage():
+            try:
+                object_storage.delete_file(storage_name)
+            except Exception:
+                logger.exception("could not delete the PDF of an upload that was not saved: %s", storage_name)
+        raise
     flow_log(
         "DOCUMENT_STORED",
         trace_id=trace_id,
@@ -691,7 +764,7 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
     owner = session.get("owner_id", LOCAL_OWNER_ID)
     with catalog_lock:
         document.update(extraction_status="processing", extraction_error=None)
-    save_catalog(catalog, owner)
+    save_session(session, owner)
     extraction = extract_pdf_pages(cache_pdf(document["storage_name"]), document_id, document_id)
     artifact = _load_extraction_artifact(extraction["extraction_name"]) if extraction["status"] == "ready" else None
     with catalog_lock:
@@ -703,7 +776,7 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
             document["extraction_history"][-1]["affected_message_ids"] = _flag_answers_whose_inputs_changed(session, document)
         session["updated_at"] = utc_now()
     try:
-        save_catalog(catalog, owner)
+        save_session(session, owner)
         # PostgreSQL names a reading after its document version and renames the local file during
         # save_catalog; R2 still has it under the worker's first name. Store it under the final name
         # too, or an API on another machine (cache_extraction) cannot download it.
@@ -715,7 +788,7 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
             document.update(extraction_status="failed", extraction_error="EXTRACTION_PUBLISH_FAILED")
         # Persist a terminal document state when the artifact cannot be saved
         # (e.g. schema validation); never leave the UI polling indefinitely.
-        save_catalog(catalog, owner)
+        save_session(session, owner)
         raise
     flow_log(
         "EXTRACTION_FINISHED",
@@ -818,7 +891,7 @@ def create_session(payload: SessionCreateRequest, request: Request) -> dict[str,
     session = {"id": session_id, "owner_id": str(owner_id), "title": payload.title.strip(), "created_at": now, "updated_at": now, "documents": [], "messages": []}
     with catalog_lock:
         catalog["sessions"][session_id] = session
-    save_catalog(catalog, owner_id)
+    save_session(session, owner_id)
     return {"session": public_session(session)}
 
 
@@ -859,7 +932,7 @@ def update_session(session_id: str, payload: SessionUpdateRequest, request: Requ
         with catalog_lock:
             session["title"] = title
             session["updated_at"] = utc_now()
-        save_catalog(catalog, owner_id)
+        save_session(session, owner_id)
     session["title"] = title
     session["updated_at"] = utc_now()
     flow_log("SESSION_RENAMED", trace_id=trace_id_for(request), session_id=session_id)
@@ -906,21 +979,14 @@ def delete_session(session_id: str, request: Request) -> dict[str, Any]:
 def upload_session_document(session_id: str, request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> dict[str, Any]:
     owner_id = owner_id_for_request(request)
     session = get_session(session_id, owner_id)
-    if guest_uploads_left(owner_id) == 0:
-        raise user_error(429, "GUEST_UPLOAD_LIMIT")
     trace_id = trace_id_for(request)
-    flow_log("UPLOAD_ACCEPTED", trace_id=trace_id, session_id=session_id, file_name_present=bool(file.filename))
-    document = persist_pdf(file, session, trace_id=trace_id)
-    job = None
-    if durable_job_queue:
-        job = durable_job_queue.enqueue(
-            owner_id=UUID(str(session.get("owner_id", owner_id))),
-            chat_id=UUID(session_id),
-            kind="extract_document",
-            dedup_key=f"extract:{document['id']}",
-            payload={"session_id": session_id, "document_id": document["id"], "trace_id": trace_id, "owner_id": str(session.get("owner_id", owner_id))},
-        )
-    else:
+    # A guest's slot is held until the document row is stored, so parallel uploads cannot pass the daily limit.
+    jobs: list[dict[str, Any] | None] = []
+    with guest_upload_slot(owner_id):
+        flow_log("UPLOAD_ACCEPTED", trace_id=trace_id, session_id=session_id, file_name_present=bool(file.filename))
+        document = persist_pdf(file, session, trace_id=trace_id, store=lambda record: jobs.append(_store_upload(session, record, trace_id)))
+    job = jobs[0] if jobs else None
+    if not durable_job_queue:
         background_tasks.add_task(_extract_in_background, session_id, document["id"], trace_id)
     persistence = {"binary_retained": True, "max_bytes": MAX_PDF_BYTES, "max_pages": MAX_PDF_PAGES}
     if durable_job_queue:
@@ -1157,7 +1223,7 @@ def rerun_document_extraction(session_id: str, document_id: str, request: Reques
         affected: list[str] = []
         document.update({"extraction_status": "queued", "page_count": None, "numeric_evidence_count": 0, "extraction_error": None})
         session["updated_at"] = utc_now()
-        save_catalog(catalog)
+        save_session(session)
         document_payload = json.loads(json.dumps(public_document(document)))
     flow_log("EXTRACTION_RERUN_QUEUED", trace_id=trace_id, session_id=session_id, document_id=document_id, previous_status=previous["status"], affected_answer_count=len(affected))
     background_tasks.add_task(_extract_in_background, session_id, document_id, trace_id)
@@ -1311,7 +1377,7 @@ def create_document_brief(session_id: str, document_id: str, request: Request) -
             snapshot=lambda message: None,
             load_extraction=lambda name: artifact,
             resolve_pdf=cache_pdf,
-            save=lambda value: save_catalog(value, owner),
+            save=lambda value: save_session(session, owner),
             persist_chart=(lambda result, region_key: _persist_chart_read(session, document, result, region_key)) if postgres_runtime else None,
             record=False,
             # A five-point overview of a dense report needs a few more turns than one question.
@@ -1321,7 +1387,7 @@ def create_document_brief(session_id: str, document_id: str, request: Request) -
         brief = {"structured_answer": message["structured_answer"], "citations": message["citations"], "created_at": message["created_at"], "marker": marker}
         with catalog_lock:
             document["brief"] = brief
-        save_catalog(catalog, owner)
+        save_session(session, owner)
         return {"status": "ready", "brief": brief}
     except ProviderError as exc:
         raise ai_failure(exc.code, str(exc), trace_id, exc.http_status) from exc
@@ -1415,7 +1481,7 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
             _append_edit(document, evidence_key, revision)
             affected = mark_answers_needing_update(session, document_id, evidence_key, current["id"])
             session["updated_at"] = utc_now()
-            save_catalog(catalog)
+            save_session(session)
     if postgres_runtime:
         # The database repeats the expected_revision_id check in its own
         # transaction, so this network call stays outside the catalog lock.
@@ -1631,7 +1697,7 @@ def _append_exchange(session: dict[str, Any], user_message: dict[str, Any], assi
         session["messages"].extend([user_message, assistant_message])
         session["updated_at"] = now
     try:
-        save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+        save_session(session)
     except Exception:
         # Not stored: keep the refused pair out of every later save.
         with catalog_lock:
@@ -1756,7 +1822,7 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
     # network client can send the X-Worker-Job header but cannot set state.
     worker_mode = getattr(request.state, "worker_job", False) is True
     if worker_mode:
-        session = deepcopy(session)
+        session = ScratchSession(deepcopy(session))
     trace_id = trace_id_for(request)
     trace = [trace_event("question_received", "ok", trace_id=trace_id, question_chars=len(payload.question))]
     idempotency_key = request.headers.get("Idempotency-Key")
@@ -1775,7 +1841,7 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
             if len(request_keys) > 128:
                 oldest = min(request_keys, key=lambda key: request_keys[key].get("created_at", ""))
                 request_keys.pop(oldest, None)
-            save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+            save_session(session)
         return response
     document = next((item for item in session["documents"] if item["id"] == payload.document_id), None)
     if document is None:
@@ -1812,7 +1878,7 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
             payload={"session_id": session_id, "document_id": document["id"], "question": payload.question, "user_message_id": user_message["id"], "assistant_message_id": assistant_message["id"], "trace_id": trace_id, "owner_id": str(session.get("owner_id", LOCAL_OWNER_ID))},
             input_data_revision=int(session.get("data_revision") or 0),
         )
-        save_catalog(catalog, session.get("owner_id", LOCAL_OWNER_ID))
+        save_session(session)
         response.status_code = 202
         flow_log("ANSWER_JOB_QUEUED", trace_id=trace_id, session_id=session_id, document_id=document["id"], job_id=job.get("id"), assistant_message_id=assistant_message["id"])
         return finish({"user_message": user_message, "assistant_message": assistant_message, "limitations": [], "trace_id": trace_id, "status": "queued", "job": job})
@@ -1828,7 +1894,7 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
                 snapshot=snapshot_answer_revision,
                 load_extraction=lambda name: artifact,
                 resolve_pdf=cache_pdf,
-                save=lambda value: save_catalog(value, owner),
+                save=lambda value: save_session(session, owner),
                 persist_chart=(lambda result, region_key: _persist_chart_read(session, document, result, region_key)) if postgres_runtime else None,
             ))
         except ProviderError as exc:
@@ -2221,6 +2287,7 @@ def upload_document(request: Request, background_tasks: BackgroundTasks, file: U
         if default_id not in catalog["sessions"]:
             now = utc_now()
             catalog["sessions"][default_id] = {"id": default_id, "owner_id": str(owner_id), "title": "Uploads", "created_at": now, "updated_at": now, "documents": [], "messages": []}
-    document = persist_pdf(file, catalog["sessions"][default_id])
+    with guest_upload_slot(owner_id):
+        document = persist_pdf(file, catalog["sessions"][default_id])
     background_tasks.add_task(_extract_in_background, default_id, document["id"], trace_id_for(request), owner_id)
     return {"upload": {**document, "persistence": {"adapter": "cloudflare_r2" if uses_remote_object_storage() else "local_filesystem", "binary_retained": True, "max_bytes": MAX_PDF_BYTES, "max_pages": MAX_PDF_PAGES}}, "next_action": "Open file_url with the PDF.js reader."}

@@ -27,7 +27,7 @@ from report_qa.infrastructure.postgres.job_queue import PostgresJobQueue
 
 logger = logging.getLogger("report_qa.worker")
 STOP = False
-# Expired guests are removed when the worker is idle, at most this often.
+# Expired guests are removed this often, between jobs, by whichever worker gets the lock.
 CLEANUP_EVERY_SECONDS = 3600
 
 
@@ -35,10 +35,12 @@ def _clean_expired_guests() -> None:
     from psycopg.rows import dict_row
 
     from report_qa.api.object_storage_runtime import object_storage
-    from report_qa.application.guest_cleanup import remove_expired_guests
+    from report_qa.api.session_storage import EXTRACTION_ROOT, UPLOAD_ROOT, number_state_root
+    from report_qa.application.guest_cleanup import LocalCopies, remove_expired_guests
     try:
-        with psycopg.connect(settings.database_url, row_factory=dict_row) as connection:
-            removed = remove_expired_guests(connection, object_storage)
+        local = LocalCopies(uploads=UPLOAD_ROOT, extractions=EXTRACTION_ROOT, number_state=number_state_root())
+        with psycopg.connect(settings.database_url, row_factory=dict_row, autocommit=True) as connection:
+            removed = remove_expired_guests(connection, object_storage, local)
         if removed:
             logger.info("removed %d expired guests", removed)
     except Exception:
@@ -130,6 +132,10 @@ def run(*, poll_seconds: float = 1.0, worker_id: str | None = None, once: bool =
     reconnect_delay = max(1.0, poll_seconds)
     next_cleanup = 0.0
     while not STOP:
+        # On a clock, not only when idle: a busy worker must still remove expired guests.
+        if not once and time.monotonic() >= next_cleanup:
+            next_cleanup = time.monotonic() + CLEANUP_EVERY_SECONDS
+            _clean_expired_guests()
         try:
             job = queue.claim(worker_id=worker_id)
             reconnect_delay = max(1.0, poll_seconds)
@@ -146,9 +152,6 @@ def run(*, poll_seconds: float = 1.0, worker_id: str | None = None, once: bool =
         if job is None:
             if once:
                 return
-            if time.monotonic() >= next_cleanup:
-                next_cleanup = time.monotonic() + CLEANUP_EVERY_SECONDS
-                _clean_expired_guests()
             time.sleep(poll_seconds)
             continue
         job_id = UUID(job["id"])
@@ -157,7 +160,8 @@ def run(*, poll_seconds: float = 1.0, worker_id: str | None = None, once: bool =
         heartbeat = threading.Thread(target=_heartbeat_loop, args=(queue, job_id, lease_token, heartbeat_stop), daemon=True)
         heartbeat.start()
         try:
-            payload = job.get("payload") or {}
+            # jobs.owner_id is the owner; a sign-in moves it to the account while the job waits.
+            payload = {**(job.get("payload") or {}), **({"owner_id": job["owner_id"]} if job.get("owner_id") else {})}
             if job["kind"] == "extract_document":
                 complete_document_extraction(str(payload["session_id"]), str(payload["document_id"]), payload.get("trace_id"), payload.get("owner_id"))
                 result = {"document_id": payload.get("document_id")}

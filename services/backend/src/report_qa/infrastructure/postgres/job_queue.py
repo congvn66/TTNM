@@ -8,6 +8,7 @@ stale result.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
@@ -53,10 +54,12 @@ class PostgresJobQueue:
         chat_id: UUID | None = None,
         input_data_revision: int | None = None,
         max_attempts: int = 3,
+        connection: Any = None,
     ) -> dict[str, Any]:
+        """Queue a job. With ``connection`` it joins the caller's open transaction, which commits it."""
         if max_attempts <= 0:
             raise JobQueueError("max_attempts must be positive")
-        with self._connect() as connection:
+        with nullcontext(connection) if connection is not None else self._connect() as connection:
             row = connection.execute(
                 """INSERT INTO jobs (owner_id,chat_id,kind,dedup_key,status,input_data_revision,payload,max_attempts)
                    VALUES (%s,%s,%s,%s,'queued',%s,%s::jsonb,%s)

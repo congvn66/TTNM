@@ -378,7 +378,9 @@ class PostgresRuntimeStore(PostgresRevisionStore):
             # The API process cache can contain sessions for more than one
             # authenticated owner.  Never replay another owner's snapshot
             # through this owner-scoped store during a save.
-            for session in (catalog.get("sessions") or {}).values():
+            # Copy first: other requests add sessions to the shared catalog while this save runs, and
+            # iterating the live dict raised "dictionary changed size during iteration" (500s under load).
+            for session in list((catalog.get("sessions") or {}).values()):
                 # Runtime snapshots store owner_id as a string while the
                 # store is initialized with a UUID.  Comparing the two
                 # directly made every session get skipped during catalog
@@ -474,22 +476,18 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         chat_id = self._uuid(session["id"])
         project_id = self._uuid(session["project_id"]) if session.get("project_id") else None
         if project_id is None:
-            canonical_name = "Workspace " + chr(0x00E1) + " nh" + chr(0x00E2) + "n"
-            canonical = self._execute(
-                "SELECT id FROM projects WHERE owner_id=%s AND name=%s AND deleted_at IS NULL ORDER BY created_at LIMIT 1",
-                (self.owner_id, canonical_name),
+            # The owner's default project under any name it has had; a new one gets the current name.
+            default = self._execute(
+                "SELECT id FROM projects WHERE owner_id=%s AND name = ANY(%s) AND deleted_at IS NULL ORDER BY created_at LIMIT 1",
+                (self.owner_id, list(DEFAULT_PROJECT_NAMES)),
             )
-            project_id = canonical[0]["id"] if canonical else self._execute(
+            project_id = default[0]["id"] if default else self._execute(
                 """INSERT INTO projects (owner_id,name) VALUES (%s,%s)
                    ON CONFLICT (owner_id,name) WHERE deleted_at IS NULL
                    DO UPDATE SET updated_at=projects.updated_at
                    RETURNING id""",
-                (self.owner_id, canonical_name),
+                (self.owner_id, DEFAULT_PROJECT_NAMES[0]),
             )[0]["id"]
-            session["project_id"] = str(project_id)
-        if project_id is None:
-            default = self._execute("SELECT id FROM projects WHERE owner_id=%s AND name = ANY(%s) AND deleted_at IS NULL ORDER BY created_at LIMIT 1", (self.owner_id, list(DEFAULT_PROJECT_NAMES)))
-            project_id = default[0]["id"] if default else self._execute("INSERT INTO projects (owner_id,name) VALUES (%s,%s) RETURNING id", (self.owner_id, DEFAULT_PROJECT_NAMES[0]))[0]["id"]
             session["project_id"] = str(project_id)
         self._execute(
             """INSERT INTO chats (id,owner_id,project_id,title,data_revision,created_at,updated_at)

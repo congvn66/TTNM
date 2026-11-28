@@ -14,6 +14,7 @@ import hmac
 import os
 import re
 import secrets
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID, uuid4
@@ -35,6 +36,8 @@ GUEST_DAYS = 7
 GUEST_UPLOADS_PER_DAY = 3
 GUESTS_PER_ADDRESS_PER_HOUR = 30
 GUEST_NAME = "Khách"
+# pg_advisory_xact_lock key: guests are made one at a time so the limits are counted exactly.
+GUEST_CREATE_LOCK = 7_301_001
 # Every table with an owner_id column; signing in moves a guest's rows to the account.
 OWNER_TABLES = ("projects", "folders", "chats", "documents", "project_documents", "jobs", "message_pins", "request_keys")
 
@@ -76,6 +79,23 @@ class PreferencesPatch(BaseModel):
 
 def _dsn() -> str:
     return settings.database_url
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return max(0, int(os.getenv(name, str(default))))
+    except ValueError:
+        return default
+
+
+def guests_per_hour() -> int:
+    """New guests allowed per hour across every address."""
+    return _env_int("AUTH_GUESTS_PER_HOUR", 200)
+
+
+def guest_uploads_per_day_total() -> int:
+    """Uploads allowed per day across every guest."""
+    return _env_int("AUTH_GUEST_UPLOADS_PER_DAY_TOTAL", 500)
 
 
 def _require_postgres() -> None:
@@ -149,11 +169,11 @@ def _csrf_guard(request: Request) -> None:
         raise user_error(403, "CSRF_ORIGIN_REJECTED")
 
 
-def _set_session_cookie(response: Response, token: str) -> None:
+def _set_session_cookie(response: Response, token: str, expires_at: datetime) -> None:
     response.set_cookie(
         SESSION_COOKIE,
         token,
-        max_age=settings.auth_session_days * 86400,
+        max_age=max(0, int((expires_at - datetime.now(timezone.utc)).total_seconds())),
         httponly=True,
         secure=settings.auth_cookie_secure,
         samesite="lax",
@@ -165,28 +185,49 @@ def _clear_session_cookie(response: Response) -> None:
     response.delete_cookie(SESSION_COOKIE, path="/")
 
 
-def _request_ip_hash(request: Request) -> str | None:
-    address = request.client.host if request.client else None
-    if not address:
+def client_address(request: Request) -> str | None:
+    """The visitor's address from the one source this deployment trusts, or None when there is none.
+
+    AUTH_CLIENT_IP_HEADER names a header that the edge in front of the API
+    always overwrites (CF-Connecting-IP on Cloudflare, X-Real-IP from nginx).
+    Without it the address is the TCP peer. uvicorn replaces the peer with the
+    X-Forwarded-For value when the peer is 127.0.0.1 (the Vite proxy), and a
+    visitor can write that header, so a request that carries it has no
+    trusted address.
+    """
+    header = os.getenv("AUTH_CLIENT_IP_HEADER", "").strip()
+    if header:
+        return request.headers.get(header, "").split(",")[0].strip() or None
+    if "x-forwarded-for" in request.headers or "forwarded" in request.headers:
         return None
+    return request.client.host if request.client else None
+
+
+def _request_ip_hash(request: Request) -> str:
+    # Requests without a trusted address share one bucket, so they share one guest limit.
+    address = client_address(request) or "unknown"
     salt = os.getenv("AUTH_IP_HASH_SALT", "sourcelens-dev-only").encode("utf-8")
     return hashlib.sha256(salt + address.encode("utf-8")).hexdigest()
 
 
-def _create_session(connection: Any, user_id: UUID, *, revoke_token: str | None = None, request: Request | None = None) -> tuple[str, datetime]:
+def _create_session(connection: Any, user_id: UUID, *, revoke_token: str | None = None, request: Request | None = None,
+                    ends_by: datetime | None = None) -> tuple[str, datetime]:
+    """A new session for the user; ``ends_by`` caps its lifetime (a guest's session ends with the guest)."""
     if revoke_token:
         connection.execute("UPDATE auth_sessions SET revoked_at=now() WHERE token_hash=%s AND revoked_at IS NULL", (_token_hash(revoke_token),))
     token = secrets.token_urlsafe(48)
     expires_at = datetime.now(timezone.utc) + timedelta(days=settings.auth_session_days)
+    if ends_by is not None:
+        expires_at = min(expires_at, ends_by)
     user_agent = (request.headers.get("user-agent") if request else None) or None
     connection.execute("INSERT INTO auth_sessions (user_id,token_hash,expires_at,last_seen_at,user_agent,ip_hash) VALUES (%s,%s,%s,now(),%s,%s)", (user_id, _token_hash(token), expires_at, user_agent[:512] if user_agent else None, _request_ip_hash(request) if request else None))
     return token, expires_at
 
 
-def _connection():
+def _connection(*, autocommit: bool = False):
     import psycopg
     from psycopg.rows import dict_row
-    return psycopg.connect(_dsn(), row_factory=dict_row)
+    return psycopg.connect(_dsn(), row_factory=dict_row, autocommit=autocommit)
 
 
 def _user_from_request(request: Request) -> dict[str, Any] | None:
@@ -199,7 +240,8 @@ def _user_from_request(request: Request) -> dict[str, Any] | None:
         with _connection() as connection:
             row = connection.execute(
                 """SELECT u.id,u.email,u.display_name,u.is_guest,u.guest_expires_at FROM auth_sessions s JOIN users u ON u.id=s.user_id
-                   WHERE s.token_hash=%s AND s.revoked_at IS NULL AND s.expires_at>now() AND u.deleted_at IS NULL""",
+                   WHERE s.token_hash=%s AND s.revoked_at IS NULL AND s.expires_at>now() AND u.deleted_at IS NULL
+                     AND (NOT u.is_guest OR u.guest_expires_at > now())""",
                 (_token_hash(token),),
             ).fetchone()
             if row:
@@ -238,58 +280,130 @@ def owner_id_for_request(request: Request) -> UUID:
     return DEMO_OWNER_ID
 
 
-def adopt_guest(connection: Any, guest_id: Any, user_id: Any) -> int:
-    """Move a guest's reports to the account they signed in to; returns how many reports moved.
+def _free_name(name: str, taken: set[str]) -> str:
+    """``name (n)`` with the smallest n >= 2 that is not in ``taken``."""
+    number = 2
+    while f"{name} ({number})" in taken:
+        number += 1
+    return f"{name} ({number})"
 
-    One transaction with the owner pairs checked at commit (migration 0011). The
-    order matters for the unique names: the guest's default project folds into
-    the account's own and is archived first, folders and projects whose names the
-    account already uses get " (2)", and only then do the owners change. If the
-    move fails the sign-in still stands and the reports stay with the guest until
-    they expire.
+
+def adopt_guest(connection: Any, guest_id: Any, user_id: Any) -> int | None:
+    """Move a guest's reports to the account they signed in to.
+
+    Returns how many reports moved, or None when the move failed (the reports
+    then stay with the guest until it expires). Call it on an autocommit
+    connection, after the account's session is committed: it is one
+    transaction of its own. The owner pairs are deferred (migration 0011) and
+    checked by SET CONSTRAINTS ALL IMMEDIATE before the transaction ends, so a
+    violation is raised here and not at a later commit. The order matters for
+    the unique names: the guest's default project folds into the account's own
+    and is archived first, folders and projects whose names the account
+    already uses get the first free " (n)", and only then do the owners change.
     """
     import logging
     try:
         with connection.transaction():
+            # The row lock waits for a running upload and stops cleanup or sign-up from taking the guest meanwhile.
+            guest = connection.execute(
+                "SELECT id FROM users WHERE id=%s AND is_guest AND deleted_at IS NULL AND guest_expires_at > now() FOR UPDATE",
+                (guest_id,)).fetchone()
+            if not guest:
+                return 0
             connection.execute("SET CONSTRAINTS ALL DEFERRED")
             count = connection.execute("SELECT count(*) AS n FROM documents WHERE owner_id=%s AND deleted_at IS NULL", (guest_id,)).fetchone()["n"]
             default = "SELECT id FROM projects WHERE owner_id=%s AND name = ANY(%s) AND deleted_at IS NULL ORDER BY created_at LIMIT 1"
             target = connection.execute(default, (user_id, list(DEFAULT_PROJECT_NAMES))).fetchone()
             source = connection.execute(default, (guest_id, list(DEFAULT_PROJECT_NAMES))).fetchone()
             if target and source:
-                connection.execute(
-                    """UPDATE folders f SET name=f.name || ' (2)', normalized_name=f.normalized_name || ' (2)', updated_at=now()
-                       WHERE f.project_id=%s AND f.deleted_at IS NULL AND EXISTS (
-                         SELECT 1 FROM folders g WHERE g.project_id=%s AND g.deleted_at IS NULL
-                           AND g.normalized_name=f.normalized_name AND g.parent_id IS NOT DISTINCT FROM f.parent_id)""",
-                    (source["id"], target["id"]))
+                # Only top-level folders can meet: a nested folder's parent is a folder of its own project.
+                folders = connection.execute(
+                    """SELECT id,project_id,name,normalized_name FROM folders
+                       WHERE project_id = ANY(%s) AND parent_id IS NULL AND deleted_at IS NULL ORDER BY created_at""",
+                    ([target["id"], source["id"]],)).fetchall()
+                account_names = {f["normalized_name"] for f in folders if f["project_id"] == target["id"]}
+                taken = {f["normalized_name"] for f in folders}
+                for folder in folders:
+                    if folder["project_id"] == source["id"] and folder["normalized_name"] in account_names:
+                        normalized = _free_name(folder["normalized_name"], taken)
+                        taken.add(normalized)
+                        suffix = normalized[len(folder["normalized_name"]):]
+                        connection.execute("UPDATE folders SET name=%s,normalized_name=%s,updated_at=now() WHERE id=%s",
+                                           (folder["name"] + suffix, normalized, folder["id"]))
                 for table in ("chats", "folders", "project_documents"):
                     connection.execute(f"UPDATE {table} SET project_id=%s WHERE project_id=%s", (target["id"], source["id"]))
                 connection.execute("UPDATE projects SET deleted_at=now(),updated_at=now() WHERE id=%s", (source["id"],))
+            projects = connection.execute(
+                "SELECT id,owner_id,name FROM projects WHERE owner_id = ANY(%s) AND deleted_at IS NULL ORDER BY created_at",
+                ([user_id, guest_id],)).fetchall()
+            account_names = {p["name"] for p in projects if p["owner_id"] == user_id}
+            taken = {p["name"] for p in projects}
+            for project in projects:
+                if project["owner_id"] == guest_id and project["name"] in account_names:
+                    name = _free_name(project["name"], taken)
+                    taken.add(name)
+                    connection.execute("UPDATE projects SET name=%s,updated_at=now() WHERE id=%s", (name, project["id"]))
+            # A queued job carries its owner in the payload too; keep the two equal.
             connection.execute(
-                """UPDATE projects p SET name=p.name || ' (2)', updated_at=now()
-                   WHERE p.owner_id=%s AND p.deleted_at IS NULL AND EXISTS (
-                     SELECT 1 FROM projects q WHERE q.owner_id=%s AND q.deleted_at IS NULL AND q.name=p.name)""",
-                (guest_id, user_id))
+                "UPDATE jobs SET payload=jsonb_set(payload,'{owner_id}',to_jsonb(%s::text)) WHERE owner_id=%s AND payload ? 'owner_id'",
+                (str(user_id), guest_id))
             for table in OWNER_TABLES:
                 connection.execute(f"UPDATE {table} SET owner_id=%s WHERE owner_id=%s", (user_id, guest_id))
+            # Revisions are immutable (a trigger); migration 0013 lets this flag through for the author column only,
+            # so the guest row can be deleted later. Turned off again at once.
+            connection.execute("SET LOCAL app.guest_purge = 'on'")
+            connection.execute("UPDATE evidence_revisions SET created_by=%s WHERE created_by=%s", (user_id, guest_id))
+            connection.execute("SET LOCAL app.guest_purge = 'off'")
             connection.execute("UPDATE users SET deleted_at=now(),updated_at=now() WHERE id=%s AND is_guest", (guest_id,))
+            connection.execute("UPDATE auth_sessions SET revoked_at=now() WHERE user_id=%s AND revoked_at IS NULL", (guest_id,))
+            connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
         return int(count)
     except Exception:
         logging.getLogger(__name__).exception("GUEST_ADOPTION_FAILED guest=%s", guest_id)
-        return 0
-
-
-def guest_uploads_left(owner_id: UUID) -> int | None:
-    """Uploads a guest may still make today; None for an account (no limit)."""
-    if settings.persistence_backend != "postgres":
         return None
+
+
+def _guest_uploads_left(connection: Any, owner_id: UUID) -> int | None:
+    """Uploads the guest may still make today, with the guest row locked; None for an account.
+
+    FOR NO KEY UPDATE makes a second upload of the same guest wait here until
+    the first one's document row is committed. It does not block the foreign
+    key checks (FOR KEY SHARE) of the rows the upload inserts.
+    """
+    row = connection.execute("SELECT is_guest, deleted_at IS NOT NULL AS gone FROM users WHERE id=%s FOR NO KEY UPDATE", (owner_id,)).fetchone()
+    if not row or row["gone"]:
+        return 0  # cleanup took the guest after its cookie was checked
+    if not row["is_guest"]:
+        return None
+    used = connection.execute("SELECT count(*) AS n FROM documents WHERE owner_id=%s AND created_at > now() - interval '1 day'", (owner_id,)).fetchone()["n"]
+    everyone = connection.execute(
+        """SELECT count(*) AS n FROM documents d JOIN users u ON u.id=d.owner_id
+           WHERE u.is_guest AND d.created_at > now() - interval '1 day'""").fetchone()["n"]
+    return max(0, min(GUEST_UPLOADS_PER_DAY - int(used), guest_uploads_per_day_total() - int(everyone)))
+
+
+def _is_guest(owner_id: UUID) -> bool:
     with _connection() as connection:
         row = connection.execute("SELECT is_guest FROM users WHERE id=%s", (owner_id,)).fetchone()
-        if not row or not row["is_guest"]:
-            return None
-        used = connection.execute("SELECT count(*) AS n FROM documents WHERE owner_id=%s AND created_at > now() - interval '1 day'", (owner_id,)).fetchone()["n"]
-    return max(0, GUEST_UPLOADS_PER_DAY - int(used))
+    return bool(row and row["is_guest"])
+
+
+@contextmanager
+def guest_upload_slot(owner_id: UUID):
+    """Hold one of a guest's daily uploads while the upload is stored; raises 429 when none is left.
+
+    Wrap the code that stores the PDF and its document row. Accounts have no
+    limit and hold nothing. The total over all guests is counted, not locked,
+    so parallel uploads of different guests can pass it by a few.
+    """
+    if settings.persistence_backend != "postgres" or not _is_guest(owner_id):
+        yield
+        return
+    with _connection() as connection, connection.transaction():
+        left = _guest_uploads_left(connection, owner_id)
+        if left is not None and left <= 0:
+            raise user_error(429, "GUEST_UPLOAD_LIMIT")
+        yield
 
 
 @router.post("/guest", status_code=status.HTTP_201_CREATED)
@@ -304,24 +418,29 @@ def start_guest(request: Request, response: Response) -> dict[str, Any]:
     try:
         with _connection() as connection:
             with connection.transaction():
-                if address:
-                    recent = connection.execute(
-                        """SELECT count(*) AS n FROM auth_sessions s JOIN users u ON u.id=s.user_id
-                           WHERE u.is_guest AND s.ip_hash=%s AND u.created_at > now() - interval '1 hour'""", (address,)).fetchone()["n"]
-                    if recent >= GUESTS_PER_ADDRESS_PER_HOUR:
-                        raise user_error(429, "GUEST_LIMIT")
+                connection.execute("SELECT pg_advisory_xact_lock(%s)", (GUEST_CREATE_LOCK,))
+                everyone = connection.execute("SELECT count(*) AS n FROM users WHERE is_guest AND created_at > now() - interval '1 hour'").fetchone()["n"]
+                recent = connection.execute(
+                    """SELECT count(*) AS n FROM auth_sessions s JOIN users u ON u.id=s.user_id
+                       WHERE s.ip_hash=%s AND s.created_at > now() - interval '1 hour' AND u.is_guest""", (address,)).fetchone()["n"]
+                if everyone >= guests_per_hour() or recent >= GUESTS_PER_ADDRESS_PER_HOUR:
+                    raise user_error(429, "GUEST_LIMIT")
                 user_id = uuid4()
                 row = connection.execute(
                     """INSERT INTO users (id,email,normalized_email,password_hash,display_name,is_guest,guest_expires_at)
                        VALUES (%s,'',%s,'!',%s,true,now() + %s * interval '1 day') RETURNING id,email,display_name,is_guest,guest_expires_at""",
                     (user_id, f"guest:{user_id}", GUEST_NAME, GUEST_DAYS)).fetchone()
-                token, _ = _create_session(connection, user_id, request=request)
-        _set_session_cookie(response, token)
+                token, expires_at = _create_session(connection, user_id, request=request, ends_by=row["guest_expires_at"])
+        _set_session_cookie(response, token, expires_at)
         return {"user": _public_user(dict(row)), "authenticated": True}
     except HTTPException:
         raise
     except Exception as exc:
         raise user_error(503, "AUTH_DATABASE_UNAVAILABLE") from exc
+
+
+def _is_unique_violation(exc: Exception) -> bool:
+    return getattr(exc, "sqlstate", None) == "23505"
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -342,18 +461,26 @@ def register(payload: RegisterRequest, request: Request, response: Response) -> 
                     user_id = guest["id"]
                     row = connection.execute(
                         """UPDATE users SET email=%s,normalized_email=%s,password_hash=%s,display_name=%s,is_guest=false,guest_expires_at=NULL,updated_at=now()
-                           WHERE id=%s AND is_guest RETURNING id,email,display_name,is_guest,guest_expires_at""",
+                           WHERE id=%s AND is_guest AND deleted_at IS NULL AND guest_expires_at > now()
+                           RETURNING id,email,display_name,is_guest,guest_expires_at""",
                         (email, email, password_hash, payload.display_name.strip(), user_id)).fetchone()
+                    if row is None:
+                        # Cleanup took the guest after the cookie was checked.
+                        raise user_error(409, "GUEST_EXPIRED")
+                    connection.execute("UPDATE auth_sessions SET revoked_at=now() WHERE user_id=%s AND revoked_at IS NULL", (user_id,))
                 else:
                     user_id = uuid4()
                     row = connection.execute("INSERT INTO users (id,email,normalized_email,password_hash,display_name) VALUES (%s,%s,%s,%s,%s) RETURNING id,email,display_name,is_guest,guest_expires_at", (user_id, email, email, password_hash, payload.display_name.strip())).fetchone()
                 # A new session id after the account changes (OWASP); the guest's cookie stops working.
-                token, _ = _create_session(connection, user_id, revoke_token=request.cookies.get(SESSION_COOKIE), request=request)
-        _set_session_cookie(response, token)
+                token, expires_at = _create_session(connection, user_id, revoke_token=request.cookies.get(SESSION_COOKIE), request=request)
+        _set_session_cookie(response, token, expires_at)
         return {"user": _public_user(dict(row)), "authenticated": True}
     except HTTPException:
         raise
     except Exception as exc:
+        if _is_unique_violation(exc):
+            # Two sign-ups with one email at the same moment: the second loses.
+            raise user_error(409, "EMAIL_ALREADY_REGISTERED") from exc
         raise user_error(503, "AUTH_DATABASE_UNAVAILABLE") from exc
 
 
@@ -365,15 +492,19 @@ def login(payload: LoginRequest, request: Request, response: Response) -> dict[s
     guest = _user_from_request(request)
     guest = guest if guest and guest.get("is_guest") else None
     try:
-        with _connection() as connection:
+        # Autocommit: the session and the move of the guest's reports are two transactions, so a failed move
+        # cannot roll back the sign-in.
+        with _connection(autocommit=True) as connection:
             row = connection.execute("SELECT id,email,display_name,password_hash,is_guest,guest_expires_at FROM users WHERE normalized_email=%s AND deleted_at IS NULL AND NOT is_guest", (email,)).fetchone()
             if not row or not _verify_password(payload.password, row["password_hash"]):
                 raise user_error(401, "INVALID_CREDENTIALS")
             with connection.transaction():
-                token, _ = _create_session(connection, row["id"], revoke_token=request.cookies.get(SESSION_COOKIE), request=request)
+                # A guest's sessions are revoked by the move; if the move fails the guest keeps them.
+                old_token = None if guest else request.cookies.get(SESSION_COOKIE)
+                token, expires_at = _create_session(connection, row["id"], revoke_token=old_token, request=request)
             moved = adopt_guest(connection, guest["id"], row["id"]) if guest else 0
-        _set_session_cookie(response, token)
-        return {"user": _public_user(dict(row)), "authenticated": True, "moved_reports": moved}
+        _set_session_cookie(response, token, expires_at)
+        return {"user": _public_user(dict(row)), "authenticated": True, "moved_reports": moved or 0, "adopt_failed": moved is None}
     except HTTPException:
         raise
     except Exception as exc:
@@ -436,8 +567,8 @@ def reset_password(payload: ResetPasswordRequest, request: Request, response: Re
                 connection.execute("UPDATE users SET password_hash=%s,updated_at=now() WHERE id=%s", (password_hash, row["id"]))
                 connection.execute("UPDATE account_tokens SET used_at=now() WHERE token_hash=%s", (_token_hash(payload.token),))
                 connection.execute("UPDATE auth_sessions SET revoked_at=now() WHERE user_id=%s AND revoked_at IS NULL", (row["id"],))
-            session_token, _ = _create_session(connection, row["id"], request=request)
-        _set_session_cookie(response, session_token)
+            session_token, expires_at = _create_session(connection, row["id"], request=request)
+        _set_session_cookie(response, session_token, expires_at)
         return {"user": _public_user(dict(row)), "authenticated": True}
     except HTTPException:
         raise
@@ -512,4 +643,4 @@ def patch_preferences(payload: PreferencesPatch, request: Request) -> dict[str, 
     return {"preferences": dict(row)}
 
 
-__all__ = ["DEMO_OWNER_ID", "SESSION_COOKIE", "current_user", "owner_id_for_request", "router", "settings_router"]
+__all__ = ["DEMO_OWNER_ID", "SESSION_COOKIE", "client_address", "current_user", "guest_upload_slot", "owner_id_for_request", "router", "settings_router"]

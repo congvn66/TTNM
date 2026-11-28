@@ -100,26 +100,20 @@ def _project(connection, project_id: UUID, owner_id: UUID):
 
 
 def _ensure_default_project(connection, owner_id: UUID):
-    # Build the canonical label from code points so this path remains correct
-    # even when a Windows shell decodes source files with a legacy code page.
-    canonical_name = "Workspace " + chr(0x00E1) + " nh" + chr(0x00E2) + "n"
-    canonical = connection.execute(
-        "SELECT id,owner_id,name,created_at,updated_at FROM projects WHERE owner_id=%s AND name=%s AND deleted_at IS NULL ORDER BY created_at LIMIT 1",
-        (owner_id, canonical_name),
+    """The account's default project: found under any of its names (see config.DEFAULT_PROJECT_NAMES), else created."""
+    row = connection.execute(
+        "SELECT id,owner_id,name,created_at,updated_at FROM projects WHERE owner_id=%s AND name = ANY(%s) AND deleted_at IS NULL ORDER BY created_at LIMIT 1",
+        (owner_id, list(DEFAULT_PROJECT_NAMES)),
     ).fetchone()
-    if canonical:
-        return canonical
+    if row:
+        return row
     return connection.execute(
         """INSERT INTO projects (owner_id,name) VALUES (%s,%s)
            ON CONFLICT (owner_id,name) WHERE deleted_at IS NULL
            DO UPDATE SET updated_at=projects.updated_at
            RETURNING id,owner_id,name,created_at,updated_at""",
-        (owner_id, canonical_name),
+        (owner_id, DEFAULT_PROJECT_NAMES[0]),
     ).fetchone()
-    row = connection.execute("SELECT id,owner_id,name,created_at,updated_at FROM projects WHERE owner_id=%s AND name = ANY(%s) AND deleted_at IS NULL ORDER BY created_at LIMIT 1", (owner_id, list(DEFAULT_PROJECT_NAMES))).fetchone()
-    if row:
-        return row
-    return connection.execute("INSERT INTO projects (owner_id,name) VALUES (%s,%s) RETURNING id,owner_id,name,created_at,updated_at", (owner_id, DEFAULT_PROJECT_NAMES[0])).fetchone()
 
 
 @router.get("/projects")
