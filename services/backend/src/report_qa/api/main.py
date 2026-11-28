@@ -592,7 +592,8 @@ def extract_pdf_pages(path: Any, document_id: str, document_version_id: str) -> 
         return {"status": "failed", "page_count": None, "numeric_evidence_count": 0, "error": type(exc).__name__}
 
 
-async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str | None = None) -> dict[str, Any]:
+def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str | None = None) -> dict[str, Any]:
+    """Store an uploaded PDF. Blocking (disk, pypdf, R2, database): call it from a sync endpoint, which runs in the thread pool."""
     # Browsers may send a client path; only its last part is the name.
     name = clean_file_name(re.split(r"[\\/]", file.filename or "unnamed.pdf")[-1])
     if not name.lower().endswith(".pdf"):
@@ -608,7 +609,7 @@ async def persist_pdf(file: UploadFile, session: dict[str, Any], trace_id: str |
     first_chunk = True
     try:
         with temporary_path.open("wb") as output:
-            while chunk := await file.read(1024 * 1024):
+            while chunk := file.file.read(1024 * 1024):
                 if first_chunk and not chunk.startswith(b"%PDF-"):
                     raise user_error(422, "INVALID_PDF")
                 first_chunk = False
@@ -703,6 +704,12 @@ def complete_document_extraction(session_id: str, document_id: str, trace_id: st
         session["updated_at"] = utc_now()
     try:
         save_catalog(catalog, owner)
+        # PostgreSQL names a reading after its document version and renames the local file during
+        # save_catalog; R2 still has it under the worker's first name. Store it under the final name
+        # too, or an API on another machine (cache_extraction) cannot download it.
+        final_name = document.get("extraction_name")
+        if artifact is not None and final_name and final_name != extraction["extraction_name"] and extraction_path(final_name).exists():
+            persist_extraction_cache(final_name, extraction_path(final_name))
     except Exception:
         with catalog_lock:
             document.update(extraction_status="failed", extraction_error="EXTRACTION_PUBLISH_FAILED")
@@ -894,12 +901,14 @@ def delete_session(session_id: str, request: Request) -> dict[str, Any]:
     response_description="Document metadata sau khi binary da duoc giu ben vung tren local disk.",
     responses={**OPENAPI_COMMON_ERRORS, 413: {"description": "PDF vuot qua 100 MiB."}},
 )
-async def upload_session_document(session_id: str, request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> dict[str, Any]:
+# A sync endpoint: FastAPI runs it in its thread pool. As "async def" its blocking database, pypdf and
+# R2 calls ran on the event loop and stopped every other request for the length of an upload.
+def upload_session_document(session_id: str, request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> dict[str, Any]:
     owner_id = owner_id_for_request(request)
     session = get_session(session_id, owner_id)
     trace_id = trace_id_for(request)
     flow_log("UPLOAD_ACCEPTED", trace_id=trace_id, session_id=session_id, file_name_present=bool(file.filename))
-    document = await persist_pdf(file, session, trace_id=trace_id)
+    document = persist_pdf(file, session, trace_id=trace_id)
     job = None
     if durable_job_queue:
         job = durable_job_queue.enqueue(
@@ -2202,7 +2211,7 @@ def read_session_message_trace(session_id: str, message_id: str, request: Reques
     response_description="Upload metadata va next_action cho PDF reader.",
     responses={413: {"description": "PDF vuot qua 100 MiB."}, 422: {"description": "Khong phai PDF hoac PDF rong."}},
 )
-async def upload_document(request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> dict[str, Any]:
+def upload_document(request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> dict[str, Any]:
     """Compatibility upload: persist the file in a server-owned local session."""
     owner_id = owner_id_for_request(request)
     default_id = f"legacy-upload-{owner_id}"
@@ -2210,6 +2219,6 @@ async def upload_document(request: Request, background_tasks: BackgroundTasks, f
         if default_id not in catalog["sessions"]:
             now = utc_now()
             catalog["sessions"][default_id] = {"id": default_id, "owner_id": str(owner_id), "title": "Uploads", "created_at": now, "updated_at": now, "documents": [], "messages": []}
-    document = await persist_pdf(file, catalog["sessions"][default_id])
+    document = persist_pdf(file, catalog["sessions"][default_id])
     background_tasks.add_task(_extract_in_background, default_id, document["id"], trace_id_for(request), owner_id)
     return {"upload": {**document, "persistence": {"adapter": "cloudflare_r2" if uses_remote_object_storage() else "local_filesystem", "binary_retained": True, "max_bytes": MAX_PDF_BYTES, "max_pages": MAX_PDF_PAGES}}, "next_action": "Open file_url with the PDF.js reader."}

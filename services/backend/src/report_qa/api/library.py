@@ -134,6 +134,7 @@ def list_projects(request: Request):
                  FROM projects p
                  LEFT JOIN chats c ON c.project_id=p.id AND c.deleted_at IS NULL
                  LEFT JOIN project_documents pd ON pd.project_id=p.id
+                       AND EXISTS (SELECT 1 FROM documents d WHERE d.id=pd.document_id AND d.deleted_at IS NULL)
                 WHERE p.owner_id=%s AND p.deleted_at IS NULL
                 GROUP BY p.id ORDER BY p.updated_at DESC,p.name""",
             (owner_id,),
@@ -190,7 +191,8 @@ def project_library(project_id: UUID, request: Request):
         documents = connection.execute(
             """SELECT pd.document_id,pd.folder_id,pd.display_name,pd.sort_order,pd.version,
                       d.title,d.created_at,dv.file_name,dv.byte_size,dv.page_count,dv.status AS version_status,
-                      COALESCE(er.status,'queued') AS extraction_status,c.id AS session_id,c.title AS session_title
+                      CASE COALESCE(er.status,'queued') WHEN 'running' THEN 'processing' ELSE COALESCE(er.status,'queued') END AS extraction_status,
+                      c.id AS session_id,c.title AS session_title
                  FROM project_documents pd
                  JOIN documents d ON d.id=pd.document_id AND d.owner_id=pd.owner_id AND d.deleted_at IS NULL
                  LEFT JOIN LATERAL (SELECT * FROM document_versions WHERE document_id=d.id ORDER BY version_no DESC LIMIT 1) dv ON TRUE
@@ -299,4 +301,7 @@ def archive_folder(folder_id: UUID, request: Request):
         result = connection.execute("UPDATE folders SET deleted_at=now(),version=version+1,updated_at=now() WHERE id=%s AND owner_id=%s AND deleted_at IS NULL", (folder_id, owner_id))
         if result.rowcount != 1:
             raise user_error(404, "FOLDER_NOT_FOUND")
+        # The dialog promises its reports go back to "Chưa phân loại": a report left pointing at a
+        # deleted folder showed under "Tất cả" but under no folder at all.
+        connection.execute("UPDATE project_documents SET folder_id=NULL,version=version+1 WHERE folder_id=%s AND owner_id=%s", (folder_id, owner_id))
     return {"folder_id": str(folder_id), "status": "archived"}
