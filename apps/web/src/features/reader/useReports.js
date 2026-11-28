@@ -132,6 +132,7 @@ export function useReports({ user = null, startGuest = null, syncUrl = true } = 
 
   // The open report, kept for one more reply when the server leaves it out once.
   const lastSelected = useRef(null);
+  const addressId = useRef(syncUrl ? readUrl() : null);
   const missing = useRef(0);
   const found = reports.find((report) => report.id === selectedId) ?? null;
   if (found) lastSelected.current = found;
@@ -157,7 +158,11 @@ export function useReports({ user = null, startGuest = null, syncUrl = true } = 
       const timer = window.setTimeout(() => load().catch(() => {}), 1500);
       return () => window.clearTimeout(timer);
     }
-    setLost(lastSelected.current?.file_name ?? "");
+    // Say so only for a report this visit showed, or one the address asked for.
+    // A report remembered from an earlier visit (another account, a guest
+    // session) that this account does not have is dropped quietly.
+    const seen = lastSelected.current?.id === selectedId;
+    if (seen || selectedId === addressId.current) setLost(seen ? lastSelected.current.file_name ?? "" : "");
     lastSelected.current = null;
     setSelectedIdState(null); writeStored(SELECTED_KEY, null); if (syncUrl) writeUrl(null);
     return undefined;
