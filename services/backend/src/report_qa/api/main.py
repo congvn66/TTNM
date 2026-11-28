@@ -47,7 +47,7 @@ from .devices import router as auth_sessions_router
 from .extraction_slots import ExtractionSlots
 from .user_messages import MESSAGES, error_detail, user_error
 from .number_input import AmbiguousNumberError, TypedNumberError, decimal_separator, display_number, document_number_locale, exact_number, read_typed_number
-from report_qa.config import settings
+from report_qa.config import DEFAULT_PROJECT_NAMES, settings
 from report_qa.infrastructure.postgres import postgres_health
 from report_qa.infrastructure.integrations import readiness as integration_readiness
 from report_qa.infrastructure.integrations import reextraction_status, runtime_capabilities
@@ -245,7 +245,15 @@ async def request_validation_error_handler(_: Request, exc: RequestValidationErr
 async def internal_error_handler(request: Request, exc: Exception) -> JSONResponse:
     trace_id = getattr(request.state, "trace_id", None)
     logger.error("Unhandled %s on %s %s (trace %s)", type(exc).__name__, request.method, request.url.path, trace_id, exc_info=exc)
-    return JSONResponse(status_code=500, content={"detail": {**error_detail("INTERNAL_ERROR"), "trace_id": trace_id}})
+    response = JSONResponse(status_code=500, content={"detail": {**error_detail("INTERNAL_ERROR"), "trace_id": trace_id}})
+    # Starlette answers an unhandled error outside CORSMiddleware, so this response would have no CORS
+    # headers and the browser would report a network error ("Không kết nối được") instead of this one.
+    origin = request.headers.get("origin")
+    if origin and origin.rstrip("/") in web_origins():
+        response.headers.update({"Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true", "Vary": "Origin"})
+    if trace_id:
+        response.headers["X-Trace-Id"] = trace_id
+    return response
 
 
 @app.get(
@@ -366,30 +374,42 @@ def save_session(session: dict[str, Any], owner_id: str | UUID | None = None) ->
         raise
 
 
-def _store_upload(session: dict[str, Any], record: dict[str, Any], trace_id: str | None) -> dict[str, Any] | None:
-    """Save the session with its new document and queue the document's extraction in one transaction.
+def _save_with_job(session: dict[str, Any], *, kind: str, dedup_key: str, payload: dict[str, Any], input_data_revision: int | None = None,
+                   prepare=None) -> dict[str, Any]:
+    """Save the session and queue one job for it in one transaction; returns the job. Needs the durable queue.
 
-    So a document row never exists without its job, nor a job without its
-    row. Returns the job, or None without a durable queue.
+    So a stored document or question never waits without its job, and a job
+    never runs for rows that were not saved (an error response used to leave
+    a queued answer for a question that was never stored). ``prepare(store,
+    job)`` runs after the job is queued, in the same transaction.
     """
     owner = str(session.get("owner_id", LOCAL_OWNER_ID))
-    if not durable_job_queue:
-        save_session(session, owner)
-        return None
     store = _runtime_for_owner(owner)
     try:
         with store.transaction():
+            # The chat row first: the job refers to it.
             store.sync_catalog({"sessions": {session["id"]: session}}, extraction_loader=_load_extraction_for_persistence)
-            return durable_job_queue.enqueue(
-                owner_id=UUID(owner), chat_id=UUID(session["id"]), kind="extract_document", dedup_key=f"extract:{record['id']}",
-                payload={"session_id": session["id"], "document_id": record["id"], "trace_id": trace_id, "owner_id": owner},
-                connection=store.connection,
+            job = durable_job_queue.enqueue(
+                owner_id=UUID(owner), chat_id=UUID(session["id"]), kind=kind, dedup_key=dedup_key, payload={**payload, "owner_id": owner},
+                input_data_revision=input_data_revision, connection=store.connection,
             )
+            if prepare is not None:
+                prepare(store, job)
+            return job
     except Exception:
         with catalog_lock:
             if catalog["sessions"].get(session["id"]) is session:
                 catalog["sessions"].pop(session["id"], None)
         raise
+
+
+def _store_upload(session: dict[str, Any], record: dict[str, Any], trace_id: str | None) -> dict[str, Any] | None:
+    """Save the session with its new document and queue the document's extraction; None without a durable queue."""
+    if not durable_job_queue:
+        save_session(session, str(session.get("owner_id", LOCAL_OWNER_ID)))
+        return None
+    return _save_with_job(session, kind="extract_document", dedup_key=f"extract:{record['id']}",
+                          payload={"session_id": session["id"], "document_id": record["id"], "trace_id": trace_id})
 
 
 class StorableRequest(BaseModel):
@@ -569,7 +589,10 @@ PRIVATE_DOCUMENT_FIELDS = {"storage_name", "extraction_name", "number_event_coun
 
 
 def public_document(document: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in document.items() if key not in PRIVATE_DOCUMENT_FIELDS}
+    result = {key: value for key, value in document.items() if key not in PRIVATE_DOCUMENT_FIELDS}
+    # "Thử lại" on a failed reading: POST .../documents/{id}/extraction queues it again (see rerun_document_extraction).
+    result["can_retry"] = document.get("extraction_status") == "failed" and (durable_job_queue is not None or reextraction_status()["status"] == "available")
+    return result
 
 
 def public_session(session: dict[str, Any]) -> dict[str, Any]:
@@ -978,7 +1001,42 @@ def delete_session(session_id: str, request: Request) -> dict[str, Any]:
 # R2 calls ran on the event loop and stopped every other request for the length of an upload.
 def upload_session_document(session_id: str, request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> dict[str, Any]:
     owner_id = owner_id_for_request(request)
-    session = get_session(session_id, owner_id)
+    return _upload_into(get_session(session_id, owner_id), owner_id, request, background_tasks, file)
+
+
+@app.post(
+    "/api/v1/projects/{project_id}/documents",
+    tags=["library"],
+    summary="Upload a PDF into a project",
+    description=(
+        "Nhu POST /sessions/{id}/documents, nhung bao cao vao du an nay: vao phien moi nhat cua du an, "
+        "hoac mot phien moi khi du an chua co phien nao. Tra cung dang voi upload vao phien (session_id cho biet phien nao)."
+    ),
+    response_model=DocumentUploadResponse,
+    responses={**OPENAPI_COMMON_ERRORS, 413: {"description": "PDF vuot qua 100 MiB."}},
+)
+def upload_project_document(project_id: str, request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> dict[str, Any]:
+    owner_id = owner_id_for_request(request)
+    if not postgres_runtime:
+        raise user_error(503, "LIBRARY_REQUIRES_POSTGRES")
+    try:
+        found = _runtime_for_owner(owner_id).project_chat(UUID(project_id))
+    except ValueError:
+        found = None
+    if found is None:
+        raise user_error(404, "PROJECT_NOT_FOUND")
+    if found:
+        session = get_session(found["id"], owner_id)
+    else:
+        # Saved with its first document, in the upload's transaction.
+        now = utc_now()
+        session = {"id": str(uuid4()), "owner_id": str(owner_id), "project_id": project_id, "title": DEFAULT_PROJECT_NAMES[0],
+                   "created_at": now, "updated_at": now, "documents": [], "messages": []}
+    return _upload_into(session, owner_id, request, background_tasks, file)
+
+
+def _upload_into(session: dict[str, Any], owner_id: UUID, request: Request, background_tasks: BackgroundTasks, file: UploadFile) -> dict[str, Any]:
+    session_id = session["id"]
     trace_id = trace_id_for(request)
     # A guest's slot is held until the document row is stored, so parallel uploads cannot pass the daily limit.
     jobs: list[dict[str, Any] | None] = []
@@ -1007,8 +1065,10 @@ def update_session_document(session_id: str, document_id: str, payload: Document
     if document is None:
         raise user_error(404, "DOCUMENT_NOT_FOUND")
     file_name = clean_file_name(payload.file_name)
-    if not file_name or any(part in file_name for part in ("/", "\\")):
+    if not file_name:
         raise user_error(422, "DOCUMENT_NAME_INVALID")
+    if any(part in file_name for part in ("/", "\\")):
+        raise user_error(422, "DOCUMENT_NAME_SLASH")
     if not file_name.lower().endswith(".pdf"):
         file_name = clean_file_name(f"{file_name}.pdf")
     if postgres_runtime:
@@ -1204,6 +1264,8 @@ def _append_edit(document: dict[str, Any], evidence_key: str, revision: dict[str
 )
 def rerun_document_extraction(session_id: str, document_id: str, request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
     owner_id = owner_id_for_request(request)
+    if durable_job_queue is not None:
+        return _retry_failed_reading(session_id, document_id, owner_id, trace_id_for(request))
     # /health capabilities.reextraction reports the same decision to the UI.
     if reextraction_status()["status"] != "available":
         raise user_error(409, "REEXTRACTION_NOT_SUPPORTED")
@@ -1228,6 +1290,40 @@ def rerun_document_extraction(session_id: str, document_id: str, request: Reques
     flow_log("EXTRACTION_RERUN_QUEUED", trace_id=trace_id, session_id=session_id, document_id=document_id, previous_status=previous["status"], affected_answer_count=len(affected))
     background_tasks.add_task(_extract_in_background, session_id, document_id, trace_id)
     return {"session_id": session_id, "document": document_payload, "previous_extraction": previous, "affected_message_ids": affected, "trace_id": trace_id}
+
+
+def _retry_failed_reading(session_id: str, document_id: str, owner_id: UUID, trace_id: str) -> dict[str, Any]:
+    """"Thử lại" with the durable queue: read a failed (or stopped) document again, keeping its id.
+
+    PostgreSQL keeps one base reading per document version, so a ready
+    document cannot be read again (REEXTRACTION_NOT_SUPPORTED); a failed one
+    stored no values and can. The reading is put back in the queue state and
+    its new job queued in one transaction.
+    """
+    session = get_session(session_id, owner_id)
+    document = next((item for item in session["documents"] if item["id"] == document_id), None)
+    if document is None:
+        raise user_error(404, "DOCUMENT_NOT_FOUND")
+    if document.get("extraction_status") in {"queued", "processing"}:
+        raise user_error(409, "EXTRACTION_IN_PROGRESS")
+    if document.get("extraction_status") != "failed":
+        raise user_error(409, "REEXTRACTION_NOT_SUPPORTED")
+    previous = {"status": "failed", "error": document.get("extraction_error")}
+    store = _runtime_for_owner(owner_id)
+    with store.transaction():
+        state = store.requeue_failed_extraction(session_id, document_id)
+        if state != "requeued":
+            raise user_error(404, "DOCUMENT_NOT_FOUND") if state == "missing" else user_error(409, "EXTRACTION_IN_PROGRESS")
+        job = durable_job_queue.enqueue(
+            owner_id=UUID(str(owner_id)), chat_id=UUID(session_id), kind="extract_document", dedup_key=f"extract:{document_id}:{uuid4()}",
+            payload={"session_id": session_id, "document_id": document_id, "trace_id": trace_id, "owner_id": str(owner_id)},
+            connection=store.connection,
+        )
+    with catalog_lock:
+        document.update({"extraction_status": "queued", "extraction_error": None})
+        document_payload = json.loads(json.dumps(public_document(document)))
+    flow_log("EXTRACTION_RETRY_QUEUED", trace_id=trace_id, session_id=session_id, document_id=document_id, job_id=job.get("id"), previous_error=previous["error"])
+    return {"session_id": session_id, "document": document_payload, "previous_extraction": previous, "affected_message_ids": [], "trace_id": trace_id, "job": job}
 
 
 @app.get(
@@ -1390,11 +1486,13 @@ def create_document_brief(session_id: str, document_id: str, request: Request) -
         save_session(session, owner)
         return {"status": "ready", "brief": brief}
     except ProviderError as exc:
-        raise ai_failure(exc.code, str(exc), trace_id, exc.http_status) from exc
+        # The question messages ("Câu hỏi quá dài…") do not fit an overview the user did not write.
+        code = "BRIEF_TIMEOUT" if exc.code == "AI_ANSWER_TIMEOUT" else exc.code
+        raise ai_failure(code, str(exc), trace_id, exc.http_status) from exc
     except AssistantError as exc:
         flow_log("ASSISTANT_INCOMPLETE", trace_id=trace_id, session_id=session_id, document_id=document["id"], purpose="brief",
                  tool_errors=_tool_errors(exc))
-        raise ai_failure("ASSISTANT_INCOMPLETE", str(exc), trace_id) from exc
+        raise ai_failure("BRIEF_INCOMPLETE", str(exc), trace_id) from exc
     finally:
         with catalog_lock:
             _brief_in_flight.pop(document_id).set()
@@ -1545,7 +1643,9 @@ def relevant_pages(document: dict[str, Any], question: str, limit: int = 3) -> l
             document["numeric_evidence_count"] = upgraded["numeric_evidence_count"]
             document["page_count"] = upgraded["page_count"]
             _publish_reading(document, upgraded["extraction_name"], payload)
-        save_catalog(catalog)
+        if not postgres_runtime:
+            # With PostgreSQL the caller saves its own session; the whole cache would replay stale copies.
+            save_catalog(catalog)
         flow_log("EXTRACTION_ARTIFACT_UPGRADED", document_id=document["id"], numeric_evidence_count=upgraded["numeric_evidence_count"])
     stop_words = {"bao", "nhiêu", "những", "của", "trong", "được", "với", "theo", "này", "là", "và", "cho", "một"}
     normalized_question = normalize_search_text(question)
@@ -1810,6 +1910,8 @@ def ask_session_document(session_id: str, payload: SessionQuestionRequest, reque
 
 
 _idempotency_in_flight: dict[tuple[str, str], threading.Event] = {}
+# The route under which runtime_store keeps the resend keys of questions (its default).
+IDEMPOTENT_ASK_ROUTE = "POST /api/v1/sessions/messages"
 
 
 def _ask_session_document(session_id: str, payload: SessionQuestionRequest, request: Request, response: Response) -> dict[str, Any]:
@@ -1868,20 +1970,34 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
             assistant_message["structured_answer"]["answer"] = assistant_message["body"]
             assistant_message["structured_answer"]["summary"] = "Câu hỏi đang chờ tài liệu được đọc xong."
         assistant_message["trace"] = queued_trace
-        session["messages"].extend([user_message, assistant_message])
-        session["updated_at"] = now
-        job = durable_job_queue.enqueue(
-            owner_id=UUID(str(session.get("owner_id", LOCAL_OWNER_ID))),
-            chat_id=UUID(session_id),
-            kind="answer_question",
-            dedup_key=f"answer:{assistant_message['id']}",
-            payload={"session_id": session_id, "document_id": document["id"], "question": payload.question, "user_message_id": user_message["id"], "assistant_message_id": assistant_message["id"], "trace_id": trace_id, "owner_id": str(session.get("owner_id", LOCAL_OWNER_ID))},
-            input_data_revision=int(session.get("data_revision") or 0),
-        )
-        save_session(session)
+        with catalog_lock:
+            session["messages"].extend([user_message, assistant_message])
+            session["updated_at"] = now
+        result: dict[str, Any] = {}
+
+        def remember(store, job: dict[str, Any]) -> None:
+            # The resend key is saved with the question, so a resend after an error never asks twice.
+            result.update({"user_message": user_message, "assistant_message": assistant_message, "limitations": [], "trace_id": trace_id, "status": "queued", "job": job})
+            if idempotency_key:
+                stored = json.loads(json.dumps(result, default=str))
+                store.put_idempotency_response(UUID(str(session.get("owner_id", LOCAL_OWNER_ID))), IDEMPOTENT_ASK_ROUTE, idempotency_key, request_fingerprint, stored)
+                request_keys[idempotency_key] = {"request_hash": request_fingerprint, "response": stored, "created_at": utc_now(), "route": IDEMPOTENT_ASK_ROUTE}
+
+        try:
+            job = _save_with_job(
+                session, kind="answer_question", dedup_key=f"answer:{assistant_message['id']}",
+                payload={"session_id": session_id, "document_id": document["id"], "question": payload.question, "user_message_id": user_message["id"], "assistant_message_id": assistant_message["id"], "trace_id": trace_id},
+                input_data_revision=int(session.get("data_revision") or 0), prepare=remember,
+            )
+        except Exception:
+            with catalog_lock:
+                session["messages"] = [item for item in session["messages"] if item is not user_message and item is not assistant_message]
+                if idempotency_key:
+                    request_keys.pop(idempotency_key, None)
+            raise
         response.status_code = 202
         flow_log("ANSWER_JOB_QUEUED", trace_id=trace_id, session_id=session_id, document_id=document["id"], job_id=job.get("id"), assistant_message_id=assistant_message["id"])
-        return finish({"user_message": user_message, "assistant_message": assistant_message, "limitations": [], "trace_id": trace_id, "status": "queued", "job": job})
+        return result
     if assistant_mode() == "tools":
         if document.get("extraction_status") != "ready":
             raise user_error(409, "EXTRACTION_NOT_READY")

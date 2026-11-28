@@ -73,13 +73,23 @@ def parse_table(raw: str):
     The header is the first line with cells. Lines without cells before it
     belong to the title: DePlot writes a chart's subtitle (e.g. its unit
     line "Đơn vị: nghìn đơn") on its own line after the TITLE line.
+
+    Two DePlot slips are repaired because no value is lost or guessed:
+    - the series names on the TITLE line ("TITLE | Doanh thu | KHCN | KHTC"),
+      with the first data row taken for the header;
+    - a one-series chart whose header is its first data row ("Nước mắm | 70.0%"):
+      the series is named after the chart title;
+    - a category name broken over lines ("Bắc Trung Bộ và" / "Duyên hải" / "Trung | 2.0").
     """
     lines = [[s.strip() for s in line.split("|")] for line in _decoded(raw).split("\n") if line.strip()]
     title = []
+    title_cells = []
     header = None
-    rows = []
+    table = []
+    wrapped = []
     for parts in lines:
         if header is None and parts[0].casefold() == "title":
+            title_cells = parts[1:]
             title += parts[1:]
             continue
         if header is None and len(parts) == 1:
@@ -88,17 +98,31 @@ def parse_table(raw: str):
         if header is None:
             header = parts
             continue
+        if len(parts) == 1 and len(header) > 1:
+            wrapped.append(parts[0])  # a long category name broken over lines: it goes on in the next line
+            continue
+        if wrapped:
+            parts = [" ".join(wrapped + [parts[0]])] + parts[1:]
+            wrapped = []
+        table.append(parts)
+    if wrapped:
+        raise ValueError("Inconsistent DePlot row width")
+    if header and all(_is_number(cell) for cell in header[1:]):
+        if len(title_cells) == len(header) >= 3 and not any(_is_number(cell) for cell in title_cells[1:]):
+            # The series names went onto the TITLE line: its first cell is the title, the rest name the columns.
+            table.insert(0, header)
+            header = [""] + title_cells[1:]
+            title = [title_cells[0]] + title[len(title_cells):]
+        elif len(header) == 2:
+            table.insert(0, header)
+            header = ["", " ".join(title).strip()]
+    rows = []
+    for parts in table:
         if len(parts) != len(header):
             raise ValueError("Inconsistent DePlot row width")
         for index, token in enumerate(parts[1:], 1):
-            try:
-                number = Decimal(token)
-                if not number.is_finite():
-                    raise ValueError("Non-finite prediction")
-            except InvalidOperation:
-                rows.append((parts[0], header[index], token, None))
-            else:
-                rows.append((parts[0], header[index], token, format(number, "f")))
+            number = _number(token)
+            rows.append((parts[0], header[index], token, None if number is None else format(number, "f")))
     title = " ".join(title)
     if not header or not rows:
         raise ValueError("DePlot did not return a data table")
@@ -112,17 +136,27 @@ def parse_table(raw: str):
     return title, rows
 
 
-def _is_number(token):
+_GROUPED = re.compile(r"-?\d{1,3}(,\d{3})+(\.\d+)?")
+
+
+def _number(token):
+    """DePlot's value as a number: "70.0%" is 70.0 (the % stays in the raw text), "1,234.5" is 1234.5."""
+    text = token.strip().removesuffix("%").strip()
+    if _GROUPED.fullmatch(text):
+        text = text.replace(",", "")
     try:
-        return Decimal(token.replace(",", "")).is_finite()
+        number = Decimal(text)
     except InvalidOperation:
-        return False
+        return None
+    return number if number.is_finite() else None
+
+
+def _is_number(token):
+    return _number(token) is not None
 
 
 def _row_label_like(cell, first_label):
     """'T1' beside a first row 'T2', 'Năm 2024' beside 'Năm 2025': same words, a number in both."""
-    import re
-
     words = lambda text: re.sub(r"\d+", "#", text.casefold()).strip()
     return bool(cell) and bool(re.search(r"\d", cell)) and bool(re.search(r"\d", first_label)) and words(cell) == words(first_label) and cell != first_label
 
@@ -388,7 +422,9 @@ class DeplotChartReader:
                             else ["reviewed_linear_axis"]
                             if valid_axis
                             else ["unverified_method_do_not_calculate"]
-                        ),
+                        )
+                        # Where the value's box is: its printed label, or the whole chart.
+                        + (["box_printed_label"] if direct_box else ["box_whole_chart"]),
                     }
                     context = f"{title} {category} {series}"
                     evidence.append(

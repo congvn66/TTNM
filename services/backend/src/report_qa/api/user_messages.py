@@ -25,7 +25,8 @@ MESSAGES = {
     "SESSION_NOT_FOUND": "Không tìm thấy báo cáo.",
     "SESSION_TITLE_REQUIRED": "Nhập tên báo cáo.",
     "DOCUMENT_NOT_FOUND": "Không tìm thấy báo cáo.",
-    "DOCUMENT_NAME_INVALID": "Tên báo cáo không hợp lệ.",
+    "DOCUMENT_NAME_INVALID": "Nhập tên báo cáo.",
+    "DOCUMENT_NAME_SLASH": "Tên báo cáo không được có dấu / hoặc \\.",
     "DOCUMENT_FILE_MISSING": "Không tìm thấy tệp PDF của báo cáo này.",
     "MESSAGE_TRACE_NOT_FOUND": "Không tìm thấy chi tiết của câu trả lời này.",
     "FORMULA_NOT_FOUND": "Không tìm thấy phép tính này trong câu trả lời.",
@@ -46,6 +47,8 @@ MESSAGES = {
     "EXTRACTION_IN_PROGRESS": "Báo cáo đang được đọc.",
     "EXTRACTION_UPGRADE_FAILED": "Không mở được kết quả đọc cũ. Đọc lại báo cáo.",
     "REEXTRACTION_NOT_SUPPORTED": "Chưa đọc lại được báo cáo này. Tải lên lại tệp PDF.",
+    # Stored as a document's extraction_error: its reading job ended or was lost without a result.
+    "EXTRACTION_STOPPED": "Chưa đọc xong báo cáo này. Thử lại.",
     # Numbers
     "EVIDENCE_NOT_FOUND": "Không tìm thấy số liệu trong báo cáo.",
     "EVIDENCE_REVISION_CONFLICT": "Số này vừa được sửa. Tải lại trang.",
@@ -57,6 +60,8 @@ MESSAGES = {
     "NO_TEXT_EVIDENCE": "Không tìm thấy nội dung liên quan trong báo cáo. Thử dùng từ có trong báo cáo.",
     "CHART_EVIDENCE_PERSISTENCE_FAILED": "Không trả lời được. Thử lại.",
     "AI_PROVIDER_UNAVAILABLE": "Hệ thống đang quá tải. Thử lại sau vài phút.",
+    # No "AI" in the text: the reader's friendlyError swaps any text with "AI" in it for a generic one.
+    "AI_RATE_LIMITED": "Trợ lý đang quá tải. Thử lại sau một phút.",
     "AI_PROVIDER_TIMEOUT": "Không trả lời được. Thử lại.",
     "AI_MODEL_UNAVAILABLE": "Không trả lời được. Thử lại.",
     "AI_PROVIDER_HTTP_ERROR": "Không trả lời được. Thử lại.",
@@ -66,6 +71,9 @@ MESSAGES = {
     "AI_UNSUPPORTED_EVIDENCE": "Không trả lời được. Thử lại.",
     "DOCUMENT_CONTEXT_TOO_LARGE": "Câu hỏi quá dài. Thử hỏi ngắn hơn.",
     "BRIEF_UNAVAILABLE": "Tính năng này chưa bật.",
+    "BRIEF_TIMEOUT": "Tóm tắt mất quá lâu. Thử lại sau.",
+    "BRIEF_INCOMPLETE": "Chưa tóm tắt được báo cáo này. Thử lại sau.",
+    "ANSWER_FAILED": "Không thể tạo câu trả lời. Hãy thử lại.",
     "ASSISTANT_INCOMPLETE": "Câu hỏi quá dài. Thử hỏi ngắn hơn.",
     "AI_PROVIDER_BAD_RESPONSE": "Không trả lời được. Thử lại.",
     "AI_ANSWER_TIMEOUT": "Câu hỏi quá dài. Thử hỏi ngắn hơn.",

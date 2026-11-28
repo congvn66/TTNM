@@ -109,6 +109,7 @@ def test_health_docs_and_openapi_expose_only_the_main_flow() -> None:
         "/api/v1/projects/{project_id}/library",
         "/api/v1/sessions/{session_id}/project",
         "/api/v1/projects/{project_id}/documents/{document_id}",
+        "/api/v1/projects/{project_id}/documents",
         "/api/v1/auth/sessions",
         "/api/v1/auth/sessions/{session_id}",
         "/api/v1/auth/sessions/revoke-others",

@@ -108,13 +108,17 @@ def _clean_page(page):
     return pixmap, remove_ruling_lines(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY))
 
 
-def clean_scan(path: Path, target: Path) -> Path:
-    """A copy of a scanned PDF with ruling lines removed, same page sizes, so boxes stay in page coordinates."""
+def clean_scan(path: Path, target: Path, pages: list[int] | None = None) -> Path:
+    """A copy of a scanned PDF (or of its pages `pages`, numbered from 1) with ruling lines removed.
+
+    Pages keep their sizes, so boxes stay in page coordinates.
+    """
     import cv2
     import pymupdf
 
     with pymupdf.open(path) as source, pymupdf.open() as copy:
-        for page in source:
+        for number in pages or range(1, source.page_count + 1):
+            page = source[number - 1]
             _, gray = _clean_page(page)
             ok, png = cv2.imencode(".png", gray)
             if not ok:

@@ -88,7 +88,7 @@ def test_answer_job_marks_its_request_as_the_worker(monkeypatch):
 
     monkeypatch.setattr(runner, "get_session", lambda *args: session)
     monkeypatch.setattr(runner, "ask_session_document", ask)
-    monkeypatch.setattr(runner, "save_catalog", lambda *args: None)
+    monkeypatch.setattr(runner, "save_session", lambda *args: None)
 
     runner.complete_answer_job({"session_id": "s", "assistant_message_id": "placeholder", "owner_id": "o", "document_id": "d", "question": "q"})
 

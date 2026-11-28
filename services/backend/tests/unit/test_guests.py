@@ -537,8 +537,11 @@ def test_both_upload_routes_hold_the_guest_slot():
     import inspect
 
     from report_qa.api import main
-    for endpoint in (main.upload_session_document, main.upload_document):
+    # The session and project routes both upload through _upload_into.
+    for endpoint in (main._upload_into, main.upload_document):
         assert "with guest_upload_slot(owner_id):" in inspect.getsource(endpoint)
+    for endpoint in (main.upload_session_document, main.upload_project_document):
+        assert "_upload_into(" in inspect.getsource(endpoint)
 
 
 def test_migration_0013_lets_only_the_purge_flag_through_the_immutability_triggers():

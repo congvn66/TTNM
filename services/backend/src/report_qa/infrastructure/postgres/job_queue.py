@@ -22,6 +22,34 @@ class JobQueueError(RuntimeError):
     pass
 
 
+# The worker's text for an answer that failed with no more specific reason (user_messages.MESSAGES["ANSWER_FAILED"]).
+ANSWER_FAILED_TEXT = "Không thể tạo câu trả lời. Hãy thử lại."
+
+
+def fail_answer_message(connection: Any, job: dict[str, Any], text: str) -> None:
+    """End the "processing" answer card of an answer job that will not run again, keeping it in the chat.
+
+    Revisions are immutable, so the failed answer is a new revision. A card
+    that is already finished is left as it is.
+    """
+    message_id = (job.get("payload") or {}).get("assistant_message_id")
+    if job.get("kind") != "answer_question" or not message_id:
+        return
+    message = connection.execute(
+        "UPDATE messages SET status='failed',content=%s,updated_at=now() WHERE id=%s AND chat_id=%s AND status='processing' RETURNING current_answer_revision_id",
+        (text, UUID(str(message_id)), job["chat_id"]),
+    ).fetchone()
+    if message and message["current_answer_revision_id"]:
+        failed = connection.execute(
+            """INSERT INTO answer_revisions (chat_id,message_id,revision_no,answer_status,question_context,operation,result,answer_text,assessment,input_data_revision)
+               SELECT chat_id,message_id,(SELECT MAX(revision_no)+1 FROM answer_revisions WHERE message_id=source.message_id),'processing_error',question_context,operation,
+                      jsonb_set(COALESCE(result,'{}'::jsonb),'{structured_answer}','null'::jsonb,true),%s,assessment,input_data_revision
+                 FROM answer_revisions AS source WHERE id=%s RETURNING id""",
+            (text, message["current_answer_revision_id"]),
+        ).fetchone()
+        connection.execute("UPDATE messages SET current_answer_revision_id=%s WHERE id=%s", (failed["id"], UUID(str(message_id))))
+
+
 class PostgresJobQueue:
     def __init__(self, database_url: str) -> None:
         if not database_url:
@@ -117,7 +145,12 @@ class PostgresJobQueue:
                 result.append(item)
             return result
 
-    def claim(self, *, worker_id: str, lease_seconds: int = 60) -> dict[str, Any] | None:
+    def claim(self, *, worker_id: str, lease_seconds: int = 60, kinds: list[str] | None = None) -> dict[str, Any] | None:
+        """Lease the next job: answers before readings, then oldest first. ``kinds`` limits it to those kinds (a worker lane).
+
+        A reader waits for an answer; a reading takes minutes. Oldest-first put
+        every question behind every queued reading.
+        """
         lease_token = uuid4()
         with self._connect() as connection:
             # A crashed worker must not leave a terminal-attempt job in
@@ -126,24 +159,28 @@ class PostgresJobQueue:
             expired = connection.execute(
                 """UPDATE jobs SET status='failed',error_code='LEASE_EXPIRED',finished_at=now(),lease_token=NULL,lease_expires_at=NULL
                    WHERE status='running' AND lease_expires_at < now() AND attempts >= max_attempts
-                   RETURNING id"""
+                   RETURNING id,kind,chat_id,payload"""
             ).fetchall()
             for item in expired:
                 event_no = connection.execute("SELECT COALESCE(MAX(event_no),0)+1 AS next FROM job_events WHERE job_id=%s", (item["id"],)).fetchone()["next"]
                 connection.execute("INSERT INTO job_events (job_id,event_no,event_type,payload) VALUES (%s,%s,'failed',%s::jsonb)", (item["id"], event_no, Jsonb({"error_code": "LEASE_EXPIRED"})))
+                # Its answer card would say "Đang trả lời…" forever. (A reading shows as failed by itself: see
+                # PostgresRuntimeStore._extraction_state.)
+                fail_answer_message(connection, item, ANSWER_FAILED_TEXT)
             row = connection.execute(
                 """WITH candidate AS (
                        SELECT id FROM jobs
-                        WHERE (status='queued' AND available_at <= now())
-                           OR (status='running' AND lease_expires_at < now())
-                        ORDER BY created_at
+                        WHERE ((status='queued' AND available_at <= now())
+                           OR (status='running' AND lease_expires_at < now()))
+                          AND (%s::text[] IS NULL OR kind = ANY(%s::text[]))
+                        ORDER BY (kind = 'answer_question') DESC, created_at
                         FOR UPDATE SKIP LOCKED LIMIT 1
                    )
                    UPDATE jobs j SET status='running', lease_token=%s, lease_expires_at=now() + (%s || ' seconds')::interval,
                        started_at=COALESCE(started_at,now()), attempts=attempts+1
                     FROM candidate WHERE j.id=candidate.id AND j.attempts < j.max_attempts
                     RETURNING j.*""",
-                (lease_token, lease_seconds),
+                (kinds, kinds, lease_token, lease_seconds),
             ).fetchone()
             if row is None:
                 return None
@@ -222,19 +259,7 @@ class PostgresJobQueue:
         with self._connect() as connection:
             row = connection.execute("UPDATE jobs SET status='cancelled',finished_at=now(),lease_token=NULL,lease_expires_at=NULL WHERE id=%s AND owner_id=%s AND status IN ('queued','running') RETURNING kind,chat_id,payload", (job_id, owner_id)).fetchone()
             if row:
-                if row['kind'] == 'answer_question' and (row['payload'] or {}).get('assistant_message_id'):
-                    message_id = UUID(row['payload']['assistant_message_id'])
-                    message = connection.execute("UPDATE messages SET status='failed',content=%s,updated_at=now() WHERE id=%s AND chat_id=%s AND status='processing' RETURNING current_answer_revision_id", ('Đã dừng tạo câu trả lời.', message_id, row['chat_id'])).fetchone()
-                    if message and message['current_answer_revision_id']:
-                        # Revisions are immutable, so the stopped answer is a new one.
-                        stopped = connection.execute(
-                            """INSERT INTO answer_revisions (chat_id,message_id,revision_no,answer_status,question_context,operation,result,answer_text,assessment,input_data_revision)
-                               SELECT chat_id,message_id,(SELECT MAX(revision_no)+1 FROM answer_revisions WHERE message_id=source.message_id),'processing_error',question_context,operation,
-                                      jsonb_set(COALESCE(result,'{}'::jsonb),'{structured_answer}','null'::jsonb,true),%s,assessment,input_data_revision
-                                 FROM answer_revisions AS source WHERE id=%s RETURNING id""",
-                            ('Đã dừng tạo câu trả lời.', message['current_answer_revision_id']),
-                        ).fetchone()
-                        connection.execute("UPDATE messages SET current_answer_revision_id=%s WHERE id=%s", (stopped['id'], message_id))
+                fail_answer_message(connection, row, "Đã dừng tạo câu trả lời.")
                 event_no = connection.execute("SELECT COALESCE(MAX(event_no),0)+1 AS next FROM job_events WHERE job_id=%s", (job_id,)).fetchone()["next"]
                 connection.execute("INSERT INTO job_events (job_id,event_no,event_type,payload) VALUES (%s,%s,'cancelled','{}'::jsonb)", (job_id, event_no))
             return bool(row)

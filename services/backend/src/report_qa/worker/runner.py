@@ -20,7 +20,10 @@ from starlette.requests import Request
 from starlette.responses import Response
 import psycopg
 
-from report_qa.api.main import SessionQuestionRequest, ask_session_document, catalog, complete_document_extraction, get_session, save_catalog
+from fastapi import HTTPException
+
+from report_qa.api.main import SessionQuestionRequest, ask_session_document, complete_document_extraction, get_session, save_session
+from report_qa.api.user_messages import MESSAGES
 from report_qa.config import settings
 from report_qa.infrastructure.postgres.job_queue import PostgresJobQueue
 
@@ -51,12 +54,38 @@ class StaleJobError(RuntimeError):
     """The answer was computed from an input snapshot that is no longer current."""
 
 
+class AnswerFailed(RuntimeError):
+    """The answer failed and its card already says so: the job ends without a retry.
+
+    A silent retry kept the job queued while the card read "failed", and a
+    rate-limited provider is not back a second later. The reader asks again.
+    """
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+class RetryLater(RuntimeError):
+    """The question came before its report was read: the job tries again in WAIT_FOR_READING_SECONDS, its card still waiting."""
+
+
+WAIT_FOR_READING_SECONDS = 30
+
+
+def _failure_code(exc: Exception) -> str:
+    """The user-facing code of an answer failure: the API error's code, else ANSWER_FAILED."""
+    detail = exc.detail if isinstance(exc, HTTPException) else None
+    code = detail.get("code") if isinstance(detail, dict) else None
+    return code if code in MESSAGES else "ANSWER_FAILED"
+
+
 def _stop(*_args) -> None:
     global STOP
     STOP = True
 
 
-def complete_answer_job(payload: dict[str, object], *, publish_guard=None) -> None:
+def complete_answer_job(payload: dict[str, object], *, publish_guard=None, last_try: bool = True) -> None:
     """Run the existing grounded answer pipeline and replace its placeholder.
 
     The compatibility API still owns the orchestration code.  This adapter
@@ -71,7 +100,12 @@ def complete_answer_job(payload: dict[str, object], *, publish_guard=None) -> No
         raise RuntimeError("JOB_OWNER_MISSING")
     session = get_session(session_id, owner_id)
     placeholder = next((item for item in session.get("messages", []) if item.get("id") == assistant_id), None)
-    if placeholder and placeholder.get("status") == "completed":
+    if placeholder is None:
+        # The question and its card are stored with the job in one transaction, so this is a job from before
+        # that: there is no card to answer into, and an answer without its question would not be saved.
+        logger.warning("answer job has no stored question; skipped session=%s message=%s", session_id, assistant_id)
+        return
+    if placeholder.get("status") == "completed":
         return
     request = Request({
         "type": "http", "method": "POST", "path": f"/api/v1/sessions/{session_id}/messages",
@@ -83,13 +117,21 @@ def complete_answer_job(payload: dict[str, object], *, publish_guard=None) -> No
     response = Response()
     try:
         result = ask_session_document(session_id, SessionQuestionRequest(document_id=str(payload["document_id"]), question=str(payload["question"])), request, response)
-    except Exception:
+    except Exception as exc:
+        code = _failure_code(exc)
+        if code == "EXTRACTION_NOT_READY" and not last_try:
+            raise RetryLater(code) from exc
+        text = MESSAGES[code]
         session = get_session(session_id, owner_id)
         placeholder = next((item for item in session.get("messages", []) if item.get("id") == assistant_id), None)
-        if placeholder is not None:
-            placeholder.update({"status": "failed", "mode": "answer_question_job", "body": "Không thể tạo câu trả lời. Hãy thử lại.", "structured_answer": {"presentation": "error_v1", "answer": "Không thể tạo câu trả lời. Hãy thử lại.", "summary": "Worker gặp lỗi khi gọi pipeline.", "sections": [], "formulas": [], "tables": [], "claims": [], "warnings": ["JOB_FAILED"], "cited_pages": []}})
-            save_catalog(catalog, owner_id)
-        raise
+        if placeholder is None:
+            raise
+        placeholder.update({"status": "failed", "mode": "answer_question_job", "body": text, "structured_answer": {"presentation": "error_v1", "answer": text, "summary": "", "error_code": code, "sections": [], "formulas": [], "tables": [], "claims": [], "warnings": [], "cited_pages": []}})
+        # Only this session: the worker's cache holds older copies of other sessions, and saving those
+        # put back document and answer states that had moved on since.
+        save_session(session, owner_id)
+        logger.warning("answer failed code=%s session=%s message=%s", code, session_id, assistant_id, exc_info=exc)
+        raise AnswerFailed(code) from exc
 
     if publish_guard is not None and not publish_guard():
         raise StaleJobError("STALE_OR_CANCELLED_JOB")
@@ -111,7 +153,7 @@ def complete_answer_job(payload: dict[str, object], *, publish_guard=None) -> No
         placeholder["status"] = "completed"
         placeholder["trace"] = [*(placeholder.get("trace") or []), {"stage": "job_worker", "status": "completed"}]
     session["updated_at"] = datetime.now(timezone.utc).isoformat()
-    save_catalog(catalog, owner_id)
+    save_session(session, owner_id)
 
 
 def _heartbeat_loop(queue: PostgresJobQueue, job_id: UUID, lease_token: UUID, stop: threading.Event) -> None:
@@ -129,6 +171,9 @@ def run(*, poll_seconds: float = 1.0, worker_id: str | None = None, once: bool =
     # ``job_events`` can distinguish a deployed worker from a one-off smoke
     # process.  Fall back to the PID for local/manual runs.
     worker_id = worker_id or os.getenv("SOURCELENS_WORKER_ID") or f"worker-{os.getpid()}"
+    # SOURCELENS_WORKER_KINDS=answer_question makes a worker that only answers, so questions never wait
+    # behind readings. Unset: every kind, answers first.
+    kinds = [item.strip() for item in os.getenv("SOURCELENS_WORKER_KINDS", "").split(",") if item.strip()] or None
     reconnect_delay = max(1.0, poll_seconds)
     next_cleanup = 0.0
     while not STOP:
@@ -137,7 +182,7 @@ def run(*, poll_seconds: float = 1.0, worker_id: str | None = None, once: bool =
             next_cleanup = time.monotonic() + CLEANUP_EVERY_SECONDS
             _clean_expired_guests()
         try:
-            job = queue.claim(worker_id=worker_id)
+            job = queue.claim(worker_id=worker_id, **({"kinds": kinds} if kinds else {}))
             reconnect_delay = max(1.0, poll_seconds)
         except (psycopg.OperationalError, psycopg.InterfaceError) as exc:
             # A transient Supabase/pooler outage must not kill the worker and
@@ -168,6 +213,7 @@ def run(*, poll_seconds: float = 1.0, worker_id: str | None = None, once: bool =
             elif job["kind"] == "answer_question":
                 complete_answer_job(
                     payload,
+                    last_try=int(job.get("attempts") or 0) >= int(job.get("max_attempts") or 3),
                     publish_guard=lambda: queue.can_publish(
                         job_id=job_id,
                         lease_token=lease_token,
@@ -183,12 +229,15 @@ def run(*, poll_seconds: float = 1.0, worker_id: str | None = None, once: bool =
         except Exception as exc:
             attempts = int(job.get("attempts") or 0)
             stale = isinstance(exc, StaleJobError)
-            retry_at = None if stale else datetime.now(timezone.utc) + timedelta(seconds=min(60, 2 ** max(0, attempts - 1))) if attempts < int(job.get("max_attempts") or 3) else None
+            final = stale or isinstance(exc, AnswerFailed)
+            delay = WAIT_FOR_READING_SECONDS if isinstance(exc, RetryLater) else min(60, 2 ** max(0, attempts - 1))
+            retry_at = None if final else datetime.now(timezone.utc) + timedelta(seconds=delay) if attempts < int(job.get("max_attempts") or 3) else None
             try:
                 if stale:
                     queue.supersede(job_id=job_id, lease_token=lease_token, reason="STALE_INPUT_REVISION")
                 else:
-                    queue.fail(job_id=job_id, lease_token=lease_token, error_code="ANSWER_FAILED" if job.get("kind") == "answer_question" else "EXTRACTION_FAILED", retry_at=retry_at)
+                    code = exc.code if isinstance(exc, AnswerFailed) else "ANSWER_FAILED" if job.get("kind") == "answer_question" else "EXTRACTION_FAILED"
+                    queue.fail(job_id=job_id, lease_token=lease_token, error_code=code, retry_at=retry_at)
             except (psycopg.OperationalError, psycopg.InterfaceError):
                 # The lease may be recovered by another worker after a DB
                 # outage. Never terminate the process while reporting failure.

@@ -36,6 +36,9 @@ GUEST_DAYS = 7
 GUEST_UPLOADS_PER_DAY = 3
 GUESTS_PER_ADDRESS_PER_HOUR = 30
 GUEST_NAME = "Khách"
+# A reset code is secrets.token_urlsafe(36): 48 characters. Anything far off that is not one of ours.
+RESET_TOKEN_MIN_CHARS = 20
+RESET_TOKEN_MAX_CHARS = 256
 # pg_advisory_xact_lock key: guests are made one at a time so the limits are counted exactly.
 GUEST_CREATE_LOCK = 7_301_001
 # Every table with an owner_id column; signing in moves a guest's rows to the account.
@@ -58,7 +61,8 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    token: str = Field(min_length=20, max_length=256)
+    # The length is checked in the endpoint: a short code gets the same clear "invalid link" message as a wrong one.
+    token: str = Field(default="", max_length=4096)
     password: str = Field(min_length=8, max_length=256)
 
 
@@ -245,7 +249,8 @@ def _user_from_request(request: Request) -> dict[str, Any] | None:
                 (_token_hash(token),),
             ).fetchone()
             if row:
-                connection.execute("UPDATE auth_sessions SET last_seen_at=now() WHERE token_hash=%s", (_token_hash(token),))
+                # At most once a minute: the reader polls every 2 s, and a write per poll made each one slower.
+                connection.execute("UPDATE auth_sessions SET last_seen_at=now() WHERE token_hash=%s AND last_seen_at < now() - interval '1 minute'", (_token_hash(token),))
                 return dict(row)
     except Exception as exc:
         # A stale token is a normal 401; a database outage must remain
@@ -311,6 +316,12 @@ def adopt_guest(connection: Any, guest_id: Any, user_id: Any) -> int | None:
             if not guest:
                 return 0
             connection.execute("SET CONSTRAINTS ALL DEFERRED")
+            # A guest chat with no report left in it would only sit empty in the account.
+            connection.execute(
+                """UPDATE chats c SET deleted_at=now(),updated_at=now() WHERE c.owner_id=%s AND c.deleted_at IS NULL
+                     AND NOT EXISTS (SELECT 1 FROM chat_documents cd JOIN document_versions dv ON dv.id=cd.document_version_id
+                                       JOIN documents d ON d.id=dv.document_id WHERE cd.chat_id=c.id AND d.deleted_at IS NULL)""",
+                (guest_id,))
             count = connection.execute("SELECT count(*) AS n FROM documents WHERE owner_id=%s AND deleted_at IS NULL", (guest_id,)).fetchone()["n"]
             default = "SELECT id FROM projects WHERE owner_id=%s AND name = ANY(%s) AND deleted_at IS NULL ORDER BY created_at LIMIT 1"
             target = connection.execute(default, (user_id, list(DEFAULT_PROJECT_NAMES))).fetchone()
@@ -375,7 +386,8 @@ def _guest_uploads_left(connection: Any, owner_id: UUID) -> int | None:
         return 0  # cleanup took the guest after its cookie was checked
     if not row["is_guest"]:
         return None
-    used = connection.execute("SELECT count(*) AS n FROM documents WHERE owner_id=%s AND created_at > now() - interval '1 day'", (owner_id,)).fetchone()["n"]
+    # A deleted report frees its slot. The total over all guests still counts every upload: it caps the reading cost.
+    used = connection.execute("SELECT count(*) AS n FROM documents WHERE owner_id=%s AND deleted_at IS NULL AND created_at > now() - interval '1 day'", (owner_id,)).fetchone()["n"]
     everyone = connection.execute(
         """SELECT count(*) AS n FROM documents d JOIN users u ON u.id=d.owner_id
            WHERE u.is_guest AND d.created_at > now() - interval '1 day'""").fetchone()["n"]
@@ -556,16 +568,18 @@ def forgot_password(payload: ForgotPasswordRequest, request: Request) -> dict[st
 def reset_password(payload: ResetPasswordRequest, request: Request, response: Response) -> dict[str, Any]:
     _require_postgres()
     _csrf_guard(request)
+    if not RESET_TOKEN_MIN_CHARS <= len(payload.token.strip()) <= RESET_TOKEN_MAX_CHARS:
+        raise user_error(400, "RESET_TOKEN_INVALID")
     password_hash = _hash_password(payload.password)
     try:
         with _connection() as connection:
             with connection.transaction():
                 row = connection.execute("""SELECT u.id,u.email,u.display_name FROM account_tokens t JOIN users u ON u.id=t.user_id
-                    WHERE t.token_hash=%s AND t.purpose='reset_password' AND t.used_at IS NULL AND t.expires_at>now() AND u.deleted_at IS NULL""", (_token_hash(payload.token),)).fetchone()
+                    WHERE t.token_hash=%s AND t.purpose='reset_password' AND t.used_at IS NULL AND t.expires_at>now() AND u.deleted_at IS NULL""", (_token_hash(payload.token.strip()),)).fetchone()
                 if not row:
                     raise user_error(400, "RESET_TOKEN_INVALID")
                 connection.execute("UPDATE users SET password_hash=%s,updated_at=now() WHERE id=%s", (password_hash, row["id"]))
-                connection.execute("UPDATE account_tokens SET used_at=now() WHERE token_hash=%s", (_token_hash(payload.token),))
+                connection.execute("UPDATE account_tokens SET used_at=now() WHERE token_hash=%s", (_token_hash(payload.token.strip()),))
                 connection.execute("UPDATE auth_sessions SET revoked_at=now() WHERE user_id=%s AND revoked_at IS NULL", (row["id"],))
             session_token, expires_at = _create_session(connection, row["id"], request=request)
         _set_session_cookie(response, session_token, expires_at)
