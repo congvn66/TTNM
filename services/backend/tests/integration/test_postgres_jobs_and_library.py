@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import HTTPException
 
 DATABASE_URL = os.getenv("SOURCELENS_TEST_DATABASE_URL", "")
 pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="needs SOURCELENS_TEST_DATABASE_URL (a throwaway PostgreSQL)")
@@ -174,8 +175,19 @@ def test_a_project_whose_reports_are_deleted_can_be_deleted(monkeypatch):
     project = library.create_project(library.ProjectCreateRequest(name=f"Dự án {uuid4()}"), None)["project"]["id"]
     session = _save(owner, _session(owner, status="ready", project_id=str(project)))
     _store(owner).archive_document(session["id"], session["documents"][0]["id"])
-    _store(owner).archive_chat(session["id"])
+    # The chat that held the report is left empty, and must not keep the project.
     assert library.archive_project(project, None)["status"] == "archived"
+    assert _q("SELECT deleted_at IS NOT NULL AS gone FROM chats WHERE id=%s", (session["id"],)) == [{"gone": True}]
+
+
+def test_a_project_with_a_live_report_cannot_be_deleted(monkeypatch):
+    owner = _owner()
+    library = _library(monkeypatch, owner)
+    project = library.create_project(library.ProjectCreateRequest(name=f"Dự án {uuid4()}"), None)["project"]["id"]
+    _save(owner, _session(owner, status="ready", project_id=str(project)))
+    with pytest.raises(HTTPException) as refused:
+        library.archive_project(project, None)
+    assert refused.value.status_code == 409
 
 
 def test_the_library_shows_a_reading_with_no_live_job_as_failed(monkeypatch):

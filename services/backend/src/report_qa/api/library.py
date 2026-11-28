@@ -163,16 +163,22 @@ def archive_project(project_id: UUID, request: Request):
     owner_id = owner_id_for_request(request)
     with _connection() as connection:
         _project(connection, project_id, owner_id)
-        # Deleted reports do not count, as in the project list (list_projects).
-        counts = connection.execute(
+        # Only live reports keep a project: a chat whose reports were all deleted is empty and
+        # goes with the project, or a project could never be deleted after its last report.
+        live = connection.execute(
             """SELECT
-                     (SELECT count(*) FROM chats WHERE project_id=%s AND owner_id=%s AND deleted_at IS NULL) AS session_count,
                      (SELECT count(*) FROM project_documents pd JOIN documents d ON d.id=pd.document_id AND d.deleted_at IS NULL
-                       WHERE pd.project_id=%s AND pd.owner_id=%s) AS document_count""",
+                       WHERE pd.project_id=%s AND pd.owner_id=%s)
+                   + (SELECT count(*) FROM chats c
+                       JOIN chat_documents cd ON cd.chat_id=c.id
+                       JOIN document_versions dv ON dv.id=cd.document_version_id
+                       JOIN documents d ON d.id=dv.document_id AND d.deleted_at IS NULL
+                      WHERE c.project_id=%s AND c.owner_id=%s AND c.deleted_at IS NULL) AS reports""",
             (project_id, owner_id, project_id, owner_id),
         ).fetchone()
-        if counts["session_count"] or counts["document_count"]:
+        if live["reports"]:
             raise user_error(409, "PROJECT_NOT_EMPTY")
+        connection.execute("UPDATE chats SET deleted_at=now(),updated_at=now() WHERE project_id=%s AND owner_id=%s AND deleted_at IS NULL", (project_id, owner_id))
         connection.execute("UPDATE projects SET deleted_at=now(),updated_at=now() WHERE id=%s AND owner_id=%s", (project_id, owner_id))
     return {"project_id": str(project_id), "status": "archived"}
 
