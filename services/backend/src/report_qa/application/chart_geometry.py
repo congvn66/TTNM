@@ -24,8 +24,8 @@ _MIN_HUE_SHARE = 0.002
 _HUE_WINDOW = 6
 
 
-def read_chart_image(png: bytes, box: list[float], categories: list[str], series: list[str], words=None) -> dict[str, Any]:
-    """What the chart image itself shows: {"shape", "marks", "axes", "names"}.
+def read_chart_image(png: bytes, box: list[float], categories: list[str], series: list[str], words=None, rows=None) -> dict[str, Any]:
+    """What the chart image itself shows: {"shape", "marks", "axes", "names", "legend", "right_line"}.
 
     shape is "pie" for a round chart (a pie or a ring), else None. marks is
     {(category, series): {"label", "bar", "text", "estimate"}}: the bar and
@@ -36,8 +36,14 @@ def read_chart_image(png: bytes, box: list[float], categories: list[str], series
     include text (a vector chart). words are the chart's printed words in
     image pixels (from the PDF for a vector chart); without them the image
     is read by OCR, which reads numbers only.
+
+    With a right axis, legend lists the legend entries that name their axis
+    ("Biên lợi nhuận gộp (trục phải)") as {"text", "side"} in reading
+    order, and right_line gives, for each of the rows category positions
+    left to right, the point of the line drawn there read on the right axis
+    ({"value", "box"}, or None where no single point is seen).
     """
-    empty = {"shape": None, "marks": {}, "axes": {"left": None, "right": None}, "names": {}}
+    empty = {"shape": None, "marks": {}, "axes": {"left": None, "right": None}, "names": {}, "legend": [], "right_line": None}
     try:
         import cv2  # noqa: F401
         import numpy as np
@@ -54,6 +60,10 @@ def read_chart_image(png: bytes, box: list[float], categories: list[str], series
         "left": _axis(words, lambda w: w["x"] + w["w"] <= min((b["x"] for b in bars), default=0.3 * width) + 2),
         "right": _axis(words, lambda w: w["x"] >= max((b["x"] + b["w"] for b in bars), default=0.7 * width) - 2),
     }
+    for axis in axes.values():
+        if axis and axis["linear"]:
+            # Ticks OCR missed still lie on the scale: the whole image height is its reach.
+            axis["reach"] = sorted((axis["intercept"], axis["intercept"] + axis["slope"] * height))
     marks, slots = _marks(image, box, bars, swatches, categories, series, words, axes)
     names = {}
     centres = [sum(bar["x"] + bar["w"] / 2 for bar in slot) / len(slot) for slot in slots]
@@ -63,7 +73,16 @@ def read_chart_image(png: bytes, box: list[float], categories: list[str], series
         name = _label_under(slot, words, height, room)
         if name:
             names[category] = name
-    return {"shape": None, "marks": marks, "axes": axes, "names": names if len(names) == len(categories) else {}}
+    legend, right_line = [], None
+    if axes["right"]:
+        legend = _legend(image, words)
+        xs = _category_xs(words, rows or len(categories), axes, height, slots)
+        if axes["right"]["linear"] and xs:
+            to_page = lambda x0, y0, x1, y1: [box[0] + x0 / width * (box[2] - box[0]), box[1] + y0 / height * (box[3] - box[1]),  # noqa: E731
+                                              box[0] + x1 / width * (box[2] - box[0]), box[1] + y1 / height * (box[3] - box[1])]
+            right_line = [_line_point(image, x, axes["right"], {bar["hue"][0] for bar in bars}, to_page) for x in xs]
+    return {"shape": None, "marks": marks, "axes": axes, "names": names if len(names) == len(categories) else {},
+            "legend": legend, "right_line": right_line}
 
 
 def find_bar_marks(png: bytes, box: list[float], categories: list[str], series: list[str]) -> dict[tuple[str, str], dict[str, Any]]:
@@ -231,22 +250,136 @@ def _label_under(slot, words, height, room):
     return text if any(ch.isalpha() for ch in text) else None
 
 
+def _ocr(image, config, lang="eng", left=0):
+    """OCR words of an image at 2x, with boxes in the image's pixels shifted by left."""
+    import cv2
+    import pytesseract
+
+    large = cv2.resize(image, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    data = pytesseract.image_to_data(large, lang=lang, config=config, output_type=pytesseract.Output.DICT)
+    return [{"text": str(text).strip(), "x": left + data["left"][i] / 2, "y": data["top"][i] / 2,
+             "w": data["width"][i] / 2, "h": data["height"][i] / 2}
+            for i, text in enumerate(data["text"]) if str(text).strip()]
+
+
 def _printed_numbers(image) -> list[dict[str, Any]]:
-    """Numbers printed on the chart, with their boxes in image pixels (OCR at 2x)."""
+    """Numbers printed on the chart, with their boxes in image pixels (OCR at 2x).
+
+    The two side strips are read again as text blocks: sparse reading of a
+    whole scanned chart misses most tick numbers (S2 found 18, 12, 10 of
+    10…24), while a strip holding only the ticks reads them all.
+    """
     try:
-        import cv2
-        import pytesseract
+        import pytesseract  # noqa: F401
     except ImportError:
         return []
-    large = cv2.resize(image, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-    data = pytesseract.image_to_data(large, config="--psm 11 -c tessedit_char_whitelist=0123456789.,", output_type=pytesseract.Output.DICT)
-    words = []
-    for index, text in enumerate(data["text"]):
-        text = str(text).strip().strip(".,")
+    digits = "-c tessedit_char_whitelist=0123456789.,"
+    words = _ocr(image, "--psm 11 " + digits)
+    width = image.shape[1]
+    strip = int(0.13 * width)
+    for left, part in ((0, image[:, :strip]), (width - strip, image[:, width - strip:])):
+        for word in _ocr(part, "--psm 6 " + digits, left=left):
+            if not any(_overlap(word, other) for other in words):
+                words.append(word)
+    out = []
+    for word in words:
+        text = word["text"].strip(".,")
         if text and any(ch.isdigit() for ch in text):
-            words.append({"text": text, "x": data["left"][index] / 2, "y": data["top"][index] / 2,
-                          "w": data["width"][index] / 2, "h": data["height"][index] / 2})
-    return words
+            out.append({**word, "text": text})
+    return out
+
+
+def _overlap(a, b) -> bool:
+    return a["x"] < b["x"] + b["w"] and b["x"] < a["x"] + a["w"] and a["y"] < b["y"] + b["h"] and b["y"] < a["y"] + a["h"]
+
+
+def _legend(image, words) -> list[dict[str, str]]:
+    """Legend entries that name their axis, in reading order: [{"text", "side"}].
+
+    A vector chart's words carry the text; a picture is read with the
+    Vietnamese OCR model.
+    """
+    if not any(sum(ch.isalpha() for ch in w["text"]) >= 2 for w in words):
+        try:
+            words = _ocr(image, "--psm 11", lang="vie")
+        except Exception:  # noqa: BLE001  no Vietnamese model or no OCR: no legend
+            return []
+    lines: list[list[dict]] = []
+    for word in sorted(words, key=lambda w: (w["y"] + w["h"] / 2, w["x"])):
+        if lines and abs(word["y"] + word["h"] / 2 - (lines[-1][0]["y"] + lines[-1][0]["h"] / 2)) <= 0.5 * word["h"]:
+            lines[-1].append(word)
+        else:
+            lines.append([word])
+    entries = []
+    for line in lines:
+        phrases: list[list[dict]] = []
+        for word in sorted(line, key=lambda w: w["x"]):
+            if phrases and word["x"] - (phrases[-1][-1]["x"] + phrases[-1][-1]["w"]) <= 1.5 * word["h"]:
+                phrases[-1].append(word)
+            else:
+                phrases.append([word])
+        for phrase in phrases:
+            # Drop what OCR made of the legend's colour mark ("1M", "—") before the name.
+            while phrase and sum(ch.isalpha() for ch in phrase[0]["text"]) < 2:
+                phrase = phrase[1:]
+            text = " ".join(w["text"] for w in phrase)
+            side = axis_side(text) if phrase else None
+            if side:
+                entries.append({"text": text, "side": side})
+    return entries
+
+
+def _category_xs(words, count, axes, height, slots):
+    """Where each category sits across the plot, left to right: its label under the axis, else its bars."""
+    known = [axis for axis in axes.values() if axis]
+    bottom = max(axis["bottom"] for axis in known)
+    left = axes["left"]["x1"] if axes["left"] else 0
+    right = axes["right"]["x0"] if axes["right"] else float("inf")
+    under = [w for w in words if bottom - 0.02 * height <= w["y"] + w["h"] / 2 <= bottom + 0.1 * height
+             and left < w["x"] + w["w"] / 2 < right]
+    lines: list[list[dict]] = []
+    for word in sorted(under, key=lambda w: w["y"]):
+        # Chained to the last word: a scan's skew lets a row of labels drift down across the page.
+        if lines and abs(word["y"] - lines[-1][-1]["y"]) <= 0.5 * word["h"]:
+            lines[-1].append(word)
+        else:
+            lines.append([word])
+    for line in lines:
+        if len(line) == count:
+            return sorted(w["x"] + w["w"] / 2 for w in line)
+    if len(slots) == count:
+        return [sum(bar["x"] + bar["w"] / 2 for bar in slot) / len(slot) for slot in slots]
+    return None
+
+
+def _line_point(image, x, axis, bar_hues, to_page):
+    """The line's point above x, read on the axis: the middle of the line's ink in a thin column.
+
+    Ink is dark grey or black, or a strong colour no bar has. A column with
+    ink far apart (two lines, or a line and a label) gives no point.
+    """
+    import cv2
+    import numpy as np
+
+    height, width = image.shape[:2]
+    step = (axis["bottom"] - axis["top"]) / 10
+    # Above the lowest tick's line: the axis line itself is ink too.
+    top, bottom = max(0, int(axis["top"] - step)), min(height, int(axis["bottom"] - 3))
+    rows = []
+    for half in (2, 5):  # a thin column first; a wider one where the line ends just beside the label's centre
+        left, right = max(0, int(x) - half), min(width, int(x) + half + 1)
+        hsv = cv2.cvtColor(np.ascontiguousarray(image[top:bottom, left:right]), cv2.COLOR_RGB2HSV).astype(int)
+        hue_free = np.ones(hsv.shape[:2], bool)
+        for hue in bar_hues:
+            hue_free &= np.abs(hsv[:, :, 0] - hue) > _HUE_WINDOW
+        ink = ((hsv[:, :, 1] < 60) & (hsv[:, :, 2] < 110)) | ((hsv[:, :, 1] > 80) & (hsv[:, :, 2] > 60) & hue_free)
+        rows = np.nonzero(ink.any(axis=1))[0]
+        if len(rows):
+            break
+    if not len(rows) or rows.max() - rows.min() > 0.12 * (bottom - top):
+        return None
+    y = top + float(np.median(rows))
+    return {"value": axis["intercept"] + axis["slope"] * y, "box": to_page(x - 6, y - 6, x + 6, y + 6)}
 
 
 def axis_side(series: str) -> str | None:
@@ -306,12 +439,20 @@ def _axis(words, beside):
     if len(points) < 3:
         return None
     values = [value for _, value in points]
-    axis = {"low": min(values), "high": max(values), "linear": False, "slope": None, "intercept": None}
+    axis = {"low": min(values), "high": max(values), "linear": False, "slope": None, "intercept": None,
+            "top": points[0][0], "bottom": points[-1][0],
+            "x0": min(w["x"] for w, _ in best), "x1": max(w["x"] + w["w"] for w, _ in best)}
     fit = _line(points)
+    # OCR misreads a tick now and then ("180" for 150): leave one out, or two when six or more are read.
     if fit is None and len(points) >= 5:
         fit = next((f for f in (_line(points[:i] + points[i + 1:]) for i in range(len(points))) if f), None)
+    if fit is None and len(points) >= 6:
+        fit = next((f for f in (_line([p for k, p in enumerate(points) if k not in (i, j)])
+                                for i in range(len(points)) for j in range(i + 1, len(points))) if f), None)
     if fit:
-        axis.update(linear=True, slope=fit[0], intercept=fit[1])
+        # The range is that of the ticks on the scale, not of a misread one left out.
+        kept = [v for y, v in points if abs(fit[1] + fit[0] * y - v) <= 0.02 * (max(values) - min(values))] or values
+        axis.update(linear=True, slope=fit[0], intercept=fit[1], low=min(kept), high=max(kept))
     return axis
 
 

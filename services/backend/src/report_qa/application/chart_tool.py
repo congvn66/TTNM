@@ -9,6 +9,7 @@ import base64
 import hashlib
 import json
 import math
+import re
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
@@ -53,7 +54,10 @@ _LABEL_BOX_TOLERANCE = 0.1
 #    pies whose parts do not add up to 100% are not readable, a value outside its axis's range or
 #    unlike the rest of its series is withheld, a bar's height checks DePlot's axis estimate, and
 #    each value says whether its box is its printed label, its bar or the whole chart.
-CHART_READER_VERSION = 4
+# 5: a line on the right axis is read where it is drawn, against the right axis's ticks (DePlot read
+#    it on the left scale); the legend gives each series its axis and name; tick strips are read
+#    again by OCR; quarter and year labels are put back on one consecutive run.
+CHART_READER_VERSION = 5
 # How far DePlot's value may be from the value a bar's height shows, as a share of the axis range.
 _AXIS_TOLERANCE = 0.04
 
@@ -176,6 +180,40 @@ def _not_readable(key, question_id, version, raw, reason):
     }
 
 
+_QUARTER = re.compile(r"Q\s*([1-4])\s*[/\u2044]\s*(\d{2}|\d{4})", re.IGNORECASE)
+_YEAR = re.compile(r"((?:19|20)\d{2})")
+
+
+def _period_sequence(labels):
+    """Quarter or year labels made consecutive when DePlot misread a few of them.
+
+    S2 Biểu đồ 1 runs Q1/25…Q3/26, but DePlot read Q2/25 as "Q2/26" and Q1/26
+    as "Q1/28". When most labels already fall on one consecutive run, the
+    others are put back on it. None when the labels are not periods or do
+    not agree enough.
+    """
+    quarters = [_QUARTER.fullmatch(label.strip()) for label in labels]
+    if all(quarters):
+        short = sum(len(m.group(2)) == 2 for m in quarters) * 2 >= len(quarters)
+        steps = [int(m.group(2)[-2:]) * 4 + int(m.group(1)) - 1 for m in quarters]
+        name = lambda step: f"Q{step % 4 + 1}/{step // 4:02d}" if short else f"Q{step % 4 + 1}/20{step // 4:02d}"  # noqa: E731
+    elif all(_YEAR.fullmatch(label.strip()) for label in labels):
+        steps = [int(label.strip()) for label in labels]
+        name = str
+    else:
+        return None
+    starts = [step - index for index, step in enumerate(steps)]
+    start = max(set(starts), key=starts.count)
+    if starts.count(start) == len(labels) or starts.count(start) < max(3, 0.6 * len(labels)):
+        return None
+    return [name(start + index) for index in range(len(labels))]
+
+
+def _reading(value, axis):
+    """A value read from the image, to the precision its axis allows: "17.9" on a 10..24 axis, "1903" on 0..2500."""
+    return format(Decimal(f"{value:.1f}" if axis["high"] - axis["low"] <= 100 else f"{value:.0f}"), "f")
+
+
 def _tick(value):
     """An axis tick as the decimal text the contract stores: 2500.0 is "2500", 0.5 is "0.5"."""
     return format(Decimal(repr(float(value))).normalize(), "f")
@@ -254,9 +292,10 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
             )
             return _not_readable(key, question_id, version, raw, reason)
         # What the image itself shows: its shape, each bar's place and printed number, the axis scales.
+        series_order = list(dict.fromkeys(p[1] for p in predictions))
         seen = read_chart_image(
-            png, box, list(dict.fromkeys(p[0] for p in predictions)), list(dict.fromkeys(p[1] for p in predictions)),
-            words=_vector_words(page, rect),
+            png, box, list(dict.fromkeys(p[0] for p in predictions)), series_order,
+            words=_vector_words(page, rect), rows=len(predictions) // len(series_order),
         )
         if seen["shape"] == "pie" and (problem := _pie_problem(predictions)):
             return _not_readable(key, question_id, version, raw, problem)
@@ -295,8 +334,13 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
         caption = (region.get("text") or "").strip()
         series_names = {series for _, series, _, _ in predictions}
         shown_series = caption if caption and series_names == {title.strip()} else None
+        # Legend entries that name their axis, one per series in DePlot's column order: they give each
+        # series its axis and its printed name ("Biên lợi nhuận gộp (trục phải)" for DePlot's "Biểu đồ").
+        legend_of = dict(zip(series_order, seen["legend"])) if len(seen["legend"]) == len(series_order) else {}
+        periods = _period_sequence([p[0] for p in predictions[::len(series_order)]])
         repeats: dict[tuple, int] = {}
-        for category, series, token, value in predictions:
+        for index, (category, series, token, value) in enumerate(predictions):
+            row = index // len(series_order)
             # DePlot can repeat a category; the repeat count keeps keys unique
             # while a first occurrence keeps the key it always had.
             repeat = repeats.get((category, series), 0)
@@ -332,8 +376,8 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
             assumptions = ["deplot_table", "model_visual_check_not_human_confirmation"]
             mark = marks.get((category, series)) if not repeat else None
             # The label printed under the bars (vector charts) is exact; DePlot's spelling is not.
-            label_category = seen["names"].get(category, category)
-            label_series = shown_series or series
+            label_category = periods[row] if periods else seen["names"].get(category, category)
+            label_series = shown_series or legend_of.get(series, {}).get("text") or series
             if mark:
                 location = mark["bar"]
             if mark and mark["label"] and _same_number(mark["text"], value):
@@ -389,7 +433,7 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
                 except InvalidOperation:
                     pass
             # The bar's height on its axis is a second reading of an estimated value: it confirms or overrules it.
-            side = axis_side(series)
+            side = axis_side(series) or legend_of.get(series, {}).get("side")
             estimate = mark.get("estimate") if mark else None
             printed = "geometry_printed_label_match" in assumptions or "native_printed_label_match" in assumptions
             problem = None
@@ -405,10 +449,31 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
                     shown = f"{estimate:.1f}" if abs(estimate) < 100 else f"{estimate:.0f}"
                     problem = ("CHART_VALUE_DISAGREES_WITH_BAR",
                                f"{label_category} · {label_series}: DePlot đọc {token}, nhưng chiều cao cột trên trục cho khoảng {shown}.")
+            # A line on the right axis is read where it is drawn. DePlot often reads it on the left
+            # axis's scale (S2 Biểu đồ 1: 241 for a 17.9% margin): then the point read on the right axis is used.
+            point = seen["right_line"][row] if side == "right" and seen["right_line"] and row < len(seen["right_line"]) else None
+            if point and not problem:
+                axis = seen["axes"]["right"]
+                reading = _reading(point["value"], axis)
+                location = point["box"]
+                lower, upper = _tick(axis["low"]), _tick(axis["high"])
+                if value is not None and abs(float(value) - point["value"]) <= _AXIS_TOLERANCE * (axis["high"] - axis["low"]):
+                    if not valid:
+                        valid, method = True, "axis_estimation"
+                        assumptions += ["geometry_line_point_match", "chart_bbox_not_exact_point"]
+                else:
+                    warnings.append({"code": "CHART_VALUE_FROM_LINE", "evidence_key": eid,
+                                     "message": f"{label_category} · {label_series}: DePlot đọc {token}, không khớp trục phải; "
+                                                f"điểm trên đường đọc theo trục phải là {reading}."})
+                    token, value = reading, reading
+                    valid, method = True, "axis_estimation"
+                    assumptions += ["geometry_line_point_reading", "deplot_value_replaced", "chart_bbox_not_exact_point"]
             axis = seen["axes"].get(side) if side else None
-            if value is not None and axis and not problem:
+            if value is not None and axis and not problem and not point:
+                # A linear scale reaches past the ticks OCR read; otherwise allow a little past the ticks seen.
                 margin = 0.05 * (axis["high"] - axis["low"])
-                if not axis["low"] - margin <= float(value) <= axis["high"] + margin:
+                low, high = axis.get("reach") or (axis["low"] - margin, axis["high"] + margin)
+                if not low <= float(value) <= high:
                     where = "phải" if side == "right" else "trái"
                     problem = ("CHART_VALUE_OFF_AXIS",
                                f"{label_category} · {label_series}: DePlot đọc {token}, ngoài thang trục {where} ({_tick(axis['low'])} đến {_tick(axis['high'])}). Có thể đã đọc theo trục kia.")
@@ -435,14 +500,18 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
             if "geometry_printed_label_match" in assumptions:
                 # Two independent reads (DePlot and OCR of the printed label) agree on the number.
                 confidence = max(float(confidence), 0.8)
-            elif "geometry_axis_estimate_match" in assumptions:
+            elif {"geometry_axis_estimate_match", "geometry_line_point_match", "geometry_line_point_reading"} & set(assumptions):
                 # DePlot and the bar's measured height agree, but both are estimates.
                 confidence = max(float(confidence), 0.6)
-            confidence = max(0, min(0.6 if label_box_unusable else 0.85, float(confidence))) if valid else 0
+            # A value taken from the image alone, or a label box that is only the chart, stays at 0.6.
+            capped = label_box_unusable or "deplot_value_replaced" in assumptions
+            confidence = max(0, min(0.6 if capped else 0.85, float(confidence))) if valid else 0
             if confidence < 0.5:
                 valid = False
             # Where the value's box is, so a reader can tell a tap target from the whole chart.
-            if mark and location == mark["bar"]:
+            if point and location == point["box"]:
+                assumptions.append("box_point")
+            elif mark and location == mark["bar"]:
                 assumptions.append("box_bar")
             elif location is box or label_box_unusable:
                 assumptions.append("box_whole_chart")

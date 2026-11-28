@@ -102,7 +102,7 @@ def test_a_bar_height_confirms_or_overrules_deplot(tmp_path):
         assert by_name[name]["numeric_value"] is None and by_name[name]["data_status"] == "ambiguous"
     disagree = [w["message"] for w in result["evidence_batch"]["warnings"] if w["code"] == "CHART_VALUE_DISAGREES_WITH_BAR"]
     assert len(disagree) == 2 and "DePlot đọc 42.0%" in disagree[0] and "khoảng 23." in disagree[0]
-    assert result["reader_version"] == CHART_READER_VERSION == 4
+    assert result["reader_version"] == CHART_READER_VERSION == 5
 
 
 def test_a_right_axis_series_read_on_the_left_scale_is_withheld(tmp_path):
@@ -240,3 +240,73 @@ def test_a_scanned_page_keeps_its_pictures_and_their_layout_captions(tmp_path):
     region = {"chart_region_key": "page-1-picture-0", "page_number": 1, "bbox": [0.1, 0.2, 0.9, 0.5], "text": "Biểu đồ 1. Doanh thu"}
     with pymupdf.open(tmp_path / "scan.pdf") as pdf:
         assert chart_candidates(pdf, [region], read_image_text=lambda page, rect: []) == [region]
+
+
+def test_quarter_and_year_labels_are_put_back_on_one_run():
+    from report_qa.application.chart_tool import _period_sequence
+
+    # DePlot's categories for S2 Biểu đồ 1 (Q1/25 … Q3/26).
+    assert _period_sequence(["Q1/25", "Q2/26", "Q3/25", "Q4/25", "Q1/28", "Q2/26", "Q3/26"]) == [
+        "Q1/25", "Q2/25", "Q3/25", "Q4/25", "Q1/26", "Q2/26", "Q3/26"]
+    assert _period_sequence(["2020", "2021", "2029", "2023"]) == ["2020", "2021", "2022", "2023"]
+    assert _period_sequence(["Q1/25", "Q2/25", "Q3/25"]) is None  # already consecutive
+    assert _period_sequence(["Q1/25", "Q4/27", "Q2/22"]) is None  # no run to trust
+    assert _period_sequence(["T1", "T2", "T3"]) is None
+
+
+def _bar_and_margin_line(path, margins):
+    """S2 Biểu đồ 1 drawn as vectors: bars on a 0..350 left axis, a margin line on a 10..24 right axis."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    top, bottom = 150, 400
+    for tick in range(0, 400, 50):
+        page.insert_text((60, bottom - tick / 350 * (bottom - top) + 3), str(tick), fontsize=8)
+    for tick in range(10, 26, 2):
+        page.insert_text((520, bottom - (tick - 10) / 14 * (bottom - top) + 3), str(tick), fontsize=8)
+    points = []
+    for index, margin in enumerate(margins):
+        x = 110 + index * 55
+        page.draw_rect(pymupdf.Rect(x, bottom - 250 / 350 * (bottom - top), x + 30, bottom), color=None, fill=NAVY)
+        page.insert_text((x + 2, 415), f"Q{index % 4 + 1}/{25 + index // 4}", fontsize=8)
+        points.append(pymupdf.Point(x + 15, bottom - (margin - 10) / 14 * (bottom - top)))
+    page.draw_polyline(points, color=(0, 0, 0), width=1.5)
+    page.insert_text((110, 440), "Doanh thu thuan (truc trai)", fontsize=8)
+    page.insert_text((300, 440), "Bien loi nhuan gop (truc phai)", fontsize=8)
+    doc.save(path)
+    return {"chart_region_key": "page-1-picture-0", "page_number": 1, "bbox": [40 / 595, 120 / 842, 560 / 595, 450 / 842], "text": ""}
+
+
+def test_a_right_axis_line_read_on_the_left_scale_is_read_where_it_is_drawn(tmp_path):
+    margins = [17.9, 16.9, 18.6, 20.0, 15.3, 16.9, 18.8]
+    region = _bar_and_margin_line(tmp_path / "s2.pdf", margins)
+    # DePlot's output for S2: the margin line came back on the left axis's scale, the series named "Biểu đồ".
+    raw = ("TITLE | Biểu đồ\n | Doanh thu thuận (tục trả) | Biểu đồ\nQ1/25 | 250 | 241.0\nQ2/26 | 250 | 153.13\n"
+           "Q3/25 | 250 | 223.23\nQ4/25 | 250 | 277.87\nQ1/28 | 250 | 188.1\nQ2/26 | 250 | 158.46\nQ3/26 | 250 | 167.38")
+    result = read_chart_region(tmp_path / "s2.pdf", region, "v", "q", complete=NO_CHECK, predictor=lambda image: raw)
+    validate_extraction_batch(result["evidence_batch"])
+    line = [e for e in result["evidence_batch"]["evidences"] if e["chart_read"]["series_label"] == "Bien loi nhuan gop (truc phai)"]
+    assert [e["chart_read"]["category_label"] for e in line] == ["Q1/25", "Q2/25", "Q3/25", "Q4/25", "Q1/26", "Q2/26", "Q3/26"]
+    assert all(e["data_status"] == "valid" and e["confidence"] == 0.6 for e in line)
+    assert all(abs(float(e["numeric_value"]) - margin) <= 0.3 for e, margin in zip(line, margins))
+    assert all({"geometry_line_point_reading", "box_point"} <= set(e["chart_read"]["assumptions"]) for e in line)
+    assert (line[0]["chart_read"]["lower_tick"], line[0]["chart_read"]["upper_tick"]) == ("10", "24")
+    moved = [w["message"] for w in result["evidence_batch"]["warnings"] if w["code"] == "CHART_VALUE_FROM_LINE"]
+    assert len(moved) == 7 and "DePlot đọc 241.0" in moved[0]
+
+
+def test_s2_scanned_margin_line_is_read_on_the_right_axis():
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[5] / "pdf-test" / "S2-logistics-bac-nam-scan.pdf"
+    if not source.exists():
+        pytest.skip("S2 test report not next to this checkout")
+    region = {"chart_region_key": "page-1-picture-0", "page_number": 1, "bbox": [0.132, 0.607, 0.89, 0.901]}
+    raw = ("TITLE | Biểu đồ\n | Doanh thu thuận (tục trả) | Biểu đồ\nQ1/25 | 182.7 | 241.0\nQ2/26 | 196.93 | 153.13\n"
+           "Q3/25 | 211.18 | 223.23\nQ4/25 | 225.66 | 277.87\nQ1/28 | 200.98 | 188.1\nQ2/26 | 213.26 | 158.46\nQ3/26 | 236.10 | 167.38")
+    result = read_chart_region(source, region, "v", "q", complete=NO_CHECK, predictor=lambda image: raw)
+    line = {e["chart_read"]["category_label"]: float(e["numeric_value"]) for e in result["evidence_batch"]["evidences"]
+            if "phải" in e["chart_read"]["series_label"] and e["numeric_value"] is not None}
+    # Answer key: Q1/26 15.3, Q2/26 16.9, Q3/26 18.8 (±0.5); the others read from the image.
+    expected = {"Q1/25": 17.9, "Q2/25": 16.9, "Q3/25": 18.6, "Q4/25": 20.0, "Q1/26": 15.3, "Q2/26": 16.9, "Q3/26": 18.8}
+    assert line.keys() == expected.keys()
+    assert all(abs(line[quarter] - value) <= 0.5 for quarter, value in expected.items())

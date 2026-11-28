@@ -291,7 +291,7 @@ export function pageProse(evidences, page) {
 }
 
 // Chart values with a box of their own (a printed label or a bar). A value boxed by the whole chart would be one huge tap target.
-const OWN_CHART_BOX = new Set(["box_printed_label", "box_bar", "geometry_printed_label_match", "native_printed_label_match", "vlm_printed_label_bbox_approximate"]);
+const OWN_CHART_BOX = new Set(["box_printed_label", "box_bar", "box_point", "geometry_printed_label_match", "native_printed_label_match", "vlm_printed_label_bbox_approximate"]);
 
 /** The chart values of the page that have their own box on it, in reading order. */
 export function pageChartLabels(evidences, page) {
