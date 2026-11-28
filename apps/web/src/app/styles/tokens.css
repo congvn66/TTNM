@@ -1,30 +1,25 @@
 :root {
-  --color-primary: #0f172a;
-  --color-secondary: #334155;
-  --color-cta: #0369a1;
-  --color-background: #f8fafc;
-  --color-text: #020617;
-  --color-muted: #475569;
+  --color-primary: #17181a;
+  --color-secondary: #3f3d39;
+  --color-cta: #2f5bea;
+  --color-background: #f6f6f3;
+  --color-text: #17181a;
+  --color-muted: #6b6760;
   --color-surface: #ffffff;
-  --color-surface-subtle: #f1f5f9;
-  --color-border: #e2e8f0;
-  --color-success: #047857;
+  --color-surface-subtle: #f3f2ef;
+  --color-border: #e6e4df;
+  --color-success: #15803d;
   --color-warning: #b45309;
   --color-danger: #b42318;
   --radius-control: 10px;
   --radius-panel: 14px;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, .06);
-  --shadow-md: 0 8px 24px rgba(15, 23, 42, .08);
-  /*
-   * Typography is deliberately tokenised instead of assigning a different
-   * font per feature. Google Sans is used when it is installed (the rounded
-   * letterforms match the product's conversational UI); the remaining stack
-   * keeps the same proportions on machines without that proprietary font.
-   */
-  --font-display: "Plus Jakarta Sans Variable", "Google Sans", "Google Sans Text", "Product Sans", "Inter", "Segoe UI Variable", "Segoe UI", sans-serif;
-  --font-body: "Plus Jakarta Sans Variable", "Google Sans Text", "Google Sans", "Inter", "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
-  --font-ui: "Plus Jakarta Sans Variable", "Google Sans Text", "Google Sans", "Inter", "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --shadow-sm: 0 1px 2px rgba(23, 24, 26, .06);
+  --shadow-md: 0 8px 28px rgba(23, 24, 26, .12);
+  /* One typeface for every page: the reader's IBM Plex Sans (full Vietnamese, same-width digits). */
+  --font-display: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-ui: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   --font-sans: var(--font-body);
   /* Type scale. Every font size up to 17px comes from here, so nothing a
      person reads is smaller than --text-xs. */
@@ -35,19 +30,20 @@
 }
 
 [data-theme="dark"] {
-  --color-background: #0f172a;
-  --color-text: #f8fafc;
-  --color-muted: #cbd5e1;
-  --color-surface: #172033;
-  --color-surface-subtle: #1e293b;
-  --color-border: #334155;
+  /* The reader's dark palette (reader.css), so every page matches it. */
+  --color-background: #141312;
+  --color-text: #f3f3f4;
+  --color-muted: #a3a3a8;
+  --color-surface: #1c1b19;
+  --color-surface-subtle: #252421;
+  --color-border: #2e2c29;
   /* Lighter hues: these are used as text on dark surfaces. */
-  --color-cta: #7dd3fc;
-  --color-success: #34d399;
+  --color-cta: #7c9bff;
+  --color-success: #4ade80;
   --color-warning: #fbbf24;
-  --color-danger: #f87171;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .24);
-  --shadow-md: 0 12px 30px rgba(0, 0, 0, .28);
+  --color-danger: #fca5a5;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
+  --shadow-md: 0 8px 28px rgba(0, 0, 0, .45);
 }
 
 html { color-scheme: light; }

@@ -40,15 +40,15 @@ function ConfirmDialog({ dialog, busy, onClose, onConfirm }) {
 function SettingsHeader({ section, user, onNavigate, onSignOut }) {
   const current = NAV.find((item) => item.id === section) ?? NAV[0];
   return <header className="settings-topbar">
-    <button className="settings-back" type="button" onClick={() => onNavigate("/app/workspace")}><Icon name="arrowLeft" size={16} /> <span>Workspace</span></button>
+    <button className="settings-back" type="button" onClick={() => onNavigate("/app/workspace")}><Icon name="arrowLeft" size={16} /> <span>Về báo cáo</span></button>
     <div className="settings-breadcrumb"><span>Cài đặt</span><b>/</b><strong>{current.label}</strong></div>
-    <div className="settings-user"><span className="profile-avatar">{initials(user)}</span><span>{user?.display_name || "Workspace cá nhân"}</span>{onSignOut && <button type="button" aria-label="Đăng xuất" onClick={onSignOut}><Icon name="logout" size={15} /></button>}</div>
+    <div className="settings-user"><span className="profile-avatar">{initials(user)}</span><span>{user?.display_name || "Tài khoản"}</span>{onSignOut && <button type="button" aria-label="Đăng xuất" onClick={onSignOut}><Icon name="logout" size={15} /></button>}</div>
   </header>;
 }
 
 function SettingsNav({ section, onNavigate }) {
   return <nav className="settings-nav" aria-label="Cài đặt tài khoản">
-    <div className="settings-nav-heading"><span>ACCOUNT</span><strong>Cài đặt</strong></div>
+    <div className="settings-nav-heading"><span>Tài khoản</span><strong>Cài đặt</strong></div>
     {NAV.map((item) => <button key={item.id} type="button" className={section === item.id ? "active" : ""} aria-current={section === item.id ? "page" : undefined} onClick={() => onNavigate(`/app/settings/${item.id}`)}><span className="settings-nav-icon"><Icon name={item.id === "profile" ? "user" : item.id === "preferences" ? "settings" : "lock"} size={16} /></span><span><b>{item.label}</b><small>{item.description}</small></span></button>)}
     <div className="settings-nav-foot"><span className="settings-secure-dot"></span><span>Dữ liệu của bạn được lưu theo tài khoản và phiên.</span></div>
   </nav>;
@@ -74,7 +74,7 @@ function ProfileSettings({ user, onProfileChange }) {
     } catch (reason) { setError(reason.message); setStatus("error"); }
   }
   return <>
-    <div className="settings-heading"><div><span className="settings-eyebrow">PROFILE</span><h1>Hồ sơ</h1><p>Thông tin được hiển thị trong workspace và các phiên phân tích của bạn.</p></div><span className="settings-status-dot"><i></i> Tài khoản đang hoạt động</span></div>
+    <div className="settings-heading"><div><h1>Hồ sơ</h1><p>Tên và email của tài khoản.</p></div><span className="settings-status-dot"><i></i> Tài khoản đang hoạt động</span></div>
     <form className="settings-card settings-form" onSubmit={save}>
       <div className="settings-card-header"><div><h2>Thông tin tài khoản</h2><p>Email đăng nhập là định danh cố định của tài khoản.</p></div><span className="profile-avatar large">{initials(user)}</span></div>
       <div className="settings-fields">
@@ -113,7 +113,7 @@ function PreferencesSettings() {
   }
   function update(key, value) { setPrefs((current) => ({ ...current, [key]: value })); if (key === "theme") setPreference(value); setStatus("idle"); }
   return <>
-    <div className="settings-heading"><div><span className="settings-eyebrow">PREFERENCES</span><h1>Tuỳ chọn</h1><p>Cá nhân hoá cách SourceLens hiển thị tài liệu và câu trả lời.</p></div></div>
+    <div className="settings-heading"><div><h1>Tuỳ chọn</h1><p>Cá nhân hoá cách SourceLens hiển thị tài liệu và câu trả lời.</p></div></div>
     <form className="settings-card settings-form" onSubmit={save}>
       <div className="settings-card-header"><div><h2>Giao diện</h2><p>Thay đổi được preview ngay; chỉ ghi bền sau khi bạn lưu.</p></div></div>
       {loading ? <div className="settings-skeleton-group"><i></i><i></i><i></i></div> : <>
@@ -181,7 +181,7 @@ function SecuritySettings() {
   }
 
   return <>
-    <div className="settings-heading"><div><span className="settings-eyebrow">SECURITY</span><h1>Bảo mật</h1><p>Kiểm soát cách tài khoản được bảo vệ khi làm việc với dữ liệu.</p></div></div>
+    <div className="settings-heading"><div><h1>Bảo mật</h1><p>Kiểm soát cách tài khoản được bảo vệ khi làm việc với dữ liệu.</p></div></div>
     <form className="settings-card settings-form security-card" onSubmit={save} noValidate>
       <div className="settings-card-header"><div><h2>Đổi mật khẩu</h2><p>Phiên hiện tại vẫn được giữ, các phiên đăng nhập khác sẽ bị thu hồi.</p></div><span className="settings-info-icon"><Icon name="lock" size={17} /></span></div>
       <div className="settings-fields">
@@ -206,6 +206,6 @@ export default function SettingsScreen({ section = "profile", user = null, onSig
   return <div className="settings-shell">
     <a className="skip-link" href="#settings-content">Bỏ qua điều hướng</a>
     <SettingsHeader section={safeSection} user={profile} onNavigate={onNavigate} onSignOut={onSignOut} />
-    <div className="settings-layout"><SettingsNav section={safeSection} onNavigate={onNavigate} /><main className="settings-content" id="settings-content">{content}<p className="settings-footnote">SourceLens · Evidence-first workspace · <button type="button" onClick={() => onNavigate("/app/workspace")}>Quay lại workspace</button></p></main></div>
+    <div className="settings-layout"><SettingsNav section={safeSection} onNavigate={onNavigate} /><main className="settings-content" id="settings-content">{content}<p className="settings-footnote">SourceLens · <button type="button" onClick={() => onNavigate("/app/workspace")}>Về báo cáo</button></p></main></div>
   </div>;
 }

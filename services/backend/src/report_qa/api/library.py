@@ -9,7 +9,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field, field_validator
 from psycopg.rows import dict_row
 
-from report_qa.config import settings
+from report_qa.config import DEFAULT_PROJECT_NAMES, settings
 from .auth import owner_id_for_request
 from .user_messages import user_error
 
@@ -116,10 +116,10 @@ def _ensure_default_project(connection, owner_id: UUID):
            RETURNING id,owner_id,name,created_at,updated_at""",
         (owner_id, canonical_name),
     ).fetchone()
-    row = connection.execute("SELECT id,owner_id,name,created_at,updated_at FROM projects WHERE owner_id=%s AND name='Workspace cá nhân' AND deleted_at IS NULL ORDER BY created_at LIMIT 1", (owner_id,)).fetchone()
+    row = connection.execute("SELECT id,owner_id,name,created_at,updated_at FROM projects WHERE owner_id=%s AND name = ANY(%s) AND deleted_at IS NULL ORDER BY created_at LIMIT 1", (owner_id, list(DEFAULT_PROJECT_NAMES))).fetchone()
     if row:
         return row
-    return connection.execute("INSERT INTO projects (owner_id,name) VALUES (%s,%s) RETURNING id,owner_id,name,created_at,updated_at", (owner_id, "Workspace cá nhân")).fetchone()
+    return connection.execute("INSERT INTO projects (owner_id,name) VALUES (%s,%s) RETURNING id,owner_id,name,created_at,updated_at", (owner_id, DEFAULT_PROJECT_NAMES[0])).fetchone()
 
 
 @router.get("/projects")

@@ -350,10 +350,55 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
   useEffect(() => {
     const node = scrollRef.current;
     if (!node || !anchor.current || !size) return;
-    const { cx, cy } = anchor.current;
+    // vx, vy: where that point sits in the view (the middle for buttons, the fingers for a pinch).
+    const { cx, cy, vx = node.clientWidth / 2, vy = node.clientHeight / 2 } = anchor.current;
     anchor.current = null;
-    node.scrollTo({ left: Math.max(0, cx * node.scrollWidth - node.clientWidth / 2), top: Math.max(0, cy * node.scrollHeight - node.clientHeight / 2) });
+    node.scrollTo({ left: Math.max(0, cx * node.scrollWidth - vx), top: Math.max(0, cy * node.scrollHeight - vy) });
   }, [size?.width]);
+  // Trackpad pinch (a wheel event with ctrlKey in Chrome, Edge and Firefox; gesture events in Safari)
+  // and Ctrl+wheel zoom the page, at most once per frame, around the point under the fingers.
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return undefined;
+    let factor = 1;
+    let frame = 0;
+    let point = null;
+    let gestureScale = 1;
+    const queue = (multiplier, clientX, clientY) => {
+      factor *= multiplier;
+      const rect = node.getBoundingClientRect();
+      point = { vx: clientX - rect.left, vy: clientY - rect.top };
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        const step = factor;
+        factor = 1;
+        if (node.scrollWidth) anchor.current = { cx: (node.scrollLeft + point.vx) / node.scrollWidth, cy: (node.scrollTop + point.vy) / node.scrollHeight, vx: point.vx, vy: point.vy };
+        autoFit.current = false;
+        setScale((value) => Math.max(0.4, Math.min(3, (value ?? 1) * step)));
+      });
+    };
+    const onWheel = (event) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      queue(Math.exp(-event.deltaY * 0.01), event.clientX, event.clientY);
+    };
+    const onGestureStart = (event) => { event.preventDefault(); gestureScale = 1; };
+    const onGestureChange = (event) => {
+      event.preventDefault();
+      queue(event.scale / gestureScale, event.clientX, event.clientY);
+      gestureScale = event.scale;
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    node.addEventListener("gesturestart", onGestureStart);
+    node.addEventListener("gesturechange", onGestureChange);
+    return () => {
+      node.removeEventListener("wheel", onWheel);
+      node.removeEventListener("gesturestart", onGestureStart);
+      node.removeEventListener("gesturechange", onGestureChange);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [pdf]);
   // After a zoom the open card may sit past the edge of the view; bring it back in.
   useEffect(() => {
     if (!openKey || narrow) return undefined;

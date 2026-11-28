@@ -102,7 +102,29 @@ def parse_table(raw: str):
     title = " ".join(title)
     if not header or not rows:
         raise ValueError("DePlot did not return a data table")
+    # A header made of numbers is a data row: the series names are missing, and the row would
+    # be read as names. A header whose first cell looks like a row label ("T1" before "T2")
+    # is that row fused with the header: its values are gone. Both fail instead of dropping a row.
+    if all(_is_number(cell) for cell in header[1:]):
+        raise ValueError("DePlot returned no series names")
+    if _row_label_like(header[0], rows[0][0]):
+        raise ValueError("DePlot fused the header with the first row")
     return title, rows
+
+
+def _is_number(token):
+    try:
+        return Decimal(token.replace(",", "")).is_finite()
+    except InvalidOperation:
+        return False
+
+
+def _row_label_like(cell, first_label):
+    """'T1' beside a first row 'T2', 'Năm 2024' beside 'Năm 2025': same words, a number in both."""
+    import re
+
+    words = lambda text: re.sub(r"\d+", "#", text.casefold()).strip()
+    return bool(cell) and bool(re.search(r"\d", cell)) and bool(re.search(r"\d", first_label)) and words(cell) == words(first_label) and cell != first_label
 
 
 def _box(value):

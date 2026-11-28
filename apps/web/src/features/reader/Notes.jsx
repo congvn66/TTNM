@@ -87,10 +87,11 @@ export function confidenceOf(answer) {
   if (typed.length) return { kind: "warn", text: `Phép tính có số không lấy từ báo cáo: ${typed.map(showNumber).join(", ")}. Hãy kiểm tra lại.` };
   const estimated = data.filter((item) => (item.data_status && item.data_status !== "valid") || ESTIMATED.test(item.method_label ?? ""));
   if (estimated.length) return { kind: "warn", text: `Mình chưa chắc ${estimated.length} số đọc từ ảnh (biểu đồ hoặc bản scan). Chạm số để so với trang.` };
-  // Where the numbers were read: a table, the running text, or both.
-  const fromText = data.some((item) => item.method_label === "đọc từ văn bản");
-  const fromTable = data.some((item) => item.method_label !== "đọc từ văn bản");
-  const where = fromText && !fromTable ? "đoạn văn" : fromText ? "bảng và đoạn văn" : "bảng";
+  // Where the numbers were read: a table, a chart, the running text, or several of them.
+  const placeOf = (item) => item.method_label === "đọc từ văn bản" ? "đoạn văn"
+    : item.source_type === "chart" || /nhãn|trục/.test(item.method_label ?? "") ? "biểu đồ" : "bảng";
+  const places = ["bảng", "biểu đồ", "đoạn văn"].filter((place) => data.some((item) => placeOf(item) === place));
+  const where = places.length ? places.join(places.length > 2 ? ", " : " và ") : "bảng";
   if (formulas.length) return { kind: "good", text: `Dựa trên ${formulas.reduce((count, formula) => count + (formula.inputs?.length ?? 0), 0) || data.length} số đọc trong ${where}, phép tính do máy làm. Chạm từng số để xem trên trang.` };
   if (data.length) return { kind: "good", text: `Đọc thẳng từ ${where} trong báo cáo.` };
   if (quotes.length) {
@@ -171,6 +172,12 @@ function sentenceHasPercent(sentence, value) {
 }
 
 /** Which of a script's results the sentence is about: the one it writes as a %, else the first it writes at all. */
+/** How many of the rows' values the sentence writes. */
+function statedCount(sentence, rows) {
+  const written = (String(sentence ?? "").match(/-?\d+(?:[.,]\d+)*/g) ?? []).flatMap(readNumberCandidates);
+  return rows.filter((row) => readNumberCandidates(String(row.value)).some((value) => written.some((number) => Math.abs(number - value) <= Math.max(0.005, Math.abs(value) * 1e-6)))).length;
+}
+
 function headlineRow(sentence, rows) {
   // A number ends at its last digit: "24.050." at the end of a sentence is 24.050.
   const written = (String(sentence ?? "").match(/-?\d+(?:[.,]\d+)*/g) ?? []).flatMap(readNumberCandidates);
@@ -213,6 +220,8 @@ export function headlineOf(answer) {
     const results = scriptResultRows(formula);
     if (!chipFromFormula(formula) || !results.length) return null;
     // A script may give several results ({diff, pct}); the headline is the one the sentence states.
+    // A sentence that lists three or more of them (one per month, one per region) has no single answer.
+    if (results.length >= 3 && formula.result_rows?.length === results.length && statedCount(answer.answer, formula.result_rows) >= 3) return null;
     const at = results.length === 1 ? 0 : (formula.result_rows?.length === results.length ? headlineRow(answer.answer, formula.result_rows) : -1);
     if (at < 0) return null;
     const row = formula.result_rows?.[at];
@@ -335,22 +344,23 @@ export function PendingCard({ item, onRetry, onDismiss }) {
 
 const SECONDS_PER_PAGE = 12;
 
-export function ReadingCard({ report }) {
+/** Progress of a new report. `uploading` is the moment before the server has the file. */
+export function ReadingCard({ report, uploading = false }) {
   const since = report?.created_at ? Date.parse(report.created_at) : null;
   const seconds = useElapsed(since);
   const estimate = Math.max(15, (report?.page_count ?? 3) * SECONDS_PER_PAGE);
-  const percent = Math.min(95, Math.round((seconds / estimate) * 100));
+  const percent = uploading ? 5 : Math.min(95, Math.round((seconds / estimate) * 100));
   const late = seconds > estimate * 1.5;
   return <article className="rd-card rd-reading" aria-live="polite">
-    <header><span className="rd-spinner large" aria-hidden="true" /><div><h3>Đang đọc báo cáo</h3><p>{report.page_count ? `${report.page_count} trang · ` : ""}thường dưới {estimate} giây · đã {seconds} giây</p></div></header>
+    <header><span className="rd-spinner large" aria-hidden="true" /><div><h3>{uploading ? `Đang tải lên ${report.file_name}` : "Đang đọc báo cáo"}</h3><p>{uploading ? `Gửi tệp lên máy chủ · đã ${seconds} giây` : <>{report.page_count ? `${report.page_count} trang · ` : ""}thường dưới {estimate} giây · đã {seconds} giây</>}</p></div></header>
     <div className="rd-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label="Tiến độ đọc ước tính"><span style={{ width: `${percent}%` }} /></div>
     <ol className="rd-steps">
-      <li className="done">Đã tải lên</li>
-      <li className="done">Mở được PDF, trang đang hiện bên trái</li>
-      <li className="active">Đọc chữ, bảng và số liệu</li>
+      <li className={uploading ? "active" : "done"}>{uploading ? "Đang tải lên" : "Đã tải lên"}</li>
+      <li className={uploading ? "" : "done"}>Mở được PDF, trang đang hiện bên trái</li>
+      <li className={uploading ? "" : "active"}>Đọc chữ, bảng và số liệu</li>
       <li>Kiểm tra các dòng tổng</li>
     </ol>
-    <p className="rd-hint">{late ? "Lâu hơn dự kiến, thường do trang scan. Vẫn đang đọc." : "Có thể gõ câu hỏi ngay. Đọc xong sẽ có tiếng chuông và thông báo."}</p>
+    <p className="rd-hint">{uploading ? "Trang báo cáo sẽ hiện ngay khi tải lên xong." : late ? "Lâu hơn dự kiến, thường do trang scan. Vẫn đang đọc." : "Có thể gõ câu hỏi ngay. Đọc xong sẽ có tiếng chuông và thông báo."}</p>
   </article>;
 }
 

@@ -29,6 +29,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.formparsers import MultiPartException
 from pypdf.errors import FileNotDecryptedError
 
+from report_qa.application.chart_tool import CHART_READER_VERSION
 from report_qa.application.evidence_extraction import extract_pdf_artifact
 from report_qa.application.chart_reading import ChartReadRequest, PdfVectorChartReader
 from report_qa.application.deplot_reading import DeplotChartReader
@@ -1641,7 +1642,7 @@ def _persist_chart_read(session: dict[str, Any], document: dict[str, Any], resul
             document_version_id=UUID(str(document.get("version_id") or document["id"])),
             evidence_batch=batch,
             question_plan_id=str(batch["trigger"]["question_plan_id"]),
-            chart_record={**result, "chart_region_key": region_key, "created_at": utc_now()},
+            chart_record={**result, "reader_version": CHART_READER_VERSION, "chart_region_key": region_key, "created_at": utc_now()},
         )
         document["evidence_state"] = store.load_evidence_state(session["id"], document["id"])
     except Exception as exc:

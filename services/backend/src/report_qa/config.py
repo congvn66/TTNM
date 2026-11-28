@@ -12,6 +12,11 @@ import os
 from dataclasses import dataclass
 
 
+# The project every account starts with. The first name is used for new ones; the older
+# name still finds projects made before it changed.
+DEFAULT_PROJECT_NAMES = ("Báo cáo của tôi", "Workspace cá nhân")
+
+
 def psycopg_url(url: str) -> str:
     """The URL psycopg connects with. DATABASE_URL may be written either way:
     "postgresql://" (Supabase's form) or SQLAlchemy's "postgresql+psycopg://"."""

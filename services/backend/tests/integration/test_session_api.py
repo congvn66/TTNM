@@ -1196,7 +1196,7 @@ def test_a_chart_read_made_on_an_earlier_reading_is_dropped(monkeypatch) -> None
         document_id = _upload(created["id"], "Doanh thu.")
         document = api_main.catalog["sessions"][created["id"]]["documents"][0]
         value = {**_reading(("chart-1", "5", "5", 1))("x", "v")["evidence_batch"]["evidences"][0], "source_type": "chart"}
-        chart = {"chart_region_key": "r", "created_at": api_main.utc_now(), "evidence_batch": {"evidences": [value]}}
+        chart = {"chart_region_key": "r", "created_at": api_main.utc_now(), "evidence_batch": {"evidences": [value]}, "reader_version": api_main.CHART_READER_VERSION}
         document["chart_extractions"] = [{**chart, "document_run_id": "an-earlier-reading"}, {**chart, "document_run_id": document["extraction_run_id"]}]
         api_main.save_catalog(api_main.catalog)
         assert [record["document_run_id"] for record in document["chart_extractions"]] == [document["extraction_run_id"]]

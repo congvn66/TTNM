@@ -1,5 +1,31 @@
 import { useEffect, useState } from "react";
 import { request } from "../../shared/api/client.js";
+import "../reader/reader.css";
+
+const AUTH_PATHS = ["/login", "/register", "/forgot-password", "/reset-password"];
+const AFTER_LOGIN_KEY = "sourcelens-after-login";
+
+const onAuthPath = () => AUTH_PATHS.includes(window.location.pathname);
+
+/** Leave the sign-in address for the page the person asked for (or the reader). */
+function leaveAuthPath() {
+  if (!onAuthPath()) return;
+  let target = "/";
+  try { target = sessionStorage.getItem(AFTER_LOGIN_KEY) || "/"; sessionStorage.removeItem(AFTER_LOGIN_KEY); } catch { /* storage blocked */ }
+  window.history.replaceState({}, "", target);
+}
+
+/** Show the sign-in address, remembering the page to return to. */
+function goToAuthPath() {
+  if (onAuthPath()) return;
+  try { sessionStorage.setItem(AFTER_LOGIN_KEY, `${window.location.pathname}${window.location.search}`); } catch { /* storage blocked */ }
+  window.history.replaceState({}, "", "/login");
+}
+
+/** The reader's own start screen, so checking the session and loading reports look like one step. */
+export function BootScreen({ children = "Đang mở SourceLens…" }) {
+  return <div className="rd-app"><div className="rd-boot" role="status"><span className="rd-spinner large" aria-hidden="true" />{children}</div></div>;
+}
 
 const initialForm = { email: "", password: "", display_name: "" };
 
@@ -46,6 +72,13 @@ export default function AuthGate({ children }) {
     return () => { active = false; };
   }, []);
 
+  // The address follows the state: signed in never shows /login, signed out always does.
+  if (state.status === "authenticated") leaveAuthPath();
+  if (state.status === "public" && mode === "login") goToAuthPath();
+  useEffect(() => {
+    if (state.status === "public") document.title = "Đăng nhập · SourceLens";
+  }, [state.status]);
+
   useEffect(() => {
     const onAuthRequired = () => setState({ status: "public", user: null });
     window.addEventListener("sourcelens:auth-required", onAuthRequired);
@@ -63,7 +96,7 @@ export default function AuthGate({ children }) {
     }
   };
 
-  if (state.status === "checking") return <div className="auth-loading"><div className="auth-spinner"></div><span>Đang kiểm tra phiên đăng nhập…</span></div>;
+  if (state.status === "checking") return <BootScreen />;
   if (state.status === "authenticated") return typeof children === "function" ? children({ user: state.user, signOut }) : children;
   if (state.status === "unavailable") return <main className="auth-gate"><section className="auth-card"><AuthMark /><p className="auth-eyebrow">SourceLens</p><h1>Chưa thể mở phiên làm việc</h1><p className="auth-muted">Dịch vụ đăng nhập hiện chưa sẵn sàng. Hãy kiểm tra kết nối rồi thử lại.</p><button className="auth-primary" onClick={() => window.location.reload()}>Thử lại</button></section></main>;
 
@@ -106,8 +139,8 @@ export default function AuthGate({ children }) {
 
   return <main className="auth-gate">
     <section className="auth-card">
-      <div className="auth-brand"><AuthMark /><div><strong>SourceLens</strong><span>Evidence-first workspace</span></div></div>
-      <div className="auth-copy"><p className="auth-eyebrow">{mode === "login" ? "Chào mừng trở lại" : mode === "register" ? "Tạo workspace riêng" : mode === "forgot" ? "Khôi phục tài khoản" : "Đặt lại mật khẩu"}</p><h1>{mode === "login" ? "Đăng nhập vào tài liệu của bạn" : mode === "register" ? "Bắt đầu với SourceLens" : mode === "forgot" ? "Lấy lại quyền truy cập" : "Chọn mật khẩu mới"}</h1><p className="auth-muted">{mode === "forgot" ? "Nhập email đã đăng ký. Chúng tôi sẽ gửi hướng dẫn an toàn nếu tìm thấy tài khoản." : mode === "reset" ? "Mật khẩu mới sẽ đăng xuất các phiên đang hoạt động để bảo vệ tài khoản." : "Tổ chức PDF, hỏi AI có căn cứ và giữ lại mọi nguồn dẫn theo từng phiên."}</p></div>
+      <div className="auth-brand"><AuthMark /><div><strong>SourceLens</strong><span>Đọc báo cáo, thấy nguồn từng con số</span></div></div>
+      <div className="auth-copy"><p className="auth-eyebrow">{mode === "login" ? "Chào mừng trở lại" : mode === "register" ? "Tạo tài khoản" : mode === "forgot" ? "Khôi phục tài khoản" : "Đặt lại mật khẩu"}</p><h1>{mode === "login" ? "Đăng nhập vào tài liệu của bạn" : mode === "register" ? "Bắt đầu với SourceLens" : mode === "forgot" ? "Lấy lại quyền truy cập" : "Chọn mật khẩu mới"}</h1><p className="auth-muted">{mode === "forgot" ? "Nhập email đã đăng ký. Chúng tôi sẽ gửi hướng dẫn an toàn nếu tìm thấy tài khoản." : mode === "reset" ? "Mật khẩu mới sẽ đăng xuất các phiên đang hoạt động để bảo vệ tài khoản." : "Tổ chức PDF, hỏi AI có căn cứ và giữ lại mọi nguồn dẫn theo từng phiên."}</p></div>
       <form className="auth-form" onSubmit={submit} noValidate>
         {mode === "register" && <label>Tên hiển thị<input {...field("display_name")} placeholder="Nguyễn Văn A" /></label>}<FieldError id={fieldErrorId("display_name")}>{fieldErrors.display_name}</FieldError>
         {mode !== "reset" && <label>Email<input {...field("email")} type="email" autoComplete="email" placeholder="you@example.com" /></label>}<FieldError id={fieldErrorId("email")}>{fieldErrors.email}</FieldError>

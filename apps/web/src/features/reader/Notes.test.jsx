@@ -73,3 +73,20 @@ it("says a number read from a paragraph came from the text, not a table", () => 
   expect(confidenceOf({ answer: "Mục tiêu là 250 tỷ đồng.", evidence: [prose] }).text).toBe("Đọc thẳng từ đoạn văn trong báo cáo.");
   expect(confidenceOf({ answer: "…", evidence: [prose, { ...cell, evidence_key: "ev-2", method_label: "đọc từ ô bảng" }] }).text).toBe("Đọc thẳng từ bảng và đoạn văn trong báo cáo.");
 });
+
+it("has no headline when the sentence lists several results of one script", () => {
+  const months = [["T2", "35"], ["T3", "41"], ["T4", "44"], ["T5", "49"], ["T6", "47"]];
+  const inputs = months.map(([, value], index) => ({ evidence_key: `ev-${index}`, value, page: 2, bbox: cell.bbox }));
+  const formula = { expression: months.map(([name], index) => `${name.toLowerCase()} = value('ev-${index}')`).join("\n") + "\nresult = {" + months.map(([name]) => `"${name}": ${name.toLowerCase()}`).join(", ") + "}",
+    result: JSON.stringify(Object.fromEntries(months)), result_rows: months.map(([name, value], index) => ({ name, value, source_keys: [`ev-${index}`] })), inputs };
+  const answer = { answer: "Tháng 2 là 35 nghìn, tháng 3 là 41 nghìn, tháng 4 là 44 nghìn, tháng 5 là 49 nghìn, tháng 6 là 47 nghìn.", evidence: inputs.map((input) => ({ ...cell, ...input })), formulas: [formula] };
+  expect(headlineOf(answer)).toBeNull();
+  // The same script stating one month still has that month as its headline.
+  expect(headlineOf({ ...answer, answer: "Tháng 4 là 44 nghìn đơn." })?.value).toBe("44");
+});
+
+it("names a chart as the source of numbers read from its labels", () => {
+  const bar = { ...cell, evidence_key: "chart-1", value: "38", method_label: "đọc từ nhãn", source_type: "chart" };
+  expect(confidenceOf({ answer: "Tháng 1 đạt 38.", evidence: [bar], formulas: [] }).text).toBe("Đọc thẳng từ biểu đồ trong báo cáo.");
+  expect(confidenceOf({ answer: "", evidence: [bar, { ...cell, method_label: "đọc từ ô bảng" }], formulas: [] }).text).toBe("Đọc thẳng từ bảng và biểu đồ trong báo cáo.");
+});

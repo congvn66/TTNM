@@ -77,10 +77,11 @@ export function useReports() {
     const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name ?? "");
     if (!isPdf) throw new Error("Chỉ nhận tệp PDF. Hãy chọn một báo cáo dạng .pdf.");
     if (file.size > MAX_BYTES) throw new Error("Tệp lớn hơn 100 MB. Hãy chọn tệp nhỏ hơn.");
-    let sessionId = uploadSessionId;
-    if (!sessionId) sessionId = (await load())[0]?.id;
-    setUploading({ name: file.name, size: file.size });
+    // Shown at once: sending a PDF to cloud storage takes a few seconds.
+    setUploading({ name: file.name, size: file.size, startedAt: new Date().toISOString() });
     try {
+      let sessionId = uploadSessionId;
+      if (!sessionId) sessionId = (await load())[0]?.id;
       const form = new FormData();
       form.append("file", file);
       const result = await request(`/api/v1/sessions/${sessionId}/documents`, { method: "POST", body: form });

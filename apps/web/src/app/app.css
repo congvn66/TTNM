@@ -812,3 +812,24 @@ body { background: var(--canvas); }
   .session-heading .session-create-button { padding: 0 9px; }
   .session-heading .session-create-button span { display: none; }
 }
+
+/* Pages outside the reader (sign-in, library, settings) in the reader's look:
+   flat surfaces, the reader's blue accent, no navy or gold. Colours come from tokens.css. */
+.auth-loading, .auth-gate { background: var(--canvas); }
+.auth-card { border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-md); }
+.auth-mark, .brand > span { background: var(--accent); color: var(--inverse-fg); box-shadow: none; border-radius: 9px; }
+[data-theme="dark"] .auth-mark, [data-theme="dark"] .brand > span { color: #141312; }
+.auth-mark span { color: inherit; font-weight: 700; }
+.auth-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.auth-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.auth-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+[data-theme="dark"] .auth-primary { color: #141312; }
+.auth-error { border-color: var(--red-soft); }
+.auth-eyebrow, .library-eyebrow, .settings-eyebrow { color: var(--accent); }
+.library-primary, .library-state button { border-color: var(--accent) !important; background: var(--accent); color: #fff; }
+[data-theme="dark"] .library-primary, [data-theme="dark"] .library-state button { color: #141312; }
+.resource-modal-backdrop { background: rgba(23, 24, 26, .4); }
+[data-theme="dark"] .settings-topbar { background: color-mix(in srgb, var(--canvas) 96%, transparent); }
+[data-theme="dark"] .settings-nav > button.active,
+[data-theme="dark"] .sidebar-nav-item.active, [data-theme="dark"] .session-item.active, [data-theme="dark"] .top-nav-item.active { background: var(--accent-soft); border-color: var(--accent-border); }
+[data-theme="dark"] .library-shell { background: var(--canvas); }

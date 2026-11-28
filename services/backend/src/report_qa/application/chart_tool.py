@@ -19,6 +19,7 @@ from report_qa.application.deplot_reading import (
     parse_table,
     predict_chart,
 )
+from report_qa.application.chart_geometry import find_bar_marks
 from report_qa.application.extraction_contract import validate_extraction_batch
 
 VERIFY = """Kiểm tra ảnh biểu đồ và bảng DePlot. Chỉ trả JSON {"rows":[...]};
@@ -44,6 +45,58 @@ như DePlot. confidence 0..1 là đánh giá của mô hình, không phải xác
 # discard a value the checker had confirmed. Clamp small overshoots; still
 # reject boxes that are clearly off the image.
 _LABEL_BOX_TOLERANCE = 0.1
+# Bumped when a change makes earlier stored reads wrong; reads of another version are read again.
+# 2: crop to the chart's own image instead of padding into the text around it (padding made
+#    DePlot fuse the unit line with the first row and drop it).
+# 3: each bar's value points at the number printed above that bar (chart_geometry).
+CHART_READER_VERSION = 3
+
+
+def _same_number(text, value):
+    """A printed label ("38", "6,5", "1.250") and a DePlot value ("38", "6.5") name the same number."""
+    if text is None or value is None:
+        return False
+    target = Decimal(value)
+    for candidate in {text.replace(",", "."), text.replace(".", "").replace(",", "."), text.replace(",", "")}:
+        try:
+            if Decimal(candidate) == target:
+                return True
+        except InvalidOperation:
+            continue
+    return False
+
+
+def current_chart_reads(document):
+    """The stored chart reads made by this reader version, oldest first."""
+    return [record for record in document.get("chart_extractions") or [] if record.get("reader_version") == CHART_READER_VERSION]
+
+
+def chart_crop(page, source_box):
+    """The page rectangle to show DePlot for a chart region.
+
+    A chart that is an embedded picture is cropped to that picture: its title,
+    unit line and labels are inside it. Otherwise the region is padded by 3%
+    of the page (layout detection can leave out the title and tick labels),
+    but never into a text block below the region, so a sentence under the
+    chart cannot take the place of its header.
+    """
+    import pymupdf
+
+    width, height = page.rect.width, page.rect.height
+    region = pymupdf.Rect(source_box[0] * width, source_box[1] * height, source_box[2] * width, source_box[3] * height)
+    best, best_overlap = None, 0.0
+    for info in page.get_image_info():
+        image = pymupdf.Rect(info["bbox"])
+        overlap = (image & region).get_area() / max(1e-9, (image | region).get_area())
+        if overlap > best_overlap:
+            best, best_overlap = image, overlap
+    if best is not None and best_overlap >= 0.6:
+        return best & page.rect
+    padded = pymupdf.Rect(region.x0 - 0.03 * width, region.y0 - 0.03 * height, region.x1 + 0.03 * width, region.y1 + 0.03 * height) & page.rect
+    for x0, y0, x1, y1, *_ in page.get_text("blocks"):
+        if y0 >= region.y1 - 1 and y0 < padded.y1 and x1 > padded.x0 and x0 < padded.x1:
+            padded.y1 = y0 - 1
+    return padded
 
 
 def _label_box(label):
@@ -79,21 +132,10 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
     key = region["chart_region_key"]
     number = region["page_number"]
     source_box = region["bbox"]
-    # Layout detection can exclude the title/tick labels at the picture edge.
-    box = [
-        max(0, source_box[0] - 0.03),
-        max(0, source_box[1] - 0.03),
-        min(1, source_box[2] + 0.03),
-        min(1, source_box[3] + 0.03),
-    ]
     with pymupdf.open(path) as pdf:
         page = pdf[number - 1]
-        rect = pymupdf.Rect(
-            box[0] * page.rect.width,
-            box[1] * page.rect.height,
-            box[2] * page.rect.width,
-            box[3] * page.rect.height,
-        )
+        rect = chart_crop(page, source_box)
+        box = [rect.x0 / page.rect.width, rect.y0 / page.rect.height, rect.x1 / page.rect.width, rect.y1 / page.rect.height]
         pix = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=rect, alpha=False)
         png = pix.tobytes("png")
         from report_qa.application.deplot_reading import MODEL_ID, REVISION
@@ -149,6 +191,8 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
                     "evidence_key": None,
                 }
             )
+        # Each bar's place and printed number, read from the image; {} for charts this cannot read.
+        marks = find_bar_marks(png, box, list(dict.fromkeys(p[0] for p in predictions)), list(dict.fromkeys(p[1] for p in predictions)))
         seen: dict[tuple, int] = {}
         for category, series, token, value in predictions:
             # DePlot can repeat a category; the repeat count keeps keys unique
@@ -184,7 +228,14 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
             label_box_unusable = False
             location = box
             assumptions = ["deplot_table", "model_visual_check_not_human_confirmation"]
-            if agrees and method == "direct_label":
+            mark = marks.get((category, series))
+            if mark and mark["label"] and _same_number(mark["text"], value):
+                # The number printed above this bar is DePlot's value: point at it.
+                location = mark["label"]
+                valid = True
+                method = "direct_label"
+                assumptions.append("geometry_printed_label_match")
+            elif agrees and method == "direct_label":
                 native = _native_label(page, box, category, value)
                 label = _label_box(r.get("label_bbox"))
                 if native:
@@ -244,6 +295,9 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
             confidence = r.get("confidence", 0)
             if not isinstance(confidence, (int, float)) or not math.isfinite(confidence):
                 confidence = 0
+            if "geometry_printed_label_match" in assumptions:
+                # Two independent reads (DePlot and OCR of the printed label) agree on the number.
+                confidence = max(float(confidence), 0.8)
             confidence = max(0, min(0.6 if label_box_unusable else 0.85, float(confidence))) if valid else 0
             if confidence < 0.5:
                 valid = False
@@ -303,4 +357,5 @@ def read_chart_region(path, region, version, question_id, *, complete, predictor
         "raw_output": raw,
         "visual_check_output": verification_raw,
         "visual_check_error": verification_error,
+        "reader_version": CHART_READER_VERSION,
     }
