@@ -1039,10 +1039,17 @@ def test_an_overview_drops_sentences_with_untraced_numbers_on_its_last_step():
     draft = {"action": "answer", "answer": "- Q2 là 130.\n- Tổng là 999.", "evidence_keys": ["b"]}
     complete = sequence(draft, draft)
     result = run_assistant("Tóm tắt", context(), complete=complete, read_chart=Mock(), max_steps=2, drop_untraced_on_last_step=True)
-    assert result["answer"] == "- Q2 là 130."
+    assert result["answer"] == "- Q2 là 130.\nMột vài số chưa đọc chắc được nên đã bỏ ra."
 
 
-def test_a_question_still_fails_when_its_numbers_cannot_be_traced():
+def test_an_answer_with_no_confirmed_number_says_so_and_points_to_the_page():
+    draft = {"action": "answer", "answer": "Khách hàng A đóng góp 999 tỷ.", "evidence_keys": ["b"]}
+    result = run_assistant("Từng khách hàng?", context(), complete=sequence(draft, draft), read_chart=Mock(), max_steps=2, drop_untraced_on_last_step=True)
+    assert result["answer"].startswith("Chưa đọc chắc được các số") and result["answer"].endswith("Xem trang 1.")
+    assert result["evidence_keys"] == [] and result["pages"] == [1]
+
+
+def test_without_the_last_step_rule_untraced_numbers_still_fail():
     draft = {"action": "answer", "answer": "Q2 là 130. Tổng là 999.", "evidence_keys": ["b"]}
     with pytest.raises(AssistantError):
         run_assistant("Q2?", context(), complete=sequence(draft, draft), read_chart=Mock(), max_steps=2)

@@ -638,7 +638,15 @@ class _Turn:
             kept = without_sentences_using(answer, untraced)
             if kept and not untraced_in(kept):
                 self.trace.append({"stage": "number_validation", "status": "dropped_untraced_sentences", "numbers": untraced})
-                answer, untraced = kept, []
+                # Say a part is missing, so a list that lost an item does not read as complete.
+                answer, untraced = kept + "\n" + DROPPED_NOTE, []
+            else:
+                # Nothing is left that the reading confirms (often a scan read wrongly): say so and
+                # point to the page, rather than fail or show numbers nothing checks.
+                where = sorted({e["page_number"] for e in cited} | {s["page"] for s in sources} | set(pages))
+                self.trace.append({"stage": "number_validation", "status": "numbers_not_confirmed", "numbers": untraced})
+                answer = UNCONFIRMED_ANSWER + (f" Xem trang {', '.join(map(str, where))}." if where else "")
+                keys, sources, pages, untraced = [], [], where, []
         if untraced:
             corrected = corrected_numbers(untraced, self.context["evidences"], self.context.get("number_locale"))
             self.reject("Every quantity in the answer must come from a python result, a cited evidence key "
@@ -661,6 +669,10 @@ class _Turn:
             "no_data_keys": [k for k in keys if by_key[k].get("data_status") == "missing"],
             "calculations": succeeded,
         }
+
+
+DROPPED_NOTE = "Một vài số chưa đọc chắc được nên đã bỏ ra."
+UNCONFIRMED_ANSWER = "Chưa đọc chắc được các số cần cho câu này, có thể do bản scan bị đọc sai, nên không đưa số ra."
 
 
 def without_sentences_using(answer: str, numbers: list[str]) -> str:

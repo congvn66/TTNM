@@ -258,7 +258,7 @@ def _history(session, document_id):
 def answer_document(
     session, document, question, trace_id, trace, catalog, *,
     overlay, snapshot, complete=None, load_extraction=None, resolve_pdf=None, save=None, persist_chart=None,
-    record=True, max_steps=7, drop_untraced_on_last_step=False,
+    record=True, max_steps=7, drop_untraced_on_last_step=True,
 ):
     """Answer with the tools assistant and persist the exchange.
 
