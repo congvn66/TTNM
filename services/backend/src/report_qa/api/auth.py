@@ -68,7 +68,7 @@ class PreferencesPatch(BaseModel):
 
 
 def _dsn() -> str:
-    return settings.database_url.replace("postgresql+psycopg://", "postgresql://", 1)
+    return settings.database_url
 
 
 def _require_postgres() -> None:
@@ -124,14 +124,19 @@ def _public_user(row: dict[str, Any]) -> dict[str, Any]:
     return {"id": str(row["id"]), "email": row["email"], "display_name": row["display_name"], "email_verified": False}
 
 
+def web_origins() -> list[str]:
+    """Web addresses allowed to call the API (CORS and the login CSRF check): the dev web plus WEB_ORIGINS."""
+    allowed = ["http://127.0.0.1:4173", "http://localhost:4173"]
+    configured = os.getenv("WEB_ORIGINS", "")
+    allowed += [item.strip().rstrip("/") for item in configured.split(",") if item.strip()]
+    return list(dict.fromkeys(allowed))
+
+
 def _csrf_guard(request: Request) -> None:
     origin = request.headers.get("origin")
     if not origin:
         return
-    allowed = {"http://127.0.0.1:4173", "http://localhost:4173"}
-    configured = os.getenv("WEB_ORIGINS", "")
-    allowed.update(item.strip().rstrip("/") for item in configured.split(",") if item.strip())
-    if origin.rstrip("/") not in allowed:
+    if origin.rstrip("/") not in web_origins():
         raise user_error(403, "CSRF_ORIGIN_REJECTED")
 
 

@@ -41,7 +41,7 @@ from report_qa.domain.contracts import validate_calculation_result_v1, validate_
 from .ai_provider import ProviderError, _load_local_env, assistant_mode, live_provider, planner_client, provider_mode
 from .jobs import router as jobs_router
 from .library import router as library_router
-from .auth import DEMO_OWNER_ID, owner_id_for_request, router as auth_router, settings_router as auth_settings_router
+from .auth import DEMO_OWNER_ID, owner_id_for_request, router as auth_router, settings_router as auth_settings_router, web_origins
 from .devices import router as auth_sessions_router
 from .extraction_slots import ExtractionSlots
 from .user_messages import MESSAGES, error_detail, user_error
@@ -201,7 +201,7 @@ app.include_router(auth_settings_router)
 app.include_router(auth_sessions_router)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:4173", "http://localhost:4173"],
+    allow_origins=web_origins(),
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     allow_credentials=True,
@@ -1393,14 +1393,15 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
             "numeric_value": numeric_value, "old_numeric_value": current["numeric_value"], "previous_revision_id": current["id"],
             "reason": payload.reason.strip(),
         }
-        _append_edit(document, evidence_key, revision)
-        affected = mark_answers_needing_update(session, document_id, evidence_key, current["id"])
-        session["updated_at"] = utc_now()
         if not postgres_runtime:
+            _append_edit(document, evidence_key, revision)
+            affected = mark_answers_needing_update(session, document_id, evidence_key, current["id"])
+            session["updated_at"] = utc_now()
             save_catalog(catalog)
     if postgres_runtime:
         # The database repeats the expected_revision_id check in its own
         # transaction, so this network call stays outside the catalog lock.
+        # Memory changes only after the database has the edit.
         try:
             _runtime_for_owner(owner_id).append_evidence_revision(
                 chat_id=UUID(session_id),
@@ -1413,6 +1414,10 @@ def create_evidence_revision(session_id: str, document_id: str, evidence_key: st
             if str(exc) == "EVIDENCE_REVISION_CONFLICT":
                 raise user_error(409, "EVIDENCE_REVISION_CONFLICT") from exc
             raise user_error(404, "EVIDENCE_NOT_FOUND") from exc
+        with catalog_lock:
+            _append_edit(document, evidence_key, revision)
+            affected = mark_answers_needing_update(session, document_id, evidence_key, current["id"])
+            session["updated_at"] = utc_now()
     trace_id = trace_id_for(request)
     flow_log("EVIDENCE_REVISION_APPENDED", trace_id=trace_id, session_id=session_id, document_id=document_id, evidence_key=evidence_key, old_value=current["numeric_value"], new_value=numeric_value, affected_answer_count=len(affected))
     return {"document_id": document_id, "evidence_key": evidence_key, "data_revision": state["data_revision"], "revision": revision, "display": display_number(numeric_value, locale), "affected_message_ids": affected, "recalculation_required": bool(affected), "trace_id": trace_id}
@@ -1515,6 +1520,7 @@ def _database_evidence_state(document: dict[str, Any], extraction: dict[str, Any
     """PostgreSQL mode: the state the database loaded, plus numbers it has no row for yet."""
     state = document.setdefault("evidence_state", {"data_revision": 0, "items": {}})
     state.setdefault("data_revision", 0)
+    state.setdefault("event_count", 0)  # apply_event numbers each change it records
     items = state.setdefault("items", {})
     for evidence in (extraction.get("evidence_batch") or {}).get("evidences", []):
         key = evidence["evidence_key"]

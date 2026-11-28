@@ -14,8 +14,7 @@ def postgres_health() -> dict[str, Any]:
     try:
         import psycopg
 
-        # psycopg accepts the SQLAlchemy URL after removing the dialect prefix.
-        dsn = settings.database_url.replace("postgresql+psycopg://", "postgresql://", 1)
+        dsn = settings.database_url
         with psycopg.connect(dsn, connect_timeout=3) as connection:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT current_database(), current_schema()")

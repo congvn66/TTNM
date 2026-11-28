@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { request } from "../../shared/api/client.js";
+import { usePolling } from "./usePolling.js";
 
 const ASKING_KEY = "sourcelens-asking-v1";
 function readAsking() { try { return JSON.parse(sessionStorage.getItem(ASKING_KEY) || "[]"); } catch { return []; } }
@@ -58,11 +59,7 @@ export function useConversation(report) {
   }, [report?.id, load]);
 
   const working = messages.some(isWorking);
-  useEffect(() => {
-    if (!working) return undefined;
-    const timer = window.setInterval(() => { load().catch(() => {}); }, 1500);
-    return () => window.clearInterval(timer);
-  }, [working, load]);
+  usePolling(working, load, 1500);
 
   const ask = useCallback(async (questionText, retryOf = null, resumeKey = null) => {
     const question = questionText.trim();

@@ -133,6 +133,11 @@ class PostgresRuntimeStore(PostgresRevisionStore):
         return {"sessions": sessions}
 
     def load_session(self, chat_id: UUID | str, *, row: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        # One connection for all of its queries: a new one per query costs ~0.4 s each to Supabase.
+        with self.transaction():
+            return self._load_session(chat_id, row=row)
+
+    def _load_session(self, chat_id: UUID | str, *, row: dict[str, Any] | None = None) -> dict[str, Any] | None:
         chat_uuid = self._uuid(chat_id)
         if row is None:
             rows = self._execute(
@@ -323,7 +328,7 @@ class PostgresRuntimeStore(PostgresRevisionStore):
                   ORDER BY sr.meta->>'evidence_key', rev.revision_no""",
             (chat_id, document_id),
         )
-        state = {"data_revision": 0, "items": {}}
+        state = {"data_revision": 0, "items": {}, "event_count": 0}
         grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
         metadata: dict[str, dict[str, Any]] = {}
         for row in rows:

@@ -1010,3 +1010,13 @@ def test_a_result_keeps_the_magnitude_unit_of_its_own_rows(code, answer):
     result = _tools_answer(rows, {"action": "python", "code": code},
                            {"action": "answer", "answer": answer, "evidence_keys": ["rev"]})
     assert result["answer"] == answer
+
+
+def test_payload_puts_the_conversation_right_before_the_question():
+    from report_qa.application.document_assistant import _Turn
+
+    context = {"pages": [{"page": 1, "text": "x"}], "evidences": [], "chart_regions": [],
+               "history": [{"role": "user", "text": "Xuất khẩu quý 1?"}, {"role": "assistant", "text": "0"}]}
+    payload = json.loads(_Turn(context, read_chart=None).payload("Tại sao vậy?"))
+    assert list(payload) == ["document", "conversation", "question", "tool_results"]
+    assert payload["conversation"] == context["history"] and "history" not in payload["document"]

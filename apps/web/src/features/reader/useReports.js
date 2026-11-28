@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { request } from "../../shared/api/client.js";
+import { usePolling } from "./usePolling.js";
 
 const SELECTED_KEY = "sourcelens-report-v2";
 const MAX_BYTES = 100 * 1024 * 1024;
@@ -62,11 +63,7 @@ export function useReports() {
   const anyProcessing = reports.some(isProcessing);
 
   // Poll only while something is being read.
-  useEffect(() => {
-    if (!anyProcessing) return undefined;
-    const timer = window.setInterval(() => { load().catch(() => {}); }, 2000);
-    return () => window.clearInterval(timer);
-  }, [anyProcessing, load]);
+  usePolling(anyProcessing, load, 2000);
 
   const select = useCallback((id) => {
     setSelectedIdState(id);

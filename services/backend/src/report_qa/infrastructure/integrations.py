@@ -86,11 +86,12 @@ def _ai_provider() -> dict[str, Any]:
 
 
 def worker_status() -> dict[str, Any]:
-    durable = settings.persistence_backend == "postgres" and settings.async_answer_jobs
+    # With PostgreSQL every upload is a queued job (and answers too when ASYNC_ANSWER_JOBS is on).
+    durable = settings.persistence_backend == "postgres"
     return {
         "mode": "durable_postgres" if durable else "compatibility_background_task",
         "status": "requires_external_worker" if durable else "available",
-        "command": "scripts/start_worker.ps1" if durable else None,
+        "command": "scripts/start_worker.ps1 or scripts/start_worker.sh" if durable else None,
     }
 
 
