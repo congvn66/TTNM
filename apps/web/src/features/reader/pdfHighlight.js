@@ -88,7 +88,8 @@ export function cellBands(evidences, key, page, runs = []) {
   const rowY = union(sameRow.length ? sameRow : [box]);
   const columnX = union(sameColumn.length ? sameColumn : [box]);
   const middle = (b, axis) => (b[axis] + b[axis + 2]) / 2;
-  const rowName = runs.filter((b) => middle(b, 1) >= rowY[1] && middle(b, 1) <= rowY[3] && b[2] <= extent[0] + 0.01 && b[0] >= extent[0] - 0.5);
+  // Line codes and note numbers are not cells, so the row name can sit far left of the first amount column.
+  const rowName = runs.filter((b) => middle(b, 1) >= rowY[1] && middle(b, 1) <= rowY[3] && b[2] <= extent[0] + 0.01 && b[0] >= extent[0] - 0.8);
   const columnName = runs.filter((b) => middle(b, 0) >= columnX[0] - 0.01 && middle(b, 0) <= columnX[2] + 0.01 && b[3] <= extent[1] + 0.005 && b[1] >= extent[1] - 0.08);
   const left = Math.min(extent[0], ...rowName.map((b) => b[0]));
   const top = Math.min(extent[1], ...columnName.map((b) => b[1]));

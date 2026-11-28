@@ -49,12 +49,22 @@ function AccountMenu({ user, onSettings, onSignOut }) {
 }
 
 /** Reports down the left, like a file list; app settings and the account at the bottom. */
-export function Sidebar({ open, onClose, reports, selected, onOpen, onHome, onNew, onLibrary, user, guest = false, onSignIn, onSettings, onSignOut, theme, onTheme, sound, onSound }) {
+export function Sidebar({ open, onClose, reports, selected, uploading = null, libraryActive = false, onOpen, onHome, onNew, onLibrary, user, guest = false, onSignIn, onSettings, onSignOut, theme, onTheme, sound, onSound }) {
   const [query, setQuery] = useState("");
+  const navRef = useRef(null);
   const shown = reports.filter((report) => report.file_name.toLowerCase().includes(query.trim().toLowerCase()));
+  // On a phone the sidebar is a drawer over the page: it takes focus when it opens, Esc closes it, and focus goes back.
+  useEffect(() => {
+    if (!open || !window.matchMedia?.("(max-width: 900px)").matches) return undefined;
+    const before = document.activeElement;
+    window.requestAnimationFrame(() => navRef.current?.querySelector(".rd-side-item.active, .rd-side-upload")?.focus());
+    const onKey = (event) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } };
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("keydown", onKey); if (before instanceof HTMLElement && document.contains(before)) before.focus(); };
+  }, [open, onClose]);
   return <>
     {open && <div className="rd-side-back" onClick={onClose} aria-hidden="true" />}
-    <nav className={`rd-side${open ? " open" : ""}`} aria-label="Báo cáo">
+    <nav ref={navRef} className={`rd-side${open ? " open" : ""}`} aria-label="Báo cáo">
       <div className="rd-side-head">
         <button type="button" className="rd-brand" onClick={onHome}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M16 16l5 5" /><path d="M8 11h6" /></svg>
@@ -66,7 +76,8 @@ export function Sidebar({ open, onClose, reports, selected, onOpen, onHome, onNe
       {reports.length > 5 && <label className="rd-side-search"><Icon name="search" size={15} /><input placeholder="Tìm báo cáo" aria-label="Tìm báo cáo" value={query} onChange={(event) => setQuery(event.target.value)} /></label>}
       <div className="rd-side-list">
         {reports.length > 0 && <p className="rd-side-heading">Báo cáo</p>}
-        <ul>{shown.map((report) => <li key={report.id}>
+        <ul>{uploading && <li><span className="rd-side-item rd-side-pending" role="status"><span className="rd-spinner small" aria-hidden="true" /><span className="rd-side-label">Đang tải lên {uploading.name}</span></span></li>}
+          {shown.map((report) => <li key={report.id}>
           <button type="button" className={`rd-side-item${report.id === selected?.id ? " active" : ""}`} aria-current={report.id === selected?.id ? "page" : undefined} onClick={() => onOpen(report.id)} title={report.file_name}>
             <StatusDot report={report} /><span className="rd-side-label">{report.file_name.replace(/\.pdf$/i, "")}</span>
           </button>
@@ -74,7 +85,7 @@ export function Sidebar({ open, onClose, reports, selected, onOpen, onHome, onNe
         {reports.length > 0 && !shown.length && <p className="rd-side-empty">Không có kết quả</p>}
       </div>
       <div className="rd-side-foot">
-        {onLibrary && <button type="button" className="rd-side-item" onClick={onLibrary}><Icon name="folder" size={16} /><span className="rd-side-label">Thư viện</span></button>}
+        {onLibrary && <button type="button" className={`rd-side-item${libraryActive ? " active" : ""}`} aria-current={libraryActive ? "page" : undefined} onClick={onLibrary}><Icon name="folder" size={16} /><span className="rd-side-label">Thư viện</span></button>}
         <div className="rd-side-controls">
           <div className="rd-icon-segment" role="radiogroup" aria-label="Giao diện">
             {THEMES.map((item) => <button key={item.value} type="button" role="radio" aria-checked={theme === item.value} aria-label={item.label} title={item.label} className={theme === item.value ? "active" : ""} onClick={() => onTheme(item.value)}><Icon name={item.icon} size={16} /></button>)}

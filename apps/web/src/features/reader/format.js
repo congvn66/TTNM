@@ -169,6 +169,7 @@ export function formatDateTime(value) {
 const UNIT_WORDS = {
   PERCENT: "%", VND: "đồng", VND_THOUSAND: "nghìn đồng", VND_MILLION: "triệu đồng", VND_BILLION: "tỷ đồng",
   THOUSAND: "nghìn", MILLION: "triệu", BILLION: "tỷ", USD: "USD",
+  TIMES: "lần", TONNE: "tấn", THOUSAND_TONNE: "nghìn tấn",
 };
 export function valueWithUnit(evidence) {
   const value = evidence?.current_numeric_value;

@@ -189,3 +189,49 @@ it("warns that a selection of percentage cells cannot be added up", async () => 
   const summary = summarizeSelection([cell("c1", "+12,1%", "12.1"), cell("c2", "+9,5%", "9.5")]);
   expect(summary.caveats.join(" ")).toMatch(/tỷ lệ/);
 });
+
+describe("selections over nested rows and period-only columns", () => {
+  const row = (key, name, rowIndex, column, columnIndex, value) => ({
+    evidence_key: key, page_number: 1, bbox: [0.5 + columnIndex * 0.1, 0.1 + rowIndex * 0.02, 0.58 + columnIndex * 0.1, 0.115 + rowIndex * 0.02],
+    raw_text: String(value), current_numeric_value: String(value), original_numeric_value: String(value), data_status: "valid",
+    table_locator: { table_region_key: "page-1-table-0", row_index: rowIndex, column_index: columnIndex, row_header: name, column_header: column },
+  });
+  const sheet = [
+    row("a1", "I. Tiền", 1, "Số cuối kỳ", 1, 100), row("a2", "I. Tiền", 1, "Số đầu năm", 2, 50),
+    row("b1", "Mã số 111", 2, "Số cuối kỳ", 1, 60), row("b2", "Mã số 111", 2, "Số đầu năm", 2, 20),
+    row("c1", "Mã số 112", 3, "Số cuối kỳ", 1, 40), row("c2", "Mã số 112", 3, "Số đầu năm", 2, 30),
+  ];
+  it("warns when a heading is added with its own rows, and not for two periods of one measure", () => {
+    const summary = summarizeSelection(sheet, sheet);
+    expect(summary.caveats).toEqual(["gồm dòng tổng, bị cộng trùng"]);
+    expect(summarizeSelection([sheet[2], sheet[4]], sheet).caveats).toEqual([]);
+    const pair = summarizeSelection([sheet[2], sheet[3]], sheet);
+    expect(pair).toMatchObject({ changeFrom: "Số đầu năm", changeTo: "Số cuối kỳ", change: 200 });
+  });
+  it("writes questions for period-only columns, earliest period first", () => {
+    expect(selectionQuestions([sheet[2], sheet[3], sheet[4], sheet[5]], sheet)).toEqual(["Mã số 111 và Mã số 112 tăng bao nhiêu phần trăm từ đầu năm đến cuối kỳ?"]);
+    expect(selectionQuestions([sheet[2], sheet[4]], sheet)).toEqual(["Mục nào cao nhất cuối kỳ giữa Mã số 111 và Mã số 112?"]);
+  });
+  it("still offers a question when the rows have no names", () => {
+    const unnamed = [row("x", null, 1, "Số cuối kỳ", 1, 7), row("y", null, 2, "Số cuối kỳ", 1, 9)];
+    expect(selectionQuestions(unnamed, unnamed)).toEqual(["Các số 7 và 9 ở trang 1 là của mục nào?"]);
+  });
+  it("measures a row against the heading it sits under", () => {
+    const lines = explainCell(sheet[2], sheet).map((line) => line.text);
+    expect(lines).toContain("Chiếm 60% của Tiền · thứ 1/2");
+  });
+});
+
+describe("chart labels on the page", () => {
+  it("keeps chart values with their own box, in reading order", async () => {
+    const { pageChartLabels } = await import("./cells.js");
+    const bar = (key, x, y, tag) => ({ evidence_key: key, page_number: 2, source_type: "chart", bbox: [x, y, x + 0.02, y + 0.01], current_numeric_value: "38", chart_read: { assumptions: [tag] } });
+    const list = [bar("b", 0.5, 0.2, "box_bar"), bar("a", 0.1, 0.2, "box_printed_label"), bar("whole", 0.1, 0.1, "box_whole_chart")];
+    expect(pageChartLabels(list, 2).map((item) => item.evidence_key)).toEqual(["a", "b"]);
+  });
+  it("counts a long bracketed reading as a number cell", async () => {
+    const { isNumberCell } = await import("./cells.js");
+    expect(isNumberCell({ raw_text: "(487,478,693)", current_numeric_value: null })).toBe(true);
+    expect(isNumberCell({ raw_text: "Ghi chú dài về khoản mục", current_numeric_value: null })).toBe(false);
+  });
+});

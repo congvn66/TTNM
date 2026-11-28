@@ -4,17 +4,17 @@ import { useTheme } from "../theme/ThemeProvider.jsx";
 import { MOVED_KEY } from "../auth/AuthGate.jsx";
 import { AskBox } from "./AskBox.jsx";
 import { ConfirmDialog, DropOverlay, HelpDialog, RenameDialog, Sidebar, Toasts, TopBar } from "./Chrome.jsx";
-import { DataPanel } from "./DataPanel.jsx";
+import { DataPanel, withSavedRevision } from "./DataPanel.jsx";
 import { Home, SAMPLE_URL } from "./Home.jsx";
 import { AnswerCard, BriefCard, FailedCard, PendingCard, ReadingCard, showNumber } from "./Notes.jsx";
 import { CellCard } from "./CellCard.jsx";
 import { ChartCard } from "./ChartCard.jsx";
 import { chartData, loadCharts, MAX_CHARTS, saveCharts } from "./charts.js";
 import { cellName, cellUnsure, selectionQuestions } from "./cells.js";
-import { formatNumber as formatValue, scrollBehavior } from "./format.js";
+import { scrollBehavior, valueWithUnit } from "./format.js";
 import { PdfStage } from "./PdfStage.jsx";
 import { isOpenProblem, useDismissed } from "./dismissed.js";
-import { buildBriefing } from "./reportChecks.js";
+import { buildBriefing, readingCells } from "./reportChecks.js";
 import { setSoundEnabled, soundEnabled, unlockSound, useReadySignal } from "./signals.js";
 import { isProcessing, useReports } from "./useReports.js";
 import { useConversation } from "./useConversation.js";
@@ -82,7 +82,9 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate, s
     const id = `${Date.now()}-${Math.random()}`;
     // A toast with a group replaces the earlier toast of that group ("uploaded" gives way to "ready").
     setToasts((items) => [...items.filter((entry) => !item.group || entry.group !== item.group).slice(-2), { ...item, id }]);
-    window.setTimeout(() => setToasts((items) => items.filter((entry) => entry.id !== id)), item.kind === "error" ? 9000 : 6000);
+    // One with a button ("Hoàn tác", "Mở") stays longer, so there is time to reach it; a busy one stays until replaced.
+    if (!item.busy) window.setTimeout(() => setToasts((items) => items.filter((entry) => entry.id !== id)), item.life ?? (item.kind === "error" ? 9000 : item.action ? 10000 : 6000));
+    return id;
   }, []);
   const closeToast = useCallback((id) => setToasts((items) => items.filter((entry) => entry.id !== id)), []);
   // Shown once after a guest signs in: their reports moved into the account.
@@ -111,6 +113,7 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate, s
   }), [selected?.id]);
   useEffect(() => { setFocus(null); setOpenCell(null); setSelection([]); setAskingSelection(false); setQuestion(""); setDataOpen(false); document.title = selected ? `${selected.file_name} · SourceLens` : "SourceLens"; }, [selected?.id]);
 
+  // Only reports this tab uploaded or re-read, or the one open: on a shared account other people's uploads stay quiet.
   useReadySignal(reports.reports, useCallback((event) => {
     const mine = event.report.id === selected?.id;
     if (event.kind === "ready" && (event.report.extraction_history?.length ?? 0) > 1) {
@@ -121,7 +124,13 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate, s
     } else {
       toast({ kind: "error", group: `report-${event.report.id}`, text: `Không đọc được ${event.report.file_name}.` });
     }
-  }, [selected?.id, toast, reports]));
+  }, [selected?.id, toast, reports]), useCallback((report) => report.id === selected?.id || reports.isMine(report.id), [selected?.id, reports]));
+  // The open report was deleted elsewhere: say so once, instead of a silent jump home.
+  useEffect(() => {
+    if (reports.lost == null) return;
+    toast({ kind: "error", text: reports.lost ? `${reports.lost} không còn nữa. Có thể đã bị xóa.` : "Không tìm thấy báo cáo này. Có thể đã bị xóa." });
+    reports.clearLost();
+  }, [reports.lost]);
 
   // One fetch of the numbers feeds both the briefing and the data panel.
   const ready = selected?.extraction_status === "ready";
@@ -157,7 +166,8 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate, s
 
   const briefing = useMemo(() => evidence.data && evidence.key === evidenceKey ? buildBriefing(evidence.data.evidences ?? []) : null, [evidence, evidenceKey]);
   const problems = useDismissed(selected?.id);
-  const currentEvidences = useMemo(() => (selected && evidence.key?.startsWith(`${selected.id}:`) ? evidence.data?.evidences ?? [] : []), [selected, evidence]);
+  // Line codes and note numbers are labels, not amounts: the page, cards, sums and charts never use them.
+  const currentEvidences = useMemo(() => (selected && evidence.key?.startsWith(`${selected.id}:`) ? readingCells(evidence.data?.evidences) : []), [selected, evidence]);
   // The paragraphs that hold a number, by key: a text number's card shows its sentence.
   const paragraphs = useMemo(() => new Map((selected && evidence.key?.startsWith(`${selected.id}:`) ? evidence.data?.paragraphs ?? [] : []).map((item) => [item.paragraph_key, item])), [selected, evidence]);
   const swaps = useSwaps({ basePath: selected ? `/api/v1/sessions/${selected.sessionId}/documents/${selected.id}` : "", evidences: currentEvidences, dataKey: evidence.key, focusOn, toast });
@@ -187,16 +197,22 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate, s
     if (node && conversation.pending.length) node.scrollTo({ top: node.scrollHeight, behavior: scrollBehavior() });
   }, [conversation.pending.length]);
 
+  // The page in view stays while a file goes up; a toast says where it goes, and the new report opens when it is in.
   const upload = useCallback(async (file) => {
     if (!file) return;
     unlockSound();
+    const target = reports.uploadTarget;
+    const busy = /\.pdf$/i.test(file.name ?? "") || file.type === "application/pdf" ? toast({ busy: true, group: "upload", text: `Đang tải lên ${file.name}${target?.many ? ` vào ${target.title}` : ""}…` }) : null;
     try {
       const document = await reports.upload(file);
       if (document) toast({ group: `report-${document.id}`, text: `Đang đọc ${document.file_name}…` });
     } catch (error) {
-      toast({ kind: "error", text: error.message });
+      // A guest at the daily limit can sign in to upload more: the toast offers it and stays longer.
+      toast({ kind: "error", group: "upload", text: error.message, action: error.code === "GUEST_UPLOAD_LIMIT" && openSignIn ? { label: "Đăng nhập", onClick: () => openSignIn("login") } : null, life: error.code === "GUEST_UPLOAD_LIMIT" ? 15000 : undefined });
+    } finally {
+      if (busy) window.setTimeout(() => closeToast(busy), 0);
     }
-  }, [reports, toast]);
+  }, [reports, toast, closeToast, openSignIn]);
 
   const useSample = useCallback(async () => {
     unlockSound();
@@ -214,7 +230,9 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate, s
     await conversation.ask(text);
   }, [conversation, selected]);
 
-  const onEvidenceSaved = useCallback(async (_item, result) => {
+  const onEvidenceSaved = useCallback(async (item, result) => {
+    // The saved value shows at once; the full reload follows.
+    setEvidence((prev) => ({ ...prev, data: withSavedRevision(prev.data, item.evidence_key, result) }));
     setRevision((value) => value + 1);
     await conversation.reload().catch(() => {});
     const affected = result?.affected_message_ids?.length ?? 0;
@@ -232,11 +250,8 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate, s
   // Stop an answer the background worker is still writing.
   const stopAnswer = useCallback(async (reply) => {
     try {
-      const jobs = (await request("/api/v1/jobs")).jobs ?? [];
-      const job = jobs.find((item) => item.kind === "answer_question" && item.payload?.assistant_message_id === reply.id && ["queued", "running"].includes(item.status));
-      if (job) await request(`/api/v1/jobs/${job.id}/cancel`, { method: "POST" });
-      await conversation.reload();
-      if (job) toast({ text: "Đã dừng" });
+      const done = await conversation.stopReply(reply);
+      if (done) toast({ text: "Đã dừng" });
     } catch (error) {
       toast({ kind: "error", text: error.message });
     }
@@ -284,7 +299,7 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate, s
   const menuItems = [
     { label: "Số liệu", onClick: () => setDataOpen(true), disabled: !ready },
     { label: "Đổi tên", onClick: () => setRenaming(selected) },
-    canReread && { label: "Đọc lại", onClick: confirmReread },
+    (canReread || selected?.can_retry) && { label: "Đọc lại", onClick: confirmReread },
     { label: "Xóa", danger: true, onClick: () => confirmDelete(selected) },
   ];
 
@@ -299,7 +314,7 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate, s
   }, [conversation.notes, openChecks]);
 
   if (reports.loading) return <div className="rd-app"><div className="rd-boot" role="status"><span className="rd-spinner large" aria-hidden="true" />Đang tải…</div></div>;
-  if (reports.error && !reports.reports.length) return <div className="rd-app"><div className="rd-boot" role="alert"><h1>Không kết nối được</h1><button type="button" className="rd-button primary" onClick={() => window.location.reload()}>Thử lại</button></div></div>;
+  if (reports.error && !reports.reports.length) return <div className="rd-app"><div className="rd-boot" role="alert"><h1>Không kết nối được</h1><p className="rd-small">{reports.error}</p><button type="button" className="rd-button primary" onClick={() => reports.retry()}>Thử lại</button></div></div>;
 
   const processing = isProcessing(selected);
   // Only this report's numbers: after switching reports the old list stays in state until the new one loads.
@@ -310,7 +325,8 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate, s
     if (!cell) return;
     chartReturn.current = null;
     setSelection([]); setAskingSelection(false); setOpenCell(key);
-    focusOn({ page: cell.page_number, boxes: cell.bbox ? [cell.bbox] : [], label: cellName(cell), value: cell.current_numeric_value == null ? "—" : formatValue(cell.current_numeric_value), raw: cell.raw_text, key, unsure: cellUnsure(cell) });
+    // With its unit, as the card shows it: "33 nghìn", not "33".
+    focusOn({ page: cell.page_number, boxes: cell.bbox ? [cell.bbox] : [], label: cellName(cell), value: cell.current_numeric_value == null ? (cell.raw_text?.trim() ? `«${cell.raw_text.trim()}»` : "—") : valueWithUnit(cell), raw: cell.current_numeric_value == null ? "" : cell.raw_text, key, unsure: cellUnsure(cell) });
   };
   const selectCells = (keys) => { setSelection(keys); setOpenCell(null); setAskingSelection(false); if (keys.length) setFocus(null); };
   const askAboutSelection = () => {
@@ -382,23 +398,18 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate, s
   };
   const renderCard = (cell, { narrow, onClose }) => <CellCard cell={cell} evidences={evidences} paragraph={paragraphs.get(cell.paragraph_locator?.paragraph_key) ?? null} notes={conversation.notes} checks={openChecks} basePath={basePath} narrow={narrow} onClose={onClose}
     onAsk={(text) => { setOpenCell(null); setQuestion(text); window.requestAnimationFrame(() => askRef.current?.focus()); }}
-    onGotoAnswer={gotoAnswer} onGotoCheck={(check) => { const key = openCell; setOpenCell(null); focusOn(check.chip); window.requestAnimationFrame(() => document.querySelector(`[data-cell="${CSS.escape(key)}"]`)?.focus({ preventScroll: true })); }}
+    onGotoAnswer={gotoAnswer} onDismissCheck={dismissProblem} onGotoCheck={(check) => { const key = openCell; setOpenCell(null); focusOn(check.chip); window.requestAnimationFrame(() => document.querySelector(`[data-cell="${CSS.escape(key)}"]`)?.focus({ preventScroll: true })); }}
     onSaved={onEvidenceSaved} onConflict={() => setRevision((value) => value + 1)} />;
   return <div className={`rd-app${sidebarOpen ? " side-open" : ""}`}>
     <a className="rd-skip" href="#main-content">Bỏ qua điều hướng</a>
-    <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} reports={reports.reports} selected={selected} onOpen={pickReport} onHome={() => pickReport(null)} onNew={() => uploadRef.current?.click()}
+    <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} reports={reports.reports} uploading={reports.uploading} selected={selected} onOpen={pickReport} onHome={() => pickReport(null)} onNew={() => uploadRef.current?.click()}
       onLibrary={account && onNavigate ? () => onNavigate("/app/library") : null} user={account} guest={isGuest} onSignIn={openSignIn} onSettings={() => onNavigate?.("/app/settings/profile")} onSignOut={onSignOut}
       theme={preference} onTheme={setPreference} sound={sound} onSound={() => { setSoundEnabled(!sound); setSound(!sound); }} />
     <TopBar selected={selected} sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen(true)} onHelp={() => setHelpOpen(true)} menuItems={menuItems} />
     <input ref={uploadRef} type="file" accept="application/pdf,.pdf" hidden onChange={(event) => { upload(event.target.files?.[0]); event.target.value = ""; }} />
-    {reports.uploading
-      ? <main className="rd-work" id="main-content">
-        <div className="rd-stage-wrap"><div className="rd-boot" role="status"><span className="rd-spinner large" aria-hidden="true" />Đang tải lên {reports.uploading.name}…</div></div>
-        <aside className="rd-notes" aria-label="Tiến độ tải lên"><div className="rd-notes-scroll"><ReadingCard uploading report={{ file_name: reports.uploading.name, created_at: reports.uploading.startedAt }} /></div></aside>
-      </main>
-      : !selected
-      ? <Home onFile={upload} onSample={useSample} uploading={reports.uploading} />
-      : <main className="rd-work" id="main-content">
+    {!selected
+      ? <Home onFile={upload} onSample={useSample} uploading={reports.uploading} project={reports.uploadTarget?.many ? reports.uploadTarget.title : ""} />
+      : <div className="rd-main"><main className="rd-work" id="main-content">
         <div className="rd-stage-wrap"><PdfStage report={selected} focus={focus} onClearFocus={clearFocus} processing={processing} markedPages={markedPages} evidences={evidences}
           openKey={openCell} onOpenCell={openCellCard} onCloseCard={closeCellCard} selection={selection} onSelect={selectCells} renderCard={renderCard}
           checks={openChecks} onDismissCheck={dismissProblem} peekKey={peekKey} onPeek={setPeekKey}
@@ -406,23 +417,23 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate, s
         <aside className="rd-notes" aria-label="Câu trả lời">
           <div className="rd-notes-scroll" ref={notesRef}>
             {processing && <ReadingCard report={selected} />}
-            {selected.extraction_status === "failed" && <FailedCard report={selected} onRetry={canReread ? (report) => reports.reextract(report).catch((error) => toast({ kind: "error", text: error.message })) : null} />}
+            {selected.extraction_status === "failed" && <FailedCard report={selected} onRetry={canReread || selected.can_retry ? (report) => reports.reextract(report).catch((error) => toast({ kind: "error", text: error.message })) : null} />}
             {ready && <BriefCard brief={brief.key === briefKey ? brief : { status: "loading" }} briefing={briefing} dismissed={problems.dismissed} onDismiss={dismissProblem} onRestore={problems.restore} activeKey={focus?.key} onFocus={focusOn} onAsk={ask} onRetry={() => loadBrief(briefKey, selected)} onOpenData={() => setDataOpen(true)} asked={askedQuestions} collapsed={conversation.notes.length > 0} scanned={briefing?.scanned} />}
-            {conversation.notes.map((note) => <AnswerCard key={note.id} note={note} activeKey={focus?.key} onFocus={focusOn} onPeek={setPeekKey} onPick={swaps.start} pickBusy={Boolean(swaps.busy)} swap={swaps.swaps[note.id]}
+            {conversation.notes.map((note) => <AnswerCard key={note.id} note={note} evidences={evidences} activeKey={focus?.key} onFocus={focusOn} onPeek={setPeekKey} onPick={swaps.start} pickBusy={Boolean(swaps.busy)} swap={swaps.swaps[note.id]}
               onUndoSwap={(id) => { swaps.undo(id); window.requestAnimationFrame(() => document.querySelector(`#note-${CSS.escape(id)} .rd-headline-value`)?.focus({ preventScroll: true })); }} onAsk={ask} onOpenData={() => setDataOpen(true)} onStop={stopAnswer} scanned={briefing?.scanned} onEdit={(text) => { setQuestion(text); askRef.current?.focus(); }} />)}
             {ready && charts.map((chart) => <ChartCard key={chart.id} chart={chart} evidences={evidences} loading={evidence.loading || !evidence.data} activeKey={openCell ?? focus?.key} onPeek={setPeekKey}
               onOpenCell={openFromChart} onShowCells={showChartCells}
               onChange={(id, patch) => changeCharts((list) => list.map((item) => (item.id === id ? { ...item, ...patch } : item)))} onRemove={removeChart} />)}
             {isGuest && openSignIn && !promptClosed && conversation.notes.some((note) => note.reply?.status === "completed") && <section className="rd-card rd-signin" aria-label="Đăng nhập">
               <p>Đăng nhập để giữ báo cáo này</p>
-              <div><button type="button" className="rd-button primary" onClick={() => openSignIn("login")}>Đăng nhập</button><button type="button" className="rd-button" onClick={closePrompt}>Để sau</button></div>
+              <div><button type="button" className="rd-button primary" onClick={() => openSignIn("login")}>Đăng nhập</button><button type="button" className="rd-button" onClick={() => openSignIn("register")}>Đăng ký</button><button type="button" className="rd-button" onClick={closePrompt}>Để sau</button></div>
             </section>}
             {conversation.pending.map((item) => <PendingCard key={item.id} item={item} onRetry={(entry) => conversation.ask(entry.question, entry.id)} onDismiss={conversation.dismiss} />)}
           </div>
           <AskBox ref={askRef} value={question} onChange={setQuestion} onSubmit={ask} asking={conversation.asking} disabled={selected.extraction_status === "failed"} note={processing ? "Đang đọc báo cáo…" : undefined}
             suggestions={selectionSuggestions} suggestionsLabel="Gợi ý" />
         </aside>
-      </main>}
+      </main></div>}
     <DataPanel open={dataOpen} data={evidence.data} loading={evidence.loading} basePath={selected ? `/api/v1/sessions/${selected.sessionId}/documents/${selected.id}` : ""} onClose={() => setDataOpen(false)} onFocus={focusOn} onSaved={onEvidenceSaved} onReload={() => setRevision((value) => value + 1)} />
     {renaming && <RenameDialog report={renaming} onClose={() => setRenaming(null)} onSave={async (report, name) => { await reports.rename(report, name); toast({ text: "Đã đổi tên" }); }} />}
     <ConfirmDialog dialog={confirm} onClose={() => setConfirm(null)} />

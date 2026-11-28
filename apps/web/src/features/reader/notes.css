@@ -1,0 +1,21 @@
+/* Answer cards: parts that Notes.jsx owns. Loaded after reader.css. */
+
+/* One input of an answer's calculation, under the headline. Not .rd-input: that is the text field. */
+.rd-calc-input { display: flex; flex: 1 1 auto; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; border: 1px solid transparent; border-radius: 8px; padding: 3px 6px; background: color-mix(in srgb, var(--part) 9%, transparent); color: var(--rd-ink); font: inherit; text-align: left; cursor: pointer; }
+.rd-calc-input:hover, .rd-calc-input:focus-visible, .rd-calc-input.active { border-color: var(--part); }
+.rd-calc-input b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.rd-calc-input small { min-width: 0; overflow: hidden; color: var(--rd-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+@media (pointer: coarse) { .rd-calc-input { min-height: 44px; align-items: center; } }
+
+/* "49.880 − 42.290 = 7.590" in Cách tính. */
+.rd-result-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; margin: 0; font-variant-numeric: tabular-nums; }
+.rd-result li > .rd-result-line { justify-content: flex-end; color: var(--rd-ink); }
+
+/* The AI's sentence after a swap: kept, folded, so it never reads as the swapped result. */
+.rd-orig > summary { color: var(--rd-muted); font-size: 13px; cursor: pointer; }
+.rd-orig[open] > summary { margin-bottom: 6px; }
+.rd-orig .rd-answer { color: var(--rd-ink-soft); font-size: 15px; }
+@media (pointer: coarse) { .rd-orig > summary { padding: 12px 0; } }
+
+/* A question the reader stopped: no error colour. */
+.rd-qa.stopped .rd-stopped-text { color: var(--rd-muted); font-size: 14px; }

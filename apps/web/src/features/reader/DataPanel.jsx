@@ -3,25 +3,59 @@ import { request } from "../../shared/api/client.js";
 import { dataStatusLabel, differsFromReading, evidenceLabel, formatNumber, needsCheck } from "./format.js";
 import { checkTableTotals, formatNumber as formatValue } from "./reportChecks.js";
 
-/** What a corrected value would do to the total check of its column. */
-function totalImpact(all, evidence, value) {
+/**
+ * What a corrected value would do to the total check of its column, said
+ * against how the column stands now: "vẫn khớp", "sẽ khớp", "sẽ lệch", "vẫn lệch".
+ */
+export function totalImpact(all, evidence, value) {
   const locator = evidence.table_locator;
   if (!locator?.table_region_key || value == null || value === "") return "";
   const column = all.filter((item) => item.table_locator?.table_region_key === locator.table_region_key && item.table_locator?.column_index === locator.column_index);
-  const after = checkTableTotals(column.map((item) => item.evidence_key === evidence.evidence_key ? { ...item, current_numeric_value: String(value) } : item)).find((check) => check.keys.includes(evidence.evidence_key));
+  const checkOf = (cells) => checkTableTotals(cells).find((check) => check.keys.includes(evidence.evidence_key));
+  const before = checkOf(column);
+  const after = checkOf(column.map((item) => item.evidence_key === evidence.evidence_key ? { ...item, current_numeric_value: String(value) } : item));
   if (!after) return "";
-  return after.ok ? "Tổng cột vẫn khớp" : `Tổng cột lệch ${formatValue(Math.abs(after.diff))}`;
+  const gap = formatValue(Math.abs(after.diff));
+  if (after.ok) return before && !before.ok ? "Tổng cột sẽ khớp" : "Tổng cột vẫn khớp";
+  return before && !before.ok ? `Tổng cột vẫn lệch ${gap}` : `Tổng cột sẽ lệch ${gap}`;
 }
 
 // Wait for a pause in typing before asking the server how it reads the number.
 const PREVIEW_DELAY_MS = 400;
 
-/** "21.500 (= 21500)" so 1.250 (one thousand two hundred fifty) is never read as 1,25. */
-function previewText(preview) {
+/**
+ * The number that will be saved. When the server read the typed text in a
+ * way the reader may not expect ("21,500" in a report that writes 21.500),
+ * it adds the plain digits so 1.250 (one thousand two hundred fifty) is never read as 1,25.
+ */
+export function previewText(preview, typed = "") {
   const value = String(preview.plain_value ?? preview.parsed_value ?? "");
   const shown = formatNumber(value);
   const plain = value.replace(".", ",");
-  return plain && plain !== shown ? `${shown} (= ${plain})` : shown;
+  const input = String(typed).replace(/\s+/g, "");
+  if (!plain || plain === shown || input === shown || input === plain) return shown;
+  return `${shown} (= ${plain})`;
+}
+
+/**
+ * The numbers with one saved correction applied, so every view shows the
+ * new value at once instead of after the next fetch.
+ */
+export function withSavedRevision(data, evidenceKey, result) {
+  const revision = result?.revision;
+  if (!data?.evidences || !revision?.id) return data;
+  return {
+    ...data,
+    data_revision: result.data_revision ?? data.data_revision,
+    evidences: data.evidences.map((item) => item.evidence_key !== evidenceKey ? item : {
+      ...item,
+      current_numeric_value: revision.numeric_value,
+      current_revision_id: revision.id,
+      revision_count: (item.revision_count ?? 1) + 1,
+      // The server counts a corrected number as valid.
+      data_status: "valid",
+    }),
+  };
 }
 
 /**
@@ -82,6 +116,7 @@ export function EditForm({ evidence, all, basePath, onCancel, onSaved, onConflic
     setWorking(false);
     if (checked) save(null);
   }
+  const impact = preview ? totalImpact(all, evidence, preview.plain_value ?? preview.parsed_value) : "";
   return <form className="rd-edit" onSubmit={(event) => { event.preventDefault(); submit(); }} noValidate>
     <b>{evidenceLabel(evidence) || `Số ở trang ${evidence.page_number}`}</b>
     <label htmlFor={`${ids}-v`}>Số đúng</label>
@@ -89,7 +124,7 @@ export function EditForm({ evidence, all, basePath, onCancel, onSaved, onConflic
     <label htmlFor={`${ids}-r`}>Ghi chú (không bắt buộc)</label>
     <input id={`${ids}-r`} className="rd-input" maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} />
     {readings.length > 0 && <div className="rd-readings" role="group" aria-label="Chọn số để lưu"><span>Ý bạn là:</span>{readings.map((reading) => <button type="button" key={reading} disabled={working} onClick={() => check(text, reading)}>{formatNumber(reading)}</button>)}</div>}
-    {preview && <p className="rd-preview" role="status">Sẽ đổi: <b>{formatNumber(evidence.current_numeric_value) || "—"} → {previewText(preview)}</b>{totalImpact(all, evidence, preview.plain_value ?? preview.parsed_value) && <small>{totalImpact(all, evidence, preview.plain_value ?? preview.parsed_value)}</small>}{preview.decimal_separator && preview.decimal_separator !== "," ? <small>Báo cáo này dùng dấu “{preview.decimal_separator}” làm dấu thập phân.</small> : null}</p>}
+    {preview && <p className="rd-preview" role="status">Sẽ đổi: <b>{formatNumber(evidence.current_numeric_value) || "—"} → {previewText(preview, text)}</b>{impact && <small>{impact}</small>}{preview.decimal_separator && preview.decimal_separator !== "," ? <small>Báo cáo này dùng dấu “{preview.decimal_separator}” làm dấu thập phân.</small> : null}</p>}
     {error && <p className="rd-error-text" role="alert">{error}</p>}
     <div className="rd-actions">
       <button type="submit" className="rd-button primary" disabled={working}>Lưu</button>

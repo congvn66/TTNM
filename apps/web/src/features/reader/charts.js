@@ -3,9 +3,9 @@
 // numbers every time, so a corrected cell moves its bar.
 import { cellNumber, cellUnsure, periodRank } from "./cells.js";
 import { clampBox } from "./pdfHighlight.js";
-import { formatNumber, NOT_ADDITIVE, splitColumn, TOTAL_ROW, totalGroups } from "./reportChecks.js";
+import { formatNumber, isTotalName, NOT_ADDITIVE, splitColumn, totalGroups } from "./reportChecks.js";
 
-const isTotal = (cell) => TOTAL_ROW.test(String(cell.table_locator.row_header ?? "").trim());
+const isTotal = (cell) => isTotalName(cell.table_locator.row_header);
 const xMid = (cell) => { const box = clampBox(cell.bbox); return box ? (box[0] + box[2]) / 2 : cell.table_locator.column_index; };
 // "- ĐMX": the dash marks a sub-item on the page; in a chart it is noise.
 const rowName = (cell) => String(cell.table_locator.row_header ?? "").trim().replace(/^[-–•+]\s+/, "") || `Dòng ${cell.table_locator.row_index + 1}`;
@@ -128,7 +128,8 @@ function shareOf(groups, tableCells) {
       if (value == null) continue;
       if (NOT_ADDITIVE.test(cell.table_locator.column_header ?? "") || NOT_ADDITIVE.test(cell.table_locator.row_header ?? "")) return null;
       const column = tableCells.filter((other) => other.table_locator.column_index === cell.table_locator.column_index);
-      const group = totalGroups(column).find((item) => item.parts.some((part) => part.evidence_key === key));
+      // Only a total that adds up: a share of a total that does not match would mislead.
+      const group = totalGroups(column).find((item) => item.status === "ok" && item.parts.some((part) => part.evidence_key === key));
       const total = cellNumber(group?.total);
       const parts = group?.parts.map(cellNumber).filter((part) => part != null) ?? [];
       // A share means something only when every part pulls the same way.

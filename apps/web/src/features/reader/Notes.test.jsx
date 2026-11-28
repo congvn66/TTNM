@@ -57,7 +57,8 @@ it("shows only the cells behind the stated result, keeping their numbers, and ne
   expect(headline.inputs.map((item) => [item.evidence_key, item.index])).toEqual([["a", 0], ["c", 2]]);
   expect(headline.chip.parts.map((part) => part.index)).toEqual([0, 2]);
   expect(headline.chip.boxes).toHaveLength(2);
-  expect(headline.label).toBe("");
+  // Not "sum_q1": the name comes from the formula's shape (a + c).
+  expect(headline.label).toBe("Tổng");
 });
 
 it("picks the closest result the sentence writes as a percentage", async () => {
@@ -94,7 +95,71 @@ it("has no headline when the sentence lists several results of one script", () =
   expect(headlineOf({ ...answer, answer: "Tháng 4 là 44 nghìn đơn." })?.value).toBe("44");
 });
 
-it("adds no line for a good answer, whether its numbers come from a table or a chart", () => {
-  const bar = { ...cell, evidence_key: "chart-1", value: "38", method_label: "đọc từ nhãn", source_type: "chart" };
-  expect(confidenceOf({ answer: "Tháng 1 đạt 38.", evidence: [bar], formulas: [] })).toBeNull();
+it("says a number comes from a chart, and that an axis estimate may be wrong", () => {
+  const bar = { ...cell, page: 2, evidence_key: "chart-1", value: "38", method_label: "đọc từ nhãn" };
+  expect(confidenceOf({ answer: "Tháng 1 đạt 38.", evidence: [bar], formulas: [] })).toEqual({ kind: "neutral", text: "Số đọc từ nhãn trên biểu đồ, trang 2" });
+  const estimate = { ...bar, evidence_key: "chart-2", method_label: "ước lượng theo trục", data_status: "ambiguous" };
+  expect(confidenceOf({ answer: "…", evidence: [bar, estimate], formulas: [] }).text).toBe("1 số ước lượng từ biểu đồ, có thể sai");
+  // A table answer still has no line.
+  expect(confidenceOf({ answer: "…", evidence: [{ ...cell, method_label: "đọc từ ô bảng" }], formulas: [] })).toBeNull();
+});
+
+it("names a result the script does not name from its formula: a − b is a difference", async () => {
+  const { headlineOf, formulaName } = await import("./Notes.jsx");
+  const inputs = [{ evidence_key: "q2", value: "49880", page: 1, bbox: cell.bbox }, { evidence_key: "q1", value: "42290", page: 1, bbox: cell.bbox }];
+  const formula = { expression: "q2 = value('q2')\nq1 = value('q1')\nresult = q2 - q1", result: "7590", inputs };
+  expect(headlineOf({ answer: "Tăng 7.590 triệu đồng.", evidence: [], formulas: [formula] }).label).toBe("Chênh lệch");
+  expect(formulaName({ expression: "result = (value('a') - value('b')) / value('b') * 100" })).toBe("Tỷ lệ thay đổi");
+  expect(formulaName({ expression: "result = value('a') * 2 - value('b')" })).toBe("");
+});
+
+it("gives each failure plain words: the server's own text when it names the cause, else the client's", async () => {
+  const { friendlyError, answerError, briefError } = await import("./Notes.jsx");
+  const busy = "Hệ thống đang bận. Thử lại sau một phút.";
+  // As the worker writes a rate-limited answer: its message and structured_answer.error_code.
+  const limited = "Trợ lý đang quá tải. Thử lại sau một phút.";
+  expect(friendlyError(answerError({ status: "failed", body: limited, structured_answer: { presentation: "error_v1", answer: limited, error_code: "AI_RATE_LIMITED" } }))).toBe(limited);
+  // Older failed answers carry only the generic text: a busy code still says when to retry.
+  expect(friendlyError(answerError({ status: "failed", body: "Không thể tạo câu trả lời. Hãy thử lại.", error_code: "AI_BUSY" }))).toBe(busy);
+  expect(friendlyError(answerError({ status: "failed", body: "Không thể tạo câu trả lời. Hãy thử lại.", structured_answer: { warnings: ["JOB_FAILED", "RATE_LIMITED"] } }))).toBe(busy);
+  expect(friendlyError(answerError({ status: "failed", body: "Không thể tạo câu trả lời. Hãy thử lại." }))).toBe("Không trả lời được. Thử lại.");
+  expect(friendlyError({ message: "Rate limit hit (HTTP 429)" })).toBe(busy);
+  // A server error that reached the client as a failed fetch is not "check your network".
+  expect(friendlyError({ message: "Không kết nối được. Thử lại.", code: "SERVER_ERROR" })).toBe("Máy chủ gặp lỗi. Thử lại.");
+  expect(friendlyError({ message: "Không kết nối được. Thử lại." })).toMatch(/Kiểm tra mạng/);
+  // Vietnamese words with "ai" in them are not the AI.
+  expect(friendlyError({ message: "Số này sai rồi" })).toBe("Số này sai rồi");
+  // The overview: the server's words for its own failures, a reason for a busy or slow service, else a plain line.
+  expect(briefError({ message: "Tóm tắt mất quá lâu. Thử lại sau.", code: "BRIEF_TIMEOUT", status: 504 })).toBe("Tóm tắt mất quá lâu. Thử lại sau.");
+  expect(briefError({ message: "Chưa tóm tắt được báo cáo này. Thử lại sau.", code: "BRIEF_INCOMPLETE", status: 502 })).toBe("Chưa tóm tắt được báo cáo này. Thử lại sau.");
+  expect(briefError({ message: limited, code: "AI_RATE_LIMITED", status: 502 })).toBe(`Chưa tóm tắt được. ${limited}`);
+  expect(briefError({ message: "Không nhận được phản hồi. Thử lại." })).toBe("Chưa tóm tắt được. Tóm tắt lâu quá nên đã dừng.");
+  expect(briefError({ message: "Không trả lời được. Thử lại.", code: "AI_INVALID_OUTPUT", status: 502 })).toBe("Chưa tóm tắt được");
+});
+
+it("knows when an answer's numbers changed, were put back, or were corrected before it was made", async () => {
+  const { inputState } = await import("./Notes.jsx");
+  const answer = { evidence: [{ ...cell, evidence_key: "q1", value: "42290" }], formulas: [{ inputs: [{ evidence_key: "q1", value: "42290" }, { evidence_key: "q2", value: "49880" }] }] };
+  const now = (q1, original = "42290") => [{ evidence_key: "q1", current_numeric_value: q1, original_numeric_value: original }, { evidence_key: "q2", current_numeric_value: "49880", original_numeric_value: "49880" }];
+  expect(inputState(answer, now("42380")).changed).toBe(true);
+  expect(inputState(answer, now("42290")).changed).toBe(false);
+  expect(inputState(answer, []).changed).toBeNull();
+  // Made after 220 was corrected to 250: it uses the corrected number, and the PDF prints the old one.
+  const made = { evidence: [{ ...cell, evidence_key: "goal", value: "250" }] };
+  expect(inputState(made, [{ evidence_key: "goal", current_numeric_value: "250", original_numeric_value: "220" }]).edited).toEqual([{ key: "goal", value: "250", printed: "220" }]);
+});
+
+it("after a swap, lists the chosen cell in the sources and runs the swapped calculation", async () => {
+  const { swappedAnswer } = await import("./Notes.jsx");
+  const answer = { evidence: [{ ...cell, evidence_key: "total", value: "42290" }, { ...cell, evidence_key: "q2", value: "49880" }, { kind: "text", page: 1, quote: "Tổng 42.290 49.880" }], formulas: [{ expression: "old" }] };
+  const swap = { formulaIndex: 0, swap: { total: "north" }, formula: { expression: "new", inputs: [{ evidence_key: "north", value: "18240", page: 1, bbox: cell.bbox, label: "Miền Bắc" }, { evidence_key: "q2", value: "49880", page: 1 }] } };
+  const shown = swappedAnswer(answer, swap);
+  expect(shown.evidence.filter((item) => item.kind === "data").map((item) => [item.evidence_key, item.value])).toEqual([["north", "18240"], ["q2", "49880"]]);
+  expect(shown.formulas[0].expression).toBe("new");
+  expect(answer.formulas[0].expression).toBe("old");
+});
+
+it("copies the answer with the pages it comes from", async () => {
+  const { copyableAnswer } = await import("./Notes.jsx");
+  expect(copyableAnswer("Tăng **7.590** triệu đồng.", [1, 2])).toBe("Tăng 7.590 triệu đồng.\nNguồn: trang 1, 2");
 });

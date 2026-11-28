@@ -136,7 +136,8 @@ export function useSwaps({ basePath, evidences, dataKey, focusOn, toast }) {
       const warning = Object.entries(swap).map(([from, to]) => pickWarning(byKey.get(from), byKey.get(to))).find(Boolean) ?? "";
       setSwaps((all) => {
         const next = { ...all };
-        if (changes.length) next[current.noteId] = { formulaIndex: current.formulaIndex, swap, formula, warning, changes };
+        // The original result's chip: undo shows it on the page again.
+        if (changes.length) next[current.noteId] = { formulaIndex: current.formulaIndex, swap, formula, warning, changes, baseChip: current.base.chip };
         else delete next[current.noteId];
         return next;
       });
@@ -152,9 +153,12 @@ export function useSwaps({ basePath, evidences, dataKey, focusOn, toast }) {
   const cancel = useCallback(() => { stopHover(); setPick(null); restoreFocus(); }, []);
 
   const undo = useCallback((noteId) => {
+    const base = swapsRef.current[noteId]?.baseChip;
     setSwaps((all) => { const next = { ...all }; delete next[noteId]; return next; });
+    // The page showed the swapped calculation: it goes back to the answer's own cells.
+    if (base) focusOn(base);
     toast({ text: "Đã hoàn tác" });
-  }, [toast]);
+  }, [focusOn, toast]);
 
   // What the page shows while choosing.
   const view = pick && {
