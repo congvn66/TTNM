@@ -1422,12 +1422,14 @@ def test_typed_number_must_be_well_formed_in_the_documents_format(monkeypatch) -
     session_id, base, rows = _document_with_numbers(monkeypatch, ("total", "1,234,567", "1234567", 1), ("target", "21.5", "21.5", 1))
     try:
         body = {"reason": "Đối chiếu PDF", "expected_revision_id": rows["target"]["current_revision_id"]}
-        for typed in ("1.234.567,89", "18,2.40", "21,500,", "1e5", "5%", "1" * 19, "１２", "1,23"):
+        for typed in ("18,2.40", "21,500,", "1e5", "5%", "1" * 19, "１２"):
             refused = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": typed})
             assert refused.status_code == 422, typed
             assert refused.json()["detail"]["code"] == "INVALID_DECIMAL"
         too_long = client.post(f"{base}/evidences/target/revisions", json={**body, "numeric_value": "1" * 80})
         assert (too_long.status_code, too_long.json()["detail"]["code"]) == (422, "INVALID_DECIMAL")
+        other_format = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": "1,23"})
+        assert other_format.json()["parsed_value"] == "1.23"
         preview = client.post(f"{base}/evidences/target/revisions?dry_run=true", json={**body, "input_text": "1,234,567.89"})
         assert preview.json() == {"parsed_value": "1234567.89", "plain_value": "1234567.89", "display": "1,234,567.89", "decimal_separator": ".", "locale": "en"}
     finally:

@@ -4,7 +4,8 @@ A document's number format is PDF_NUMBER_LOCALE when it is set; otherwise
 it is the format its page text proves (detected_locale), the same rule the
 extraction reads the printed numbers with; otherwise it is unknown.
 
-A typed number must be a well-formed number in that format: digits, then
+A typed number must be a well-formed number in that format, or, when it is
+not, in the other format ("30.42" in a Vietnamese document): digits, then
 optionally thousands separators each followed by exactly three digits, then
 optionally one decimal separator followed by digits. A sign or brackets
 ("(5)" is -5) may surround it, and a "%" may follow it only when the number
@@ -74,7 +75,12 @@ def read_typed_number(text: str, locale: str | None, *, percent: bool = False) -
     """
     body, negative = _split_sign(text.strip(), percent)
     if locale in SEPARATORS:
+        # "30.42" is not a number in Vietnamese format, but it can only mean
+        # 30.42, so the other format is used. "21.500" reads in both formats,
+        # and then the document's format wins.
         value = _read(body, locale)
+        if value is None:
+            value = next((reading for other in LOCALES if other != locale and (reading := _read(body, other)) is not None), None)
         if value is None:
             raise TypedNumberError(_format_message(text, locale))
     else:
