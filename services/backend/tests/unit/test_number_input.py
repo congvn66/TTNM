@@ -16,6 +16,9 @@ def test_a_decimal_number_proves_the_format_whose_grammar_alone_reads_it():
     assert detected_locale(["Doanh thu tăng 128,4."]) == "vi"
     assert detected_locale(["21.7%", "26,200"]) == "en"
     assert detected_locale(["19,0%", "21.7%"]) is None
+    # A clear majority wins over a few slips, as in a broker report with one "44,4%".
+    assert detected_locale(["13.7%", "82.7%", "49.0%", "6.2", "18.6", "27.8", "8.3", "3.4", "5.9", "1.8", "21.5", "44,4%"]) == "en"
+    assert detected_locale(["6.2", "18.6", "27.8", "44,4%", "4,4"]) is None
     assert detected_locale(["Quý 2/2026", "31.12.2023"]) is None
 
 

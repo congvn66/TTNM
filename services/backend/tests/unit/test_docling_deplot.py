@@ -447,6 +447,35 @@ def test_scanned_page_uses_ocr_tokens_and_keeps_retrieval_text(tmp_path):
     assert item["bbox"] == [0.3, 0.1, 0.36, 0.15]
 
 
+def test_scanned_number_takes_the_unit_written_after_it_else_the_page_note(tmp_path):
+    import pymupdf
+    from report_qa.application.ocr_extraction import OcrPage
+
+    path = tmp_path / "scan.pdf"
+    with pymupdf.open() as pdf:
+        pdf.new_page(width=400, height=300)
+        pdf.save(path)
+    converter = Mock()
+    converter.convert.return_value = SimpleNamespace(
+        status="ConversionStatus.SUCCESS",
+        document=SimpleNamespace(export_to_dict=lambda: {"tables": [], "pictures": [], "texts": []}),
+    )
+    words = "Doanh thu (đơn vị: triệu đồng) Miền Bắc 1.250 . Mục tiêu năm 2026 là 220 tỷ đồng."
+
+    class FakeOcr:
+        def available(self):
+            return True, None
+
+        def read_page(self, _path, _page_number):
+            tokens = tuple({"text": w, "bbox": [0.1, 0.1, 0.2, 0.15], "confidence": 0.9} for w in words.split())
+            return OcrPage(page_number=1, width=800, height=600, tokens=tokens)
+
+    result = extract_docling_artifact(path, "scan-version", converter=converter, ocr_engine=FakeOcr())
+    units = {e["raw_text"]: e["semantic"]["unit"] for e in result["evidence_batch"]["evidences"]}
+    assert units["220"] == "VND_BILLION"
+    assert units["1.250"] == "VND_MILLION"
+
+
 def test_axis_metadata_without_confirmation_of_absent_labels_is_not_enough():
     region = {
         **request().chart_regions[0],

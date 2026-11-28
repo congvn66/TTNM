@@ -166,6 +166,7 @@ limit('RLIMIT_FSIZE', 0)
 limit('RLIMIT_NOFILE', 16)
 payload=json.load(sys.stdin)
 used=[]
+swapped=set()
 printed=[]
 def unique(items):
     return tuple(dict.fromkeys(items))
@@ -246,11 +247,16 @@ def module_function(fn):
 def namespace(module, names):
     return types.SimpleNamespace(**{n:(module_function(getattr(module,n)) if callable(getattr(module,n)) else getattr(module,n)) for n in names})
 def value(key):
+    # A reader's swap: the script reads another cell in place of this one; the script itself is unchanged.
+    original=key
+    key=payload['swap'].get(key,key)
     item=payload['evidence'].get(key)
     if item is None:
         raise KeyError('Unknown evidence key: '+str(key))
     if item.get('data_status')!='valid' or item.get('numeric_value') is None:
         raise ValueError('Evidence is missing or unverified: '+key)
+    # Counted only once the swapped-in cell was really read, so a caught failure is not a swap.
+    if original in payload['swap']: swapped.add(original)
     if key not in used: used.append(key)
     return traced(Decimal(item['numeric_value']),{key},())
 # A count of traced values and the whole part of a traced value keep their sources.
@@ -307,7 +313,7 @@ try:
     manual=unique(t for n in numbers for t in (n.typed if isinstance(n,Traced) else typed_of(n)))
     output=json.dumps({'status':'succeeded','result':result,'result_rows':result_rows(result),'used_evidence_keys':[k for k in used if k in sources],
                        'manual_numbers':list(manual),'traced_numbers':[{'value':str(n),'typed':list(n.typed),'keys':sorted(n.sources)} for n in numbers if isinstance(n,Traced) and n.sources],
-                       'stdout':''.join(printed)},default=str,allow_nan=False)
+                       'swapped_keys':sorted(swapped),'stdout':''.join(printed)},default=str,allow_nan=False)
     if len(output)>30000: raise ValueError('Calculation result too large')
     print(output)
 except Exception as exc:
@@ -392,8 +398,12 @@ def _run_runner(payload_json):
         return error
 
 
-def run_calculation(code, evidence):
-    """Execute a validated script; evidence maps key -> current Data row."""
+def run_calculation(code, evidence, swap=None):
+    """Execute a validated script; evidence maps key -> current Data row.
+
+    ``swap`` maps a key the script reads to the key to read instead, so the
+    same script runs on other cells without its text being rewritten.
+    """
     try:
         validate_script(code, evidence)
     except (ValueError, SyntaxError, MemoryError, RecursionError) as exc:
@@ -403,6 +413,7 @@ def run_calculation(code, evidence):
         "max_stdout": MAX_STDOUT_CHARS,
         "max_error": MAX_ERROR_CHARS,
         "code": code,
+        "swap": dict(swap or {}),
         "builtins": _SAFE_BUILTINS,
         "modules": {name: sorted(names) for name, names in _MODULE_ATTRIBUTES.items() if name != "decimal"},
         "evidence": {

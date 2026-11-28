@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import WorkspaceScreen from "../features/workspace/WorkspaceScreen.jsx";
+import ReaderApp from "../features/reader/ReaderApp.jsx";
 import LibraryScreen from "../features/workspace/LibraryScreenV2.jsx";
 import SettingsScreen from "../features/workspace/SettingsScreen.jsx";
 
@@ -38,5 +38,5 @@ export default function AppRouter({ user = null, onSignOut = null }) {
     return <LibraryScreen onNavigate={navigate} />;
   }
 
-  return <WorkspaceScreen user={user} onSignOut={onSignOut} onNavigate={navigate} />;
+  return <ReaderApp user={user} onSignOut={onSignOut} onNavigate={navigate} />;
 }

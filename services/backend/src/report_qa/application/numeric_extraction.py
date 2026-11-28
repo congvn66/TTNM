@@ -173,6 +173,7 @@ def header_period(headers: list[str | None], page_year: str | None = None) -> di
     return None
 
 SEPARATORS = {"vi": (".", ","), "en": (",", ".")}  # (thousands, decimal)
+LOCALE_MAJORITY = 10  # proofs of one format per proof of the other before that format wins
 # A well-formed number in one format: digits, optional thousands groups of three, optional decimals.
 GRAMMAR = {
     locale: re.compile(rf"(?P<whole>[0-9]{{1,3}}(?:{re.escape(thousands)}[0-9]{{3}})+|[0-9]+)(?:{re.escape(decimal)}(?P<fraction>[0-9]+))?")
@@ -186,16 +187,23 @@ def detected_locale(texts) -> str | None:
     A printed number proves a format when that format's grammar reads it and
     the other's does not: "1.234.567", "1.234,5" and "6,5" are Vietnamese,
     "1,234,567", "1,234.5" and "6.5" are English. "1.234" and "2026" prove
-    nothing. A document that proves both formats has no one format.
+    nothing. When a document proves both, one format wins only when it has at
+    least LOCALE_MAJORITY times the proofs of the other: writers slip ("44,4%"
+    in an English-style report), and a few slips must not make every
+    "3,722" in the report unreadable. A closer split has no one format.
     """
-    found = set()
+    counts = dict.fromkeys(GRAMMAR, 0)
     for text in texts:
         for match in quantities(text or ""):
             token = match.group().strip("()+-% ")
-            readers = {locale for locale, grammar in GRAMMAR.items() if grammar.fullmatch(token)}
+            readers = [locale for locale, grammar in GRAMMAR.items() if grammar.fullmatch(token)]
             if len(readers) == 1:
-                found |= readers
-    return found.pop() if len(found) == 1 else None
+                counts[readers[0]] += 1
+    ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)
+    (winner, most), (_, other) = ranked[0], ranked[1]
+    if not most:
+        return None
+    return winner if other == 0 or most >= LOCALE_MAJORITY * other else None
 
 
 def single_year(text: str) -> str | None:

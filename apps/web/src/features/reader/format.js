@@ -156,6 +156,9 @@ export function distinctFormulas(formulas) {
   });
 }
 
+/** "smooth" unless the reader asked the system for less motion; the CSS rule cannot reach scrolls made from code. */
+export const scrollBehavior = () => (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
+
 export function formatDateTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";

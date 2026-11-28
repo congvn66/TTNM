@@ -92,6 +92,8 @@ def test_health_docs_and_openapi_expose_only_the_main_flow() -> None:
         "/api/v1/sessions/{session_id}/documents/{document_id}/file",
         "/api/v1/sessions/{session_id}/documents/{document_id}/extraction",
         "/api/v1/sessions/{session_id}/documents/{document_id}/evidences",
+        "/api/v1/sessions/{session_id}/documents/{document_id}/brief",
+        "/api/v1/sessions/{session_id}/documents/{document_id}/recalculate",
         "/api/v1/sessions/{session_id}/documents/{document_id}/evidences/{evidence_key}/revisions",
         "/api/v1/sessions/{session_id}/messages",
             "/api/v1/sessions/{session_id}/messages/{message_id}/trace",
@@ -1496,3 +1498,71 @@ def test_a_reading_is_parsed_once_and_requests_leave_the_shared_copy_unchanged(m
         assert read_extraction(name) == on_disk
     finally:
         cleanup_session(created["id"])
+
+
+def test_document_brief_is_made_once_per_reading_and_stays_out_of_the_chat(monkeypatch):
+    from report_qa.api import document_assistant_flow
+
+    calls = []
+    monkeypatch.setenv("REPORT_QA_ASSISTANT_MODE", "tools")
+    reply = {"action": "answer", "answer": "Báo cáo doanh thu quý 1/2026.\n- Doanh thu đạt 120.", "evidence_keys": [],
+             "sources": [{"page": 1, "quote": "Revenue Q1/2026 was 120."}]}
+    monkeypatch.setattr(document_assistant_flow, "planner_client", lambda: calls.append(1) or _FakePlanner(reply))
+    created = client.post("/api/v1/sessions", json={"title": "Brief"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        base = f"/api/v1/sessions/{created['id']}/documents/{document_id}/brief"
+        assert client.get(base).json() == {"status": "missing"}
+        made = client.post(base)
+        assert made.status_code == 200, made.text
+        assert made.json()["brief"]["structured_answer"]["answer"].startswith("Báo cáo doanh thu")
+        again = client.post(base)
+        assert again.json()["brief"] == made.json()["brief"]
+        assert client.get(base).json()["status"] == "ready"
+        assert len(calls) == 1
+        messages = client.get(f"/api/v1/sessions/{created['id']}").json()["session"]["messages"]
+        assert messages == []
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_document_brief_needs_the_tools_assistant(monkeypatch):
+    monkeypatch.setenv("REPORT_QA_ASSISTANT_MODE", "legacy")
+    created = client.post("/api/v1/sessions", json={"title": "Brief legacy"}).json()["session"]
+    try:
+        document_id = _upload(created["id"], "Revenue Q1/2026 was 120.")
+        response = client.post(f"/api/v1/sessions/{created['id']}/documents/{document_id}/brief")
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "BRIEF_UNAVAILABLE"
+    finally:
+        cleanup_session(created["id"])
+
+
+def test_recalculate_runs_a_stored_answer_script_on_other_cells_with_todays_numbers(monkeypatch) -> None:
+    session_id, base, rows = _document_with_numbers(monkeypatch, ("north", "200", "200", 1), ("south", "300", "300", 1), ("total", "1000", "1000", 1))
+    try:
+        document_id = base.rsplit("/", 1)[1]
+        script = "a = value('north')\nb = value('total')\nresult = round(a / b * 100, 2)"
+        api_main.catalog["sessions"][session_id]["messages"].append({
+            "id": "answer-1", "role": "assistant", "document_id": document_id,
+            "structured_answer": {"formulas": [{"name": "Python", "expression": script, "substitution": "Tỷ trọng"}]}})
+        swapped = client.post(f"{base}/recalculate", json={"message_id": "answer-1", "swap": {"north": "south"}})
+        assert swapped.status_code == 200, swapped.text
+        assert swapped.json()["formula"]["result"] == "30.00"
+        # A corrected number is what the calculation reads, as for a new answer.
+        client.post(f"{base}/evidences/total/revisions", json={"numeric_value": "800", "reason": "Đối chiếu PDF", "expected_revision_id": rows["total"]["current_revision_id"]})
+        assert client.post(f"{base}/recalculate", json={"message_id": "answer-1"}).json()["formula"]["result"] == "25.00"
+        # Nothing is saved on the answer.
+        assert api_main.catalog["sessions"][session_id]["messages"][-1]["structured_answer"]["formulas"][0]["expression"] == script
+
+        assert client.post(f"{base}/recalculate", json={"message_id": "missing"}).json()["detail"]["code"] == "FORMULA_NOT_FOUND"
+        assert client.post(f"{base}/recalculate", json={"message_id": "answer-1", "swap": {"south": "north"}}).status_code == 422
+        # Two runs at once per reader at most; a third is told to wait instead of holding a worker.
+        slot = api_main._recalculation_slots[next(iter(api_main._recalculation_slots))]
+        slot.acquire(); slot.acquire()
+        try:
+            assert client.post(f"{base}/recalculate", json={"message_id": "answer-1"}).json()["detail"]["code"] == "RECALCULATE_BUSY"
+        finally:
+            slot.release(); slot.release()
+    finally:
+        cleanup_session(session_id)

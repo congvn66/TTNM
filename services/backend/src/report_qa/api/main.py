@@ -35,7 +35,7 @@ from report_qa.application.deplot_reading import DeplotChartReader
 from report_qa.application.p0_pipeline import calculation_answer, execute_calculation, resolve_evidence
 from report_qa.application.question_planner import build_catalog, plan_question
 from report_qa.application.text_safety import storable
-from report_qa.api.document_assistant_flow import answer_document, extraction_marker, flag_if_inputs_changed, with_chart_batches
+from report_qa.api.document_assistant_flow import answer_document, extraction_marker, flag_if_inputs_changed, recalculate, with_chart_batches
 from report_qa.application.document_assistant import AssistantError
 from report_qa.domain.contracts import validate_calculation_result_v1, validate_question_plan_v2
 from .ai_provider import ProviderError, _load_local_env, assistant_mode, live_provider, planner_client, provider_mode
@@ -362,6 +362,14 @@ class DocumentUpdateRequest(StorableRequest):
 class SessionQuestionRequest(StorableRequest):
     document_id: str = Field(min_length=1)
     question: str = Field(min_length=1, max_length=2000)
+
+
+class FormulaRecalculateRequest(BaseModel):
+    """Run an answer's calculation again with some cells swapped: {cell it read: cell to read instead}."""
+
+    message_id: str = Field(min_length=1, max_length=80)
+    formula_index: int = Field(default=0, ge=0, le=50)
+    swap: dict[str, str] = Field(default_factory=dict, max_length=10)
 
 
 class EvidenceRevisionCreateRequest(StorableRequest):
@@ -1188,6 +1196,132 @@ def list_document_evidences(session_id: str, document_id: str, request: Request)
     return JSONResponse(records)
 
 
+# Each run is a Python process of up to a few seconds: a reader moving over a table must not hold every worker.
+RECALCULATIONS_PER_OWNER = 2
+_recalculation_slots: dict[str, threading.BoundedSemaphore] = {}
+
+
+@app.post(
+    "/api/v1/sessions/{session_id}/documents/{document_id}/recalculate",
+    tags=["sessions"],
+    summary="Run an answer's calculation again on other cells, without saving",
+    responses=OPENAPI_COMMON_ERRORS,
+)
+def recalculate_formula(session_id: str, document_id: str, body: FormulaRecalculateRequest, request: Request) -> dict[str, Any]:
+    session = get_session(session_id, owner_id_for_request(request))
+    document, artifact = _ready_document(session, document_id)
+    with catalog_lock:
+        message = next((item for item in session["messages"] if item["id"] == body.message_id), None)
+        formulas = ((message or {}).get("structured_answer") or {}).get("formulas") or []
+        if message is None or message.get("role") != "assistant" or message.get("document_id") != document_id or body.formula_index >= len(formulas):
+            raise user_error(404, "FORMULA_NOT_FOUND")
+        # Today's numbers, as the assistant itself reads them: corrections applied, chart reads included.
+        current = extraction_with_evidence_revisions(document, with_chart_batches(document, artifact), artifact)
+        by_key = {e["evidence_key"]: e for e in current["evidence_batch"]["evidences"]}
+        slot = _recalculation_slots.setdefault(owner_id_for_request(request), threading.BoundedSemaphore(RECALCULATIONS_PER_OWNER))
+    if not slot.acquire(blocking=False):
+        raise user_error(429, "RECALCULATE_BUSY")
+    # The script runs in its own process, outside the lock.
+    try:
+        return recalculate(formulas[body.formula_index], by_key, body.swap)
+    except ValueError as exc:
+        raise user_error(409 if str(exc) == "FORMULA_NOT_RECALCULABLE" else 422, str(exc)) from exc
+    finally:
+        slot.release()
+
+
+def _tool_errors(exc: AssistantError) -> list[dict[str, Any]]:
+    """Each rejected step with what it named (untraced numbers, bad quotes), so a failed answer can be traced."""
+    return [{k: v for k, v in item.items() if k != "tool"} for item in getattr(exc, "tool_results", []) if item.get("error")]
+
+
+# The document overview: one AI answer per reading of a document that says
+# what the report is, its key points with their numbers, and what it flags.
+# It is stored on the document, not in the chat, and made again after a re-read.
+BRIEF_QUESTION = (
+    "Tóm tắt báo cáo này cho người đọc lần đầu. Viết đúng các phần sau, bằng tiếng Việt:\n"
+    "1. Một câu: đây là báo cáo gì, của đơn vị nào, cho kỳ nào.\n"
+    "2. Từ 3 đến 5 gạch đầu dòng là các điểm nổi bật nhất. Mỗi dòng nêu một ý và con số quan trọng nhất của ý đó, "
+    "ghi đúng như trong báo cáo, kèm đơn vị.\n"
+    "3. Nếu báo cáo tự nêu rủi ro, điểm bất thường hay lưu ý, thêm một dòng bắt đầu bằng \"Cần chú ý:\". Không có thì bỏ phần này.\n"
+    "Chỉ dùng thông tin có trong báo cáo. Không suy đoán, không tự tính thêm.\n"
+    "Dẫn nguồn con số bằng evidence_keys của các dòng data. Chỉ thêm 1-2 quote thật ngắn, chép nguyên văn. "
+    "Không cần read_chart: chỉ dùng văn bản và bảng đã có."
+)
+_brief_in_flight: dict[str, threading.Event] = {}
+
+
+def _brief_response(document: dict[str, Any]) -> dict[str, Any]:
+    brief = document.get("brief")
+    if brief and brief.get("marker") == extraction_marker(document):
+        return {"status": "ready", "brief": brief}
+    return {"status": "missing"}
+
+
+@app.get(
+    "/api/v1/sessions/{session_id}/documents/{document_id}/brief",
+    tags=["sessions"], summary="Read the AI overview of a document, if made", responses=OPENAPI_COMMON_ERRORS,
+)
+def get_document_brief(session_id: str, document_id: str, request: Request) -> dict[str, Any]:
+    session = get_session(session_id, owner_id_for_request(request))
+    document, _ = _ready_document(session, document_id)
+    return _brief_response(document)
+
+
+@app.post(
+    "/api/v1/sessions/{session_id}/documents/{document_id}/brief",
+    tags=["sessions"], summary="Make the AI overview of a document (once per reading)", responses=OPENAPI_COMMON_ERRORS,
+)
+def create_document_brief(session_id: str, document_id: str, request: Request) -> dict[str, Any]:
+    session = get_session(session_id, owner_id_for_request(request))
+    document, artifact = _ready_document(session, document_id)
+    if assistant_mode() != "tools":
+        raise user_error(409, "BRIEF_UNAVAILABLE")
+    # A second request for the same document waits for the first instead of paying for another AI run.
+    while True:
+        with catalog_lock:
+            existing = _brief_response(document)
+            if existing["status"] == "ready":
+                return existing
+            running = _brief_in_flight.get(document_id)
+            if running is None:
+                _brief_in_flight[document_id] = threading.Event()
+                break
+        running.wait()
+    trace_id = trace_id_for(request)
+    trace = [trace_event("brief_requested", "ok", trace_id=trace_id)]
+    owner = session.get("owner_id", LOCAL_OWNER_ID)
+    marker = extraction_marker(document)
+    try:
+        result = answer_document(
+            session, document, BRIEF_QUESTION, trace_id, trace, catalog,
+            overlay=lambda document, extraction: extraction_with_evidence_revisions(document, extraction, artifact),
+            snapshot=lambda message: None,
+            load_extraction=lambda name: artifact,
+            resolve_pdf=cache_pdf,
+            save=lambda value: save_catalog(value, owner),
+            persist_chart=(lambda result, region_key: _persist_chart_read(session, document, result, region_key)) if postgres_runtime else None,
+            record=False,
+            # A five-point overview of a dense report needs a few more turns than one question.
+            max_steps=10,
+        )
+        message = result["assistant_message"]
+        brief = {"structured_answer": message["structured_answer"], "citations": message["citations"], "created_at": message["created_at"], "marker": marker}
+        with catalog_lock:
+            document["brief"] = brief
+        save_catalog(catalog, owner)
+        return {"status": "ready", "brief": brief}
+    except ProviderError as exc:
+        raise ai_failure(exc.code, str(exc), trace_id, exc.http_status) from exc
+    except AssistantError as exc:
+        flow_log("ASSISTANT_INCOMPLETE", trace_id=trace_id, session_id=session_id, document_id=document["id"], purpose="brief",
+                 tool_errors=_tool_errors(exc))
+        raise ai_failure("ASSISTANT_INCOMPLETE", str(exc), trace_id) from exc
+    finally:
+        with catalog_lock:
+            _brief_in_flight.pop(document_id).set()
+
+
 def _evidence_records(document: dict[str, Any], document_id: str, artifact: dict[str, Any], extraction: dict[str, Any]) -> dict[str, Any]:
     """The Data rows with their current values. Call under catalog_lock.
 
@@ -1677,7 +1811,7 @@ def _ask_session_document(session_id: str, payload: SessionQuestionRequest, requ
             raise ai_failure(exc.code, str(exc), trace_id, exc.http_status) from exc
         except AssistantError as exc:
             flow_log("ASSISTANT_INCOMPLETE", trace_id=trace_id, session_id=session_id, document_id=document["id"],
-                     tool_errors=[item.get("error") for item in getattr(exc, "tool_results", []) if item.get("error")])
+                     tool_errors=_tool_errors(exc))
             raise ai_failure("ASSISTANT_INCOMPLETE", str(exc), trace_id) from exc
     # Only a clarification asked about *this* document can be answered here;
     # a pending clarification on another PDF in the session must not be

@@ -28,6 +28,10 @@ MESSAGES = {
     "DOCUMENT_NAME_INVALID": "Tên tài liệu không hợp lệ.",
     "DOCUMENT_FILE_MISSING": "Không tìm thấy tệp PDF đã lưu của tài liệu này.",
     "MESSAGE_TRACE_NOT_FOUND": "Không tìm thấy nhật ký xử lý của câu trả lời này.",
+    "FORMULA_NOT_FOUND": "Không tìm thấy phép tính này trong câu trả lời.",
+    "FORMULA_NOT_RECALCULABLE": "Phép tính này không tính lại được với ô khác.",
+    "FORMULA_SWAP_INVALID": "Ô cần đổi không có trong phép tính, hoặc ô mới không có trong tài liệu.",
+    "RECALCULATE_BUSY": "Đang tính lại phép tính trước, thử lại sau giây lát.",
     # Uploads
     "UPLOAD_FORM_INVALID": "Không đọc được tệp tải lên. Tên tệp có thể quá dài; hãy đổi tên tệp ngắn hơn (tối đa 255 ký tự) rồi tải lên lại.",
     "PDF_REQUIRED": "Chỉ chấp nhận tệp .pdf.",
@@ -60,6 +64,7 @@ MESSAGES = {
     "AI_UNGROUNDED_CITATION": "AI trả về trích dẫn không nằm trong tài liệu. Hãy thử lại câu hỏi.",
     "AI_UNSUPPORTED_EVIDENCE": "AI chưa xác minh được evidence trong tài liệu. Hãy thử lại câu hỏi.",
     "DOCUMENT_CONTEXT_TOO_LARGE": "Tài liệu quá dài để trợ lý đọc hết trong một lần hỏi.",
+    "BRIEF_UNAVAILABLE": "Tóm tắt tự động cần trợ lý AI đọc toàn văn. Bạn vẫn hỏi về báo cáo được bình thường.",
     "ASSISTANT_INCOMPLETE": "Trợ lý chưa hoàn tất câu trả lời trong số bước cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",
     "AI_PROVIDER_BAD_RESPONSE": "Dịch vụ AI trả về phản hồi không hợp lệ. Hãy thử lại sau.",
     "AI_ANSWER_TIMEOUT": "Trợ lý chưa trả lời xong trong thời gian cho phép. Hãy thử lại hoặc hỏi cụ thể hơn.",
