@@ -341,9 +341,13 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
     if (!box || !size) return;
     const pageHeight = size.height / size.scale;
     const textPx = (box[3] - box[1]) * pageHeight * size.scale;
-    if (textPx >= 13) return;
+    // Digit boxes are tighter than the font, so 9 px of box is already readable text. A box under
+    // 3 px is a dash or a rule, with nothing to read. One tap zooms at most 1.6x so the row name stays in view.
+    const phone = window.matchMedia?.("(max-width: 700px)").matches;
+    if (textPx < 3 || (textPx >= 9 && !phone)) return;
+    if (phone && textPx >= 11) return;
     autoFit.current = false;
-    setScale(Math.min(3, Math.max(size.scale * (15 / Math.max(textPx, 4)), window.matchMedia?.("(max-width: 700px)").matches ? 1.4 : 0)));
+    setScale(Math.min(2.2, Math.max(size.scale * Math.min(1.6, 13 / textPx), phone ? 1.4 : 0)));
   }, [focus?.nonce, pdf]);
 
   // Keep the middle of the view in place when zooming with the buttons.
@@ -382,7 +386,8 @@ export function PdfStage({ report, focus, onClearFocus, processing, markedPages,
     const onWheel = (event) => {
       if (!event.ctrlKey) return;
       event.preventDefault();
-      queue(Math.exp(-event.deltaY * 0.01), event.clientX, event.clientY);
+      // A trackpad pinch sends small deltas; a mouse wheel notch sends about 100. Clamp so one notch is ~25%, not 2.7x.
+      queue(Math.exp(-Math.max(-25, Math.min(25, event.deltaY)) * 0.01), event.clientX, event.clientY);
     };
     const onGestureStart = (event) => { event.preventDefault(); gestureScale = 1; };
     const onGestureChange = (event) => {

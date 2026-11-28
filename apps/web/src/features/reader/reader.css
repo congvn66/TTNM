@@ -126,7 +126,8 @@ body:has(.rd-app) { background: #f6f6f3; }
 .rd-work { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 420px); min-height: 0; }
 .rd-stage-wrap { position: relative; min-width: 0; min-height: 0; }
 .rd-stage { height: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "rail bar" "rail scroll" "tools tools"; background: var(--rd-canvas); }
-.rd-focusbar { grid-area: bar; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 12px 8px 16px; border-bottom: 1px solid var(--rd-accent-line); background: var(--rd-accent-soft); color: var(--rd-accent-ink); animation: rd-pop .2s ease-out; }
+/* The bar floats over the top of the page (same grid cell as the scroller), so showing or hiding it never moves the page under the pointer. */
+.rd-focusbar { grid-area: scroll; align-self: start; position: relative; z-index: 6; box-shadow: 0 2px 8px rgba(23, 24, 26, .12); display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 12px 8px 16px; border-bottom: 1px solid var(--rd-accent-line); background: var(--rd-accent-soft); color: var(--rd-accent-ink); animation: rd-pop .2s ease-out; }
 .rd-focusbar.unsure { border-bottom-color: var(--rd-warn); background: var(--rd-warn-soft); color: var(--rd-ink); }
 .rd-focus-close { display: grid; place-items: center; width: 32px; min-width: 32px; height: 32px; border: 1px solid currentColor; border-radius: 8px; padding: 0; background: transparent; font-size: 18px; line-height: 1; cursor: pointer; }
 .rd-focusbar p { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; font-size: 14px; }
@@ -147,7 +148,7 @@ body:has(.rd-app) { background: #f6f6f3; }
 .rd-thumb span { display: flex; align-items: center; gap: 4px; color: var(--rd-muted); font-size: 12px; }
 .rd-thumb.active span { color: var(--rd-accent); font-weight: 700; }
 .rd-thumb i { width: 6px; height: 6px; border-radius: 50%; background: var(--rd-accent); }
-.rd-scroll { grid-area: scroll; position: relative; min-width: 0; min-height: 0; overflow: auto; padding: 24px; }
+.rd-scroll { grid-area: scroll; position: relative; min-width: 0; min-height: 0; overflow: auto; padding: 24px; scroll-padding-top: 88px; }
 .rd-page { position: relative; margin: 0 auto; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .12), 0 8px 24px rgba(0, 0, 0, .06); }
 .rd-page canvas { display: block; }
 .rd-page-skeleton { width: min(620px, 100%); aspect-ratio: 1 / 1.41; margin: 0 auto; border-radius: 4px; background: linear-gradient(90deg, var(--rd-surface) 40%, var(--rd-subtle) 50%, var(--rd-surface) 60%) 0 0 / 300% 100%; animation: rd-shimmer 1.4s linear infinite; }

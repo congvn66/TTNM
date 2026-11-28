@@ -182,3 +182,10 @@ describe("numbers in running text", () => {
     expect(part.number).toBe("12");
   });
 });
+
+it("warns that a selection of percentage cells cannot be added up", async () => {
+  const { summarizeSelection } = await import("./cells.js");
+  const cell = (key, raw, value) => ({ evidence_key: key, raw_text: raw, current_numeric_value: value, data_status: "valid", page_number: 1, table_locator: { table_region_key: "t", row_index: Number(key.slice(-1)), column_index: 6, row_header: `Mảng ${key}`, column_header: "Thay đổi" } });
+  const summary = summarizeSelection([cell("c1", "+12,1%", "12.1"), cell("c2", "+9,5%", "9.5")]);
+  expect(summary.caveats.join(" ")).toMatch(/tỷ lệ/);
+});

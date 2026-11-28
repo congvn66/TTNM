@@ -196,7 +196,9 @@ export function summarizeSelection(cells) {
   if (cells.some((total) => isTotalRow(total) && cells.some((part) => !isTotalRow(part) && sameColumn(part, total) && part.table_locator.row_index < total.table_locator.row_index))) caveats.push("gồm dòng tổng, bị cộng trùng");
   // A sum of percentages or ratios means nothing; neither does one across different measures.
   const headers = cells.map((cell) => cell.table_locator?.column_header ?? "");
-  const additive = !headers.some((header) => NOT_ADDITIVE.test(header));
+  // A ratio shows in its header ("Biên lợi nhuận") or in the cells themselves ("+12,1%" under "Thay đổi").
+  const additive = !headers.some((header) => NOT_ADDITIVE.test(header))
+    && !cells.some((cell) => String(cell.raw_text ?? "").includes("%") || cell.semantic?.unit === "PERCENT");
   if (!additive) caveats.push("cột tỷ lệ, cộng lại không có nghĩa");
   if (new Set(headers.map((header) => splitColumn(header).measure).filter(Boolean)).size > 1) caveats.push("gồm nhiều chỉ tiêu khác nhau");
   // A change only reads right between two periods of one row, earlier to later.
