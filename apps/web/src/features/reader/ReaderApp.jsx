@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { request } from "../../shared/api/client.js";
 import { useTheme } from "../theme/ThemeProvider.jsx";
+import { MOVED_KEY } from "../auth/AuthGate.jsx";
 import { AskBox } from "./AskBox.jsx";
 import { ConfirmDialog, DropOverlay, HelpDialog, RenameDialog, Sidebar, Toasts, TopBar } from "./Chrome.jsx";
 import { DataPanel } from "./DataPanel.jsx";
@@ -32,15 +33,18 @@ function firstDataSource(reply) {
 }
 
 const SIDEBAR_KEY = "sourcelens-sidebar";
+const PROMPT_KEY = "sourcelens-signin-prompt-closed";
 const narrowScreen = () => Boolean(window.matchMedia?.("(max-width: 900px)").matches);
 function initialSidebar() {
   if (narrowScreen()) return false;
   try { return localStorage.getItem(SIDEBAR_KEY) !== "0"; } catch { return true; }
 }
 
-export default function ReaderApp({ user = null, onSignOut = null, onNavigate }) {
+export default function ReaderApp({ user = null, onSignOut = null, onNavigate, startGuest = null, openSignIn = null }) {
   const { preference, setPreference } = useTheme();
-  const reports = useReports();
+  const reports = useReports({ user, startGuest });
+  const isGuest = Boolean(user?.is_guest);
+  const account = user && !isGuest ? user : null;
   const { selected } = reports;
   const conversation = useConversation(selected);
   const [focus, setFocus] = useState(null);
@@ -81,6 +85,15 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
     window.setTimeout(() => setToasts((items) => items.filter((entry) => entry.id !== id)), item.kind === "error" ? 9000 : 6000);
   }, []);
   const closeToast = useCallback((id) => setToasts((items) => items.filter((entry) => entry.id !== id)), []);
+  // Shown once after a guest signs in: their reports moved into the account.
+  useEffect(() => {
+    let moved = 0;
+    try { moved = Number(sessionStorage.getItem(MOVED_KEY) || 0); sessionStorage.removeItem(MOVED_KEY); } catch { /* storage blocked */ }
+    if (moved > 0) toast({ text: `Đã chuyển ${moved} báo cáo vào tài khoản` });
+  }, [toast]);
+  // One quiet prompt per visit, after a guest's first answer: sign in to keep the report.
+  const [promptClosed, setPromptClosed] = useState(() => { try { return sessionStorage.getItem(PROMPT_KEY) === "1"; } catch { return false; } });
+  const closePrompt = () => { setPromptClosed(true); try { sessionStorage.setItem(PROMPT_KEY, "1"); } catch { /* storage blocked */ } };
 
   const focusOn = useCallback((next) => {
     setFocus(next?.page ? { ...next, nonce: Date.now() } : null);
@@ -374,7 +387,7 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
   return <div className={`rd-app${sidebarOpen ? " side-open" : ""}`}>
     <a className="rd-skip" href="#main-content">Bỏ qua điều hướng</a>
     <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} reports={reports.reports} selected={selected} onOpen={pickReport} onHome={() => pickReport(null)} onNew={() => uploadRef.current?.click()}
-      onLibrary={user && onNavigate ? () => onNavigate("/app/library") : null} user={user} onSettings={() => onNavigate?.("/app/settings/profile")} onSignOut={onSignOut}
+      onLibrary={account && onNavigate ? () => onNavigate("/app/library") : null} user={account} guest={isGuest} onSignIn={openSignIn} onSettings={() => onNavigate?.("/app/settings/profile")} onSignOut={onSignOut}
       theme={preference} onTheme={setPreference} sound={sound} onSound={() => { setSoundEnabled(!sound); setSound(!sound); }} />
     <TopBar selected={selected} sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen(true)} onHelp={() => setHelpOpen(true)} menuItems={menuItems} />
     <input ref={uploadRef} type="file" accept="application/pdf,.pdf" hidden onChange={(event) => { upload(event.target.files?.[0]); event.target.value = ""; }} />
@@ -400,6 +413,10 @@ export default function ReaderApp({ user = null, onSignOut = null, onNavigate })
             {ready && charts.map((chart) => <ChartCard key={chart.id} chart={chart} evidences={evidences} loading={evidence.loading || !evidence.data} activeKey={openCell ?? focus?.key} onPeek={setPeekKey}
               onOpenCell={openFromChart} onShowCells={showChartCells}
               onChange={(id, patch) => changeCharts((list) => list.map((item) => (item.id === id ? { ...item, ...patch } : item)))} onRemove={removeChart} />)}
+            {isGuest && openSignIn && !promptClosed && conversation.notes.some((note) => note.reply?.status === "completed") && <section className="rd-card rd-signin" aria-label="Đăng nhập">
+              <p>Đăng nhập để giữ báo cáo này</p>
+              <div><button type="button" className="rd-button primary" onClick={() => openSignIn("login")}>Đăng nhập</button><button type="button" className="rd-button" onClick={closePrompt}>Để sau</button></div>
+            </section>}
             {conversation.pending.map((item) => <PendingCard key={item.id} item={item} onRetry={(entry) => conversation.ask(entry.question, entry.id)} onDismiss={conversation.dismiss} />)}
           </div>
           <AskBox ref={askRef} value={question} onChange={setQuestion} onSubmit={ask} asking={conversation.asking} disabled={selected.extraction_status === "failed"} note={processing ? "Đang đọc báo cáo…" : undefined}

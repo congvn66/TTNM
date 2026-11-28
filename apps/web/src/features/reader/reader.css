@@ -636,3 +636,8 @@ body:has(.rd-app) { background: #f6f6f3; }
 .rd-menu-panel button:hover:not(:disabled), .rd-menu-panel button:focus-visible { background: var(--rd-subtle); }
 .rd-menu-panel button.danger { color: var(--rd-bad); }
 .rd-menu-panel button:disabled { color: var(--rd-muted); cursor: default; }
+
+.rd-side-note { margin: 0 8px; color: var(--rd-muted); font-size: 12px; }
+.rd-signin { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.rd-signin p { margin: 0; font-weight: 600; }
+.rd-signin div { display: flex; gap: 8px; }

@@ -70,6 +70,11 @@ def test_signing_in_moves_every_owned_table_and_folds_the_default_project():
     assert moved == set(auth.OWNER_TABLES)
     folded = [values for sql, values in connection.sql if "SET project_id" in sql]
     assert folded and all(values == ("account-default", "guest-default") for values in folded)
+    # Names are freed before any owner changes: the account cannot hold two projects of one name.
+    first_owner_move = next(i for i, sql in enumerate(statements) if "SET owner_id" in sql)
+    archive_default = next(i for i, sql in enumerate(statements) if sql.startswith("UPDATE projects SET deleted_at"))
+    rename = next(i for i, sql in enumerate(statements) if "name=p.name || ' (2)'" in sql)
+    assert archive_default < first_owner_move and rename < first_owner_move
     assert any(sql.startswith("UPDATE users SET deleted_at") for sql in statements)
 
 

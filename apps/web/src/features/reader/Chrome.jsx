@@ -49,7 +49,7 @@ function AccountMenu({ user, onSettings, onSignOut }) {
 }
 
 /** Reports down the left, like a file list; app settings and the account at the bottom. */
-export function Sidebar({ open, onClose, reports, selected, onOpen, onHome, onNew, onLibrary, user, onSettings, onSignOut, theme, onTheme, sound, onSound }) {
+export function Sidebar({ open, onClose, reports, selected, onOpen, onHome, onNew, onLibrary, user, guest = false, onSignIn, onSettings, onSignOut, theme, onTheme, sound, onSound }) {
   const [query, setQuery] = useState("");
   const shown = reports.filter((report) => report.file_name.toLowerCase().includes(query.trim().toLowerCase()));
   return <>
@@ -82,6 +82,10 @@ export function Sidebar({ open, onClose, reports, selected, onOpen, onHome, onNe
           <button type="button" className={`rd-icon-button${sound ? " on" : ""}`} aria-pressed={sound} aria-label="Âm báo khi đọc xong" title={sound ? "Âm báo: bật" : "Âm báo: tắt"} onClick={onSound}><Icon name={sound ? "bell" : "bellOff"} size={16} /></button>
         </div>
         {user && <AccountMenu user={user} onSettings={onSettings} onSignOut={onSignOut} />}
+        {!user && onSignIn && <>
+          {guest && <p className="rd-side-note">Báo cáo được giữ 7 ngày</p>}
+          <button type="button" className="rd-side-item" onClick={() => onSignIn("login")}><Icon name="login" size={16} /><span className="rd-side-label">Đăng nhập</span></button>
+        </>}
       </div>
     </nav>
   </>;

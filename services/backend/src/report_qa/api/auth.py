@@ -241,9 +241,12 @@ def owner_id_for_request(request: Request) -> UUID:
 def adopt_guest(connection: Any, guest_id: Any, user_id: Any) -> int:
     """Move a guest's reports to the account they signed in to; returns how many reports moved.
 
-    One transaction with the owner pairs checked at commit (migration 0010). The
-    guest's default project folds into the account's own. If the move fails the
-    sign-in still stands and the reports stay with the guest until they expire.
+    One transaction with the owner pairs checked at commit (migration 0011). The
+    order matters for the unique names: the guest's default project folds into
+    the account's own and is archived first, folders and projects whose names the
+    account already uses get " (2)", and only then do the owners change. If the
+    move fails the sign-in still stands and the reports stay with the guest until
+    they expire.
     """
     import logging
     try:
@@ -253,12 +256,23 @@ def adopt_guest(connection: Any, guest_id: Any, user_id: Any) -> int:
             default = "SELECT id FROM projects WHERE owner_id=%s AND name = ANY(%s) AND deleted_at IS NULL ORDER BY created_at LIMIT 1"
             target = connection.execute(default, (user_id, list(DEFAULT_PROJECT_NAMES))).fetchone()
             source = connection.execute(default, (guest_id, list(DEFAULT_PROJECT_NAMES))).fetchone()
-            for table in OWNER_TABLES:
-                connection.execute(f"UPDATE {table} SET owner_id=%s WHERE owner_id=%s", (user_id, guest_id))
             if target and source:
+                connection.execute(
+                    """UPDATE folders f SET name=f.name || ' (2)', normalized_name=f.normalized_name || ' (2)', updated_at=now()
+                       WHERE f.project_id=%s AND f.deleted_at IS NULL AND EXISTS (
+                         SELECT 1 FROM folders g WHERE g.project_id=%s AND g.deleted_at IS NULL
+                           AND g.normalized_name=f.normalized_name AND g.parent_id IS NOT DISTINCT FROM f.parent_id)""",
+                    (source["id"], target["id"]))
                 for table in ("chats", "folders", "project_documents"):
                     connection.execute(f"UPDATE {table} SET project_id=%s WHERE project_id=%s", (target["id"], source["id"]))
                 connection.execute("UPDATE projects SET deleted_at=now(),updated_at=now() WHERE id=%s", (source["id"],))
+            connection.execute(
+                """UPDATE projects p SET name=p.name || ' (2)', updated_at=now()
+                   WHERE p.owner_id=%s AND p.deleted_at IS NULL AND EXISTS (
+                     SELECT 1 FROM projects q WHERE q.owner_id=%s AND q.deleted_at IS NULL AND q.name=p.name)""",
+                (guest_id, user_id))
+            for table in OWNER_TABLES:
+                connection.execute(f"UPDATE {table} SET owner_id=%s WHERE owner_id=%s", (user_id, guest_id))
             connection.execute("UPDATE users SET deleted_at=now(),updated_at=now() WHERE id=%s AND is_guest", (guest_id,))
         return int(count)
     except Exception:

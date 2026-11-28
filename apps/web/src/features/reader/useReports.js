@@ -25,7 +25,12 @@ export function isProcessing(report) {
   return ["queued", "processing"].includes(report?.extraction_status);
 }
 
-export function useReports() {
+/**
+ * The reports of the person using the app. `startGuest` is given when sign-in is in use:
+ * then a visitor without a session has no reports, and the first upload makes them a guest.
+ */
+export function useReports({ user = null, startGuest = null } = {}) {
+  const enabled = Boolean(user) || !startGuest;
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -40,6 +45,8 @@ export function useReports() {
     return readStored(SELECTED_KEY);
   });
   const [uploading, setUploading] = useState(null);
+  const uploadingRef = useRef(null);
+  uploadingRef.current = uploading;
   const loadSeq = useRef(0);
 
   const load = useCallback(async () => {
@@ -55,8 +62,16 @@ export function useReports() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      // Signed out: drop the list and any request still on its way, so no report of the account stays on screen.
+      loadSeq.current += 1;
+      setSessions([]); setSelectedIdState(null); setLoading(false);
+      return;
+    }
+    // Becoming a guest during an upload reloads the list behind the upload card, not over it.
+    if (!uploadingRef.current) setLoading(true);
     load().then(() => setError("")).catch((reason) => setError(reason.message)).finally(() => setLoading(false));
-  }, [load]);
+  }, [load, enabled, user?.id]);
 
   const reports = useMemo(() => flatten(sessions), [sessions]);
   const selected = reports.find((report) => report.id === selectedId) ?? null;
@@ -80,7 +95,8 @@ export function useReports() {
     // Shown at once: sending a PDF to cloud storage takes a few seconds.
     setUploading({ name: file.name, size: file.size, startedAt: new Date().toISOString() });
     try {
-      let sessionId = uploadSessionId;
+      if (!enabled) await startGuest();
+      let sessionId = enabled ? uploadSessionId : null;
       if (!sessionId) sessionId = (await load())[0]?.id;
       const form = new FormData();
       form.append("file", file);
@@ -93,7 +109,7 @@ export function useReports() {
     } finally {
       setUploading(null);
     }
-  }, [uploadSessionId, load, select]);
+  }, [uploadSessionId, load, select, enabled, startGuest]);
 
   const rename = useCallback(async (report, name) => {
     const fileName = name.trim();
